@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fizzy-skill"
+version = "0.1.0"
+description = "Command-line client for the Fizzy API and a Claude Code skill that builds researched cards from Markdown drafts"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Environment :: Console",
+]
+
+[project.scripts]
+fz = "fizzy_skill.cli:main"
+
+[tool.setuptools]
+packages = ["fizzy_skill"]
