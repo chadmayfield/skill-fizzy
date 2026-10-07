@@ -119,6 +119,15 @@ class TestApi(unittest.TestCase):
             Fizzy(c).move_card(5, "now")
             self.assertEqual(json.loads(opener.calls[-1][2]), {"column_id": "C1"})
 
+    def test_card_search_is_url_encoded(self):
+        # A raw space in the query made http.client refuse the URL.
+        url = "https://fz.test/1/cards?board_ids%5B%5D=B1&terms%5B%5D=first+aid&terms%5B%5D=a%26b"
+        routes = {("GET", url): FakeResponse(200, [])}
+        with tempfile.TemporaryDirectory() as t:
+            c, opener = make_client(routes, tmp=t)
+            Fizzy(c).cards("B1", **{"terms[]": ["first aid", "a&b"]})
+            self.assertEqual(opener.calls[0][1], url)
+
 
 class TestUpload(unittest.TestCase):
     def test_prefers_attachable_sgid(self):

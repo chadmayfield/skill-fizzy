@@ -18,6 +18,7 @@ import json
 import mimetypes
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 from .client import Client
 
@@ -85,7 +86,7 @@ class Fizzy:
                 continue
             for item in (v if isinstance(v, (list, tuple)) else [v]):
                 params.append((k, item))
-        query = "&".join(f"{k}={v}" for k, v in params)
+        query = urlencode(params)
         return self.c.get_all("/cards" + (f"?{query}" if query else ""))
 
     def card(self, number: int) -> Dict[str, Any]:
