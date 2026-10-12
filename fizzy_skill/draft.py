@@ -72,7 +72,16 @@ class Draft:
         return found
 
     def images(self) -> List[str]:
-        return [m.group(1) for m in _IMAGE.finditer(self.body_md)]
+        """Targets of image lines; only these become attachments."""
+        return [m.group(2) for m in map(markdown.IMAGE_LINE.match, self.body_md.splitlines()) if m]
+
+    def check_images(self, inbox: Path) -> None:
+        """Raise if an image would not embed or its file is missing."""
+        for line in self.body_md.splitlines():
+            if _IMAGE.search(line) and not markdown.IMAGE_LINE.match(line):
+                raise DraftError(f"image must be on a line by itself to embed: {line.strip()!r}")
+        for img in self.images():
+            self.resolve_image(img, inbox)
 
     def resolve_image(self, target: str, inbox: Path) -> Path:
         p = Path(target).expanduser()

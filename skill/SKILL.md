@@ -46,6 +46,8 @@ work through the `fz` command-line client in this repository.
    `# Title`, `## Goal`, `## Details`, `## Links & media`, `## Steps`.
    - Column defaults to **Maybe?** unless the user names one.
    - Steps are concrete actions, `- [ ] ...`.
+   - Put each image on a line by itself, `![alt](file.jpg)`, not in a list
+     item. Otherwise it shows as text instead of a photo.
    - Big projects get fewer, bigger cards with the work in their steps.
 5. **Check it:** `fz draft check <file> --links`. Fix or remove every link
    that does not return OK. Dead links are bugs.

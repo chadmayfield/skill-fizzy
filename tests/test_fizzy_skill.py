@@ -200,6 +200,16 @@ class TestDraft(unittest.TestCase):
             draft.record_card(p, 42)
             self.assertEqual(draft.parse(p).card, 42)
 
+    def test_image_in_list_item_is_rejected(self):
+        with tempfile.TemporaryDirectory() as t:
+            p = Path(t) / "x.md"
+            p.write_text("---\nboard: B\n---\n# T\n\n## Links & media\n- ![a photo](pic.jpg)\n")
+            (Path(t) / "pic.jpg").write_bytes(b"\xff\xd8")
+            d = draft.parse(p)
+            self.assertEqual(d.images(), [])  # would render as text, so nothing to upload
+            with self.assertRaisesRegex(draft.DraftError, "on a line by itself"):
+                d.check_images(Path(t))
+
     def test_requires_board_and_title(self):
         with tempfile.TemporaryDirectory() as t:
             p = Path(t) / "x.md"

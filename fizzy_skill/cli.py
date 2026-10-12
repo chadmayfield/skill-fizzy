@@ -188,8 +188,7 @@ def cmd_draft_check(fz: Optional[Fizzy], args, cfg) -> int:
     for p in _draft_paths(args.drafts):
         try:
             d = draft_mod.parse(p)
-            for img in d.images():
-                d.resolve_image(img, cfg.inbox_path)
+            d.check_images(cfg.inbox_path)
         except draft_mod.DraftError as e:
             print(f"✗ {p}: {e}")
             bad += 1
@@ -247,8 +246,7 @@ def cmd_draft_apply(fz: Fizzy, args, cfg) -> int:
     drafts = []
     for p in paths:  # validate everything first: all or nothing on parse errors
         d = draft_mod.parse(p)
-        for img in d.images():
-            d.resolve_image(img, cfg.inbox_path)
+        d.check_images(cfg.inbox_path)
         drafts.append(d)
     for d in drafts:
         if d.card:

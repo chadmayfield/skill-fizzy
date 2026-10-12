@@ -15,7 +15,7 @@ import html
 import re
 from typing import List
 
-_IMAGE_LINE = re.compile(r"^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
+IMAGE_LINE = re.compile(r"^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _BULLET = re.compile(r"^\s*[-*+]\s+(.*)$")
 _NUMBERED = re.compile(r"^\s*\d+[.)]\s+(.*)$")
@@ -80,7 +80,7 @@ def to_html(md: str) -> str:
             i += 1
             continue
 
-        m = _IMAGE_LINE.match(line)
+        m = IMAGE_LINE.match(line)
         if m:
             flush_para(); close_list()
             out.append(f"<!--attach:{m.group(2)}-->")
