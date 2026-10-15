@@ -1,4 +1,4 @@
-# fizzy-skill
+# skill-fizzy
 
 A small command-line client for the [Fizzy](https://github.com/basecamp/fizzy)
 API, plus a [Claude Code](https://docs.claude.com/en/docs/claude-code) skill
