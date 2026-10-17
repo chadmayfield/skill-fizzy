@@ -283,7 +283,7 @@ func TestCardDecodes(t *testing.T) {
 	f, _, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
 		w.Write([]byte(`{"number":5,"title":"T","closed":true,"golden":true,"tags":["a"],"url":"u",
 "description":"d","description_html":"<p>d</p>","last_active_at":"2026-10-01T00:00:00Z",
-"board":{"id":"B1","name":"Home"},"column":{"id":"C1","name":"Now","color":"red"},
+"board":{"id":"B1","name":"Home"},"column":{"id":"C1","name":"Now","color":{"name":"Red","value":"var(--color-card-1)"}},
 "steps":[{"id":"S1","content":"c","completed":true}],"surprise":1}`))
 	})
 	c, err := f.Card(5)

@@ -24,7 +24,7 @@ func fakeFizzy(t *testing.T) *httptest.Server {
 	card := func(n int, title, column string, extra string) string {
 		col := "null"
 		if column != "" {
-			col = fmt.Sprintf(`{"id":"c-%s","name":%q,"color":"var(--color-card-default)"}`, strings.ToLower(column), column)
+			col = fmt.Sprintf(`{"id":"c-%s","name":%q,"color":{"name":"Blue","value":"var(--color-card-default)"}}`, strings.ToLower(column), column)
 		}
 		return fmt.Sprintf(`{"id":"k%d","number":%d,"title":%q,"status":"published","board":{"id":"b1","name":"Home"},"column":%s,"url":"%s/1/cards/%d"%s}`,
 			n, n, title, col, srv.URL, n, extra)
@@ -35,7 +35,7 @@ func fakeFizzy(t *testing.T) *httptest.Server {
 			`{"name":"Garden","id":"b2","all_access":true}]`)
 	})
 	mux.HandleFunc("GET /1/boards/b1/columns", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `[{"id":"c-later","name":"Later","color":"var(--color-card-default)"},{"id":"c-next","name":"Next","color":"var(--color-card-1)"},{"id":"c-now","name":"Now","color":"var(--color-card-2)"}]`)
+		io.WriteString(w, `[{"id":"c-later","name":"Later","color":{"name":"Blue","value":"var(--color-card-default)"}},{"id":"c-next","name":"Next","color":{"name":"Blue","value":"var(--color-card-1)"}},{"id":"c-now","name":"Now","color":{"name":"Blue","value":"var(--color-card-2)"}}]`)
 	})
 	mux.HandleFunc("GET /1/boards/b2/columns", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `[]`) })
 	mux.HandleFunc("GET /1/cards", func(w http.ResponseWriter, r *http.Request) {
