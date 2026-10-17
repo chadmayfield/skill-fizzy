@@ -192,6 +192,8 @@ func TestCardEditErrors(t *testing.T) {
 		{"description and file", []string{"card", "edit", "5", "--description", "d", "--description-file", "f"}, 2, "not allowed with"},
 		{"bad status", []string{"card", "edit", "5", "--status", "gone"}, 2, "invalid choice"},
 		{"bad number", []string{"card", "edit", "abc", "--title", "T"}, 2, "invalid int value"},
+		{"empty old", []string{"card", "edit", "5", "--replace", "", "z"}, 2, "OLD must not be empty"},
+		{"allow-empty alone", []string{"card", "edit", "5", "--allow-empty", "--title", "T"}, 2, "--allow-empty only goes with --description or --description-file"},
 	}
 	for _, tc := range cases {
 		r := runGo(tc.args)
@@ -203,5 +205,48 @@ func TestCardEditErrors(t *testing.T) {
 		if c.method != "GET" {
 			t.Errorf("an error case wrote %+v", c)
 		}
+	}
+}
+
+func TestCardEditRefusesEmptyDescription(t *testing.T) {
+	srv, calls := editServer(t, "{}")
+	editEnv(t, srv)
+	empty := filepath.Join(t.TempDir(), "empty.md")
+	if err := os.WriteFile(empty, []byte(" \n\t\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"card", "edit", "5", "--description", ""},
+		{"card", "edit", "5", "--description", "  \n"},
+		{"card", "edit", "5", "--description-file", empty},
+		{"card", "edit", "5", "--description", "", "--title", "T"},
+	} {
+		r := runGo(args)
+		if r.code != 2 || !strings.Contains(r.stderr, "the new description is empty; add --allow-empty to clear it") {
+			t.Errorf("fz %q: got %+v", args, r)
+		}
+	}
+	if cs := calls(); len(cs) != 0 {
+		t.Fatalf("a refused edit sent %+v", cs)
+	}
+	r := runGo([]string{"card", "edit", "5", "--description", "", "--allow-empty"})
+	if r.code != 0 || r.stdout != "card #5 updated: description\n" {
+		t.Fatalf("with --allow-empty: %+v", r)
+	}
+	if cs := calls(); len(cs) != 1 || cs[0].body != `{"card":{"description":""}}` {
+		t.Errorf("calls %+v", cs)
+	}
+}
+
+func TestCardEditReplaceKeepsLinks(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<p>Buy a <a href=\"https://example.com/hinge\">hinge</a></p>"}`)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--replace", "hinge", "hinges"})
+	if r.code != 0 {
+		t.Fatalf("got %+v", r)
+	}
+	want := `<p>Buy a <a href="https://example.com/hinge">hinges</a></p>`
+	if got := putBody(t, calls())["card"]["description"]; got != want {
+		t.Errorf("description %q", got)
 	}
 }

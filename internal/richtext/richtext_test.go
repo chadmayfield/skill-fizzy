@@ -60,3 +60,25 @@ func TestReplaceCountsSubstrings(t *testing.T) {
 		t.Errorf("all: %q, %v", got, err)
 	}
 }
+
+func TestReplaceSkipsTagsAndAttributes(t *testing.T) {
+	html := `<p>Buy a <a href="https://example.com/hinge">hinge</a></p>`
+	got, err := ReplaceText(html, "hinge", "hinges", false)
+	want := `<p>Buy a <a href="https://example.com/hinge">hinges</a></p>`
+	if err != nil || got != want {
+		t.Errorf("got %q, %v\nwant %q", got, err, want)
+	}
+	if _, err := ReplaceText(`<p class="gate">x</p>`, "gate", "door", false); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("attribute only: %v", err)
+	}
+	if _, err := ReplaceText(`<p>a</p>`, "p", "q", true); err == nil {
+		t.Errorf("tag name matched")
+	}
+	got, err = ReplaceText(`<p>gate</p><p class="gate">gate</p>`, "gate", "door", true)
+	if err != nil || got != `<p>door</p><p class="gate">door</p>` {
+		t.Errorf("all: %q, %v", got, err)
+	}
+	if _, err := ReplaceText(`<p>the <b>gate</b> hinge</p>`, "the gate", "a gate", false); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("a match across a tag: %v", err)
+	}
+}

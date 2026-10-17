@@ -22,8 +22,11 @@ func addCardEditCommand(root *cobra.Command) {
 		Use:   "edit NUMBER [OLD NEW]",
 		Short: "change a card's title, description or status",
 		Long: "Change a card. A new description replaces the whole thing, including embedded images. " +
+			"fz refuses a new description that is empty or only whitespace unless --allow-empty is given. " +
 			"--replace swaps one phrase in the current description and leaves the rest alone. " +
-			"Give the phrase and its replacement after the number.",
+			"Give the phrase and its replacement after the number. The phrase must not be empty. " +
+			"It matches only text, never tag names or attributes such as a link's address, " +
+			"and a match cannot cross formatting.",
 		Example: examples(
 			`fz card edit 87 --title "Fix the gate hinge"`,
 			`fz card edit 87 --replace "50% off" "up to 50% off"`,
@@ -40,6 +43,7 @@ func addCardEditCommand(root *cobra.Command) {
 	// one flag. The flag takes none, and the two words follow the number.
 	edit.Flags().Bool("replace", false, "swap one phrase in the description; give OLD and NEW after the number")
 	edit.Flags().Bool("all", false, "with --replace, swap every match")
+	edit.Flags().Bool("allow-empty", false, "allow a new description that is empty, which clears it")
 	edit.Flags().String("status", "", "card status, drafted or published")
 
 	for _, c := range root.Commands() {
@@ -64,6 +68,8 @@ func cardEdit(c *cmdContext, a []string) error {
 		return usagef("OLD and NEW only go with --replace")
 	case all && !replace:
 		return usagef("--all only goes with --replace")
+	case replace && a[1] == "":
+		return usagef("--replace: OLD must not be empty")
 	case fl.Changed("description") && fl.Changed("description-file"):
 		return usagef("argument --description-file: not allowed with argument --description")
 	}
@@ -92,6 +98,13 @@ func cardEdit(c *cmdContext, a []string) error {
 		}
 		d := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n")
 		md = &d
+	}
+	allowEmpty, _ := fl.GetBool("allow-empty")
+	switch {
+	case allowEmpty && md == nil:
+		return usagef("--allow-empty only goes with --description or --description-file")
+	case md != nil && strings.TrimSpace(*md) == "" && !allowEmpty:
+		return usagef("the new description is empty; add --allow-empty to clear it")
 	}
 	if md != nil {
 		html := markdown.ToHTML(*md)
