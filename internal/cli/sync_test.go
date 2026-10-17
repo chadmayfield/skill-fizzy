@@ -717,3 +717,18 @@ func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
 		t.Errorf("writes other than the upload: %q", w)
 	}
 }
+
+func TestSyncReportsExtraCardTagWithoutPrune(t *testing.T) {
+	srv, fz, cfg, d := syncFixture(t, syncDraftText)
+	srv.edit(func(st *cardState) { st.tags = `["buy","extra"]` })
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !syncHas(report, "tag kept, not in draft: extra") {
+		t.Errorf("report does not mention the extra tag: %q", report)
+	}
+	if syncHas(report, "tag kept, not in draft: buy") {
+		t.Errorf("reported a draft tag as extra: %q", report)
+	}
+}

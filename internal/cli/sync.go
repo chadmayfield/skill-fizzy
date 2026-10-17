@@ -154,18 +154,20 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 			report = append(report, "tag added: "+t)
 		}
 	}
-	if prune {
-		for _, t := range card.Tags {
-			if hasTag(d.Tags, tagKey(t)) {
-				continue
-			}
-			changed, err := fz.RemoveTag(d.Card, t)
-			if err != nil {
-				return nil, err
-			}
-			if changed {
-				report = append(report, "tag removed: "+t)
-			}
+	for _, t := range card.Tags {
+		if hasTag(d.Tags, tagKey(t)) {
+			continue
+		}
+		if !prune {
+			report = append(report, "tag kept, not in draft: "+t)
+			continue
+		}
+		changed, err := fz.RemoveTag(d.Card, t)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			report = append(report, "tag removed: "+t)
 		}
 	}
 
