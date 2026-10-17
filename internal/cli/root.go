@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -104,6 +105,6 @@ func unknownSubcommand(root *cobra.Command, args []string) error {
 func Execute(version, commit, date string) int {
 	_, _ = commit, date
 	root := NewRoot()
-	root.Version = version
+	root.Version = resolveVersion(version, debug.ReadBuildInfo)
 	return run(root, os.Args[1:], os.Stdout, os.Stderr)
 }
