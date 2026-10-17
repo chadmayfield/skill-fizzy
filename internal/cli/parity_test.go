@@ -2,13 +2,12 @@ package cli
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -105,31 +104,14 @@ type result struct {
 	code           int
 }
 
-func runPython(t *testing.T, fz string, env []string, args []string) result {
-	t.Helper()
-	cmd := exec.Command("python3", append([]string{fz}, args...)...)
-	cmd.Env = env
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	err := cmd.Run()
-	code := 0
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		code = exit.ExitCode()
-	} else if err != nil {
-		t.Fatalf("python3: %v", err)
-	}
-	return result{out.String(), errb.String(), code}
-}
-
 func runGo(args []string) result {
 	var out, errb bytes.Buffer
 	code := run(NewRoot(), append([]string{}, args...), &out, &errb)
 	return result{out.String(), errb.String(), code}
 }
 
-// parityEnv points both implementations at srv with a throwaway home, so
-// neither reads the real config nor writes the real action log.
+// parityEnv points fz at srv with a throwaway home, so it neither reads the
+// real config nor writes the real action log.
 func parityEnv(t *testing.T, srv *httptest.Server) []string {
 	t.Helper()
 	home := t.TempDir()
@@ -150,36 +132,6 @@ func parityEnv(t *testing.T, srv *httptest.Server) []string {
 	return env
 }
 
-// oldForm turns a noun-form command line back into the fz 0.1 form, the
-// only one the Python fz understands.
-func oldForm(args []string) []string {
-	i := commandIndex(args)
-	if i+1 >= len(args) {
-		return args
-	}
-	head, noun, verb, rest := args[:i:i], args[i], args[i+1], args[i+2:]
-	out := func(words ...string) []string { return append(append(head, words...), rest...) }
-	switch noun + " " + verb {
-	case "board list":
-		return out("boards")
-	case "board create":
-		return out("board-create")
-	case "column list":
-		return out("columns")
-	case "card list":
-		return out("cards")
-	case "card show", "card create", "card move", "card reopen", "card golden", "card tag", "card delete":
-		return out(verb)
-	case "step add":
-		return out("step")
-	case "comment add":
-		return out("comment")
-	case "step check", "step uncheck":
-		return append(append(head, "step", rest[0], "--"+verb, rest[1]), rest[2:]...)
-	}
-	return args
-}
-
 func writeFile(t *testing.T, path, text string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
@@ -187,102 +139,137 @@ func writeFile(t *testing.T, path, text string) {
 	}
 }
 
-func TestParityWithPython(t *testing.T) {
-	if _, err := exec.LookPath("python3"); err != nil {
-		t.Skip("python3 not on PATH")
+// pythonGolden holds what the Python fz printed for each parity case. It was
+// captured once from the Python fz (bin/fz, Python 3.9) on 2026-10-17, while
+// that code still existed, and is the reference the Go fz must match. Nothing
+// regenerates it: the Python fz is gone, and writing this file from Go output
+// would turn the test into Go checking itself. Fix Go, not the file.
+const pythonGolden = "testdata/parity/python-fz.json"
+
+// URL, DIR and HOME placeholders stand for the per-run fake server URL, the
+// fixture directory and the throwaway home in the golden file.
+const (
+	urlMark  = "{{URL}}"
+	dirMark  = "{{DIR}}"
+	homeMark = "{{HOME}}"
+)
+
+type parityCase struct {
+	// Args is the command line Go runs. PythonArgs is the fz 0.1 form the
+	// Python fz was given, when it differs.
+	Args       []string `json:"args"`
+	PythonArgs []string `json:"python_args,omitempty"`
+	Stdout     string   `json:"stdout"`
+	Stderr     string   `json:"stderr"`
+	Code       int      `json:"code"`
+}
+
+type parityFile struct {
+	Note  string       `json:"note"`
+	Cases []parityCase `json:"cases"`
+	// UsageCases are usage errors. argparse and cobra word them
+	// differently, so only the exit code is compared.
+	UsageCases []parityCase `json:"usage_cases"`
+}
+
+// parityFixture is the fake server, the environment and the files the
+// parity cases read.
+type parityFixture struct {
+	srv                           *httptest.Server
+	env                           []string
+	home, dir                     string
+	img, drafts, good, bad, plain string
+}
+
+func newParityFixture(t *testing.T) parityFixture {
+	t.Helper()
+	srv := fakeFizzy(t)
+	env := parityEnv(t, srv)
+	f := parityFixture{srv: srv, env: env, home: os.Getenv("HOME"), dir: t.TempDir()}
+	f.img = filepath.Join(f.dir, "hinge.jpg")
+	writeFile(t, f.img, "not really a jpeg")
+	f.drafts = filepath.Join(f.dir, "drafts")
+	if err := os.Mkdir(f.drafts, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	fz, err := filepath.Abs(filepath.Join("..", "..", "bin", "fz"))
+	writeFile(t, filepath.Join(f.drafts, "hinge.jpg"), "jpeg bytes")
+	f.good = filepath.Join(f.drafts, "gate.md")
+	writeFile(t, f.good, "---\nboard: Home\ncolumn: Next\ntags: buy, #Waiting\ngolden: true\n---\n# Fix the gate\n\n"+
+		"Swap the **hinge** on the side gate.\n\n![Hinge](hinge.jpg)\n\n- [Guide]("+srv.URL+"/links/ok)\n- "+srv.URL+"/links/missing\n\n"+
+		"## Steps\n- [ ] Order the hinge\n- [x] Measure the gap\n")
+	writeFile(t, filepath.Join(f.drafts, "latch.md"), "---\nboard: Home\ncard: 87\n---\n# Fix the latch\n\nTwo screws.\n")
+	f.bad = filepath.Join(f.dir, "bad.md")
+	writeFile(t, f.bad, "# No front matter\n")
+	f.plain = filepath.Join(f.dir, "plain.md")
+	writeFile(t, f.plain, "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n\n## Steps\n- [ ] Buy oil\n")
+	return f
+}
+
+// mark replaces this run's server URL and directories with placeholders.
+func (f parityFixture) mark(s string) string {
+	return strings.NewReplacer(f.srv.URL, urlMark, f.dir, dirMark, f.home, homeMark).Replace(s)
+}
+
+// unmark turns placeholders back into this run's server URL and directories.
+func (f parityFixture) unmark(s string) string {
+	return strings.NewReplacer(urlMark, f.srv.URL, dirMark, f.dir, homeMark, f.home).Replace(s)
+}
+
+func (f parityFixture) markAll(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = f.mark(a)
+	}
+	return out
+}
+
+func (f parityFixture) unmarkAll(args []string) []string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = f.unmark(a)
+	}
+	return out
+}
+
+func readParityFile(t *testing.T) parityFile {
+	t.Helper()
+	raw, err := os.ReadFile(pythonGolden)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := fakeFizzy(t)
-	env := parityEnv(t, srv)
-
-	dir := t.TempDir()
-	img := filepath.Join(dir, "hinge.jpg")
-	writeFile(t, img, "not really a jpeg")
-	drafts := filepath.Join(dir, "drafts")
-	if err := os.Mkdir(drafts, 0o755); err != nil {
+	var p parityFile
+	if err := json.Unmarshal(raw, &p); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(drafts, "hinge.jpg"), "jpeg bytes")
-	good := filepath.Join(drafts, "gate.md")
-	writeFile(t, good, "---\nboard: Home\ncolumn: Next\ntags: buy, #Waiting\ngolden: true\n---\n# Fix the gate\n\n"+
-		"Swap the **hinge** on the side gate.\n\n![Hinge](hinge.jpg)\n\n- [Guide]("+srv.URL+"/links/ok)\n- "+srv.URL+"/links/missing\n\n"+
-		"## Steps\n- [ ] Order the hinge\n- [x] Measure the gap\n")
-	done := filepath.Join(drafts, "latch.md")
-	writeFile(t, done, "---\nboard: Home\ncard: 87\n---\n# Fix the latch\n\nTwo screws.\n")
-	bad := filepath.Join(dir, "bad.md")
-	writeFile(t, bad, "# No front matter\n")
-	plain := filepath.Join(dir, "plain.md")
-	writeFile(t, plain, "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n\n## Steps\n- [ ] Buy oil\n")
-
-	cases := [][]string{
-		// reads, text and JSON
-		{"boards"}, {"board", "list"}, {"--json", "boards"},
-		{"columns", "Home"}, {"column", "list", "Home"}, {"columns", "Garden"}, {"--json", "columns", "Home"}, {"--json", "columns", "b2"},
-		{"cards"}, {"cards", "--board", "Home"}, {"card", "list", "--board", "Garden"},
-		{"cards", "--state", "golden", "--search", "gate hinge"}, {"cards", "--search", ""},
-		{"--json", "cards", "--board", "Home"}, {"--json", "cards", "--board", "Garden"},
-		{"show", "87"}, {"show", "88"}, {"show", "89"}, {"card", "show", "87"}, {"--json", "show", "87"}, {"--json", "card", "show", "88"},
-		// writes, dry-run
-		{"--dry-run", "board-create", "Patio", "--postpone", "30", "--columns", "Later, Next,,Now"},
-		{"--dry-run", "board", "create", "Patio"},
-		{"--dry-run", "--json", "board-create", "Pätio", "--columns", "Später"},
-		{"--dry-run", "create", "Home", "Fix the latch", "--description", "Use **two** screws", "--column", "Next", "--tag", "buy"},
-		{"--dry-run", "card", "create", "Home", "Fix the latch"},
-		{"--dry-run", "--json", "create", "Home", "Fix the latch"},
-		{"--dry-run", "create", "Home", "Fix the latch", "--description-file", plain},
-		{"--dry-run", "move", "87", "--to", "Now"}, {"--dry-run", "move", "87", "--to", "maybe"},
-		{"--dry-run", "move", "87", "--to", "done"}, {"--dry-run", "move", "87", "--to", "Not Now"},
-		{"--dry-run", "card", "move", "87", "--board", "Garden"}, {"--dry-run", "--json", "move", "87", "--board", "Home", "--to", "Next"},
-		{"--dry-run", "reopen", "89"}, {"--dry-run", "--json", "reopen", "89"},
-		{"--dry-run", "golden", "87"}, {"--dry-run", "golden", "87", "--off"}, {"--dry-run", "--json", "card", "golden", "87", "--off"},
-		{"--dry-run", "tag", "87", "#Hinge"}, {"--dry-run", "tag", "87", "buy"}, {"--dry-run", "tag", "87", "buy", "--remove"},
-		{"--dry-run", "card", "tag", "87", "hinge", "--remove"}, {"--dry-run", "--json", "tag", "87", "hinge"},
-		{"--dry-run", "step", "87", "Order the hinge", "--done"}, {"--dry-run", "--json", "step", "add", "87", "Order the hinge"},
-		{"--dry-run", "step", "87", "--check", stepA}, {"--dry-run", "step", "87", "--uncheck=" + stepA},
-		{"--dry-run", "--json", "step", "87", "--check=" + stepA},
-		{"--dry-run", "step", "check", "87", stepA}, {"--dry-run", "--json", "step", "uncheck", "87", stepA},
-		{"--dry-run", "comment", "87", "Measured: **42 mm**"}, {"--dry-run", "--json", "comment", "add", "87", "ok"},
-		{"--dry-run", "delete", "87", "--yes"}, {"--dry-run", "--json", "card", "delete", "87", "--yes"},
-		{"--dry-run", "upload", img}, {"--dry-run", "--json", "upload", img},
-		// writes against the fake server
-		{"create", "Home", "Fix the latch", "--column", "Next", "--tag", "hinge"}, {"--json", "create", "Home", "Fix the latch"},
-		{"board-create", "Patio", "--postpone", "30", "--columns", "Later,Now"}, {"--json", "board-create", "Patio"},
-		{"step", "87", "Order the hinge"}, {"comment", "87", "hi"}, {"move", "87", "--to", "Now"},
-		{"tag", "87", "hinge"}, {"delete", "87", "--yes"}, {"upload", img}, {"--json", "upload", img},
-		// drafts
-		{"draft", "check", drafts}, {"draft", "check", good, "--links"}, {"draft", "check", bad, plain},
-		{"draft", "preview", good, plain}, {"draft", "preview", drafts},
-		{"--dry-run", "draft", "apply", drafts}, {"--dry-run", "draft", "apply", plain},
-		// errors
-		{"cards", "--board", "Nope"}, {"--dry-run", "move", "87", "--to", "Nope"}, {"--dry-run", "create", "Nope", "x"},
-		{"delete", "87"}, {"--json", "delete", "87"}, {"show", "999"}, {"draft", "apply", bad},
+	if len(p.Cases) == 0 || len(p.UsageCases) == 0 {
+		t.Fatalf("%s holds no cases", pythonGolden)
 	}
-	for _, args := range cases {
-		py := runPython(t, fz, env, oldForm(args))
+	return p
+}
+
+// TestParityWithPython runs every case in the golden file through the Go fz
+// and compares stdout, stderr and the exit code with what the Python fz
+// printed.
+func TestParityWithPython(t *testing.T) {
+	f := newParityFixture(t)
+	p := readParityFile(t)
+	for _, c := range p.Cases {
+		args := f.unmarkAll(c.Args)
+		want := result{f.unmark(c.Stdout), f.unmark(c.Stderr), c.Code}
 		// Go's skip line names --update, which Python's fz does not have.
 		// That one line is the only intended difference in draft apply.
-		py.stdout = strings.ReplaceAll(py.stdout, "skip latch.md: already card #87\n",
+		want.stdout = strings.ReplaceAll(want.stdout, "skip latch.md: already card #87\n",
 			"skip latch.md: already card #87 (use --update to push changes)\n")
 		got := runGo(args)
-		if got != py {
+		if got != want {
 			t.Errorf("fz %q\n go: code %d\n%s--- stderr\n%s\n py: code %d\n%s--- stderr\n%s",
-				args, got.code, got.stdout, got.stderr, py.code, py.stdout, py.stderr)
+				c.Args, got.code, got.stdout, got.stderr, want.code, want.stdout, want.stderr)
 		}
 	}
-
-	// Usage errors: argparse and cobra word them differently, so only the
-	// exit code is compared.
-	for _, args := range [][]string{
-		{"show", "abc"}, {"show"}, {"cards", "--state", "bogus"}, {"board-create", "X", "--postpone", "5"},
-		{"--nope", "boards"}, {"nope"}, {"create", "Home"}, {"draft", "check"},
-	} {
-		py := runPython(t, fz, env, args)
-		got := runGo(args)
-		if got.code != py.code {
-			t.Errorf("fz %q: go exit %d, python exit %d (go stderr %q)", args, got.code, py.code, got.stderr)
+	for _, c := range p.UsageCases {
+		got := runGo(f.unmarkAll(c.Args))
+		if got.code != c.Code {
+			t.Errorf("fz %q: go exit %d, python exit %d (go stderr %q)", c.Args, got.code, c.Code, got.stderr)
 		}
 	}
 }
