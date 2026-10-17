@@ -1,0 +1,32 @@
+{
+  "board": "Workshop",
+  "body_md": "## Details\nBody before the steps.\n\n## Notes\nBody after the steps.",
+  "card": null,
+  "column": "Maybe?",
+  "golden": false,
+  "images": [],
+  "links": [],
+  "meta": {
+    "board": "Workshop"
+  },
+  "steps": [
+    {
+      "content": "Upper case mark",
+      "done": true
+    },
+    {
+      "content": "Plus bullet",
+      "done": false
+    },
+    {
+      "content": "Indented item",
+      "done": true
+    },
+    {
+      "content": "Second steps section",
+      "done": false
+    }
+  ],
+  "tags": [],
+  "title": "Step markers"
+}

@@ -1,0 +1,34 @@
+{
+  "board": "Workshop",
+  "body_md": "## Goal\nThe side gate swings shut without dragging.\n\n## Details\nMeasure the post gap first. The old hinge is rusted through.\n\n## Links & media\n- [Hinge guide](https://example.com/hinge)\n![Gate gap](gate-gap.jpg)",
+  "card": null,
+  "column": "Next",
+  "golden": false,
+  "images": [
+    "gate-gap.jpg"
+  ],
+  "links": [
+    "https://example.com/hinge"
+  ],
+  "meta": {
+    "board": "Workshop",
+    "column": "Next",
+    "golden": "false",
+    "tags": "build, buy"
+  },
+  "steps": [
+    {
+      "content": "Measure the post gap",
+      "done": false
+    },
+    {
+      "content": "Order the hinge",
+      "done": true
+    }
+  ],
+  "tags": [
+    "build",
+    "buy"
+  ],
+  "title": "Replace the gate hinge"
+}

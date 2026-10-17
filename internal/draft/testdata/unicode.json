@@ -1,0 +1,26 @@
+{
+  "board": "Workshop",
+  "body_md": "Résumé of the fix. Link https://example.com/café/page ok.",
+  "card": null,
+  "column": "Maybe?",
+  "golden": false,
+  "images": [],
+  "links": [
+    "https://example.com/café/page"
+  ],
+  "meta": {
+    "board": "Workshop",
+    "tags": "café, Über"
+  },
+  "steps": [
+    {
+      "content": "Prüfen the latch",
+      "done": false
+    }
+  ],
+  "tags": [
+    "café",
+    "über"
+  ],
+  "title": "Gate – naïve hinge ✓"
+}

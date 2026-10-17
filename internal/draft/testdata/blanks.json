@@ -1,0 +1,20 @@
+{
+  "board": "Workshop",
+  "body_md": "Body with blank lines around.",
+  "card": null,
+  "column": "Maybe?",
+  "golden": false,
+  "images": [],
+  "links": [],
+  "meta": {
+    "board": "Workshop"
+  },
+  "steps": [
+    {
+      "content": "Only step",
+      "done": false
+    }
+  ],
+  "tags": [],
+  "title": "Spaced"
+}
