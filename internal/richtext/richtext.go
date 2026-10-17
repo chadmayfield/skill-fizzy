@@ -31,8 +31,10 @@ var escaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 // Quotes stay as they are, because Fizzy stores them unescaped in text.
 func escapeText(s string) string { return escaper.Replace(s) }
 
-// tag matches one HTML tag, from < to the next >.
-var tag = regexp.MustCompile(`<[^>]*>`)
+// tag matches one comment or one HTML tag. A comment runs to its closing
+// -->, and a tag runs to the first > outside a quoted attribute value, so a
+// > inside a comment or a quoted attribute does not end it early.
+var tag = regexp.MustCompile(`<!--[\s\S]*?-->|<(?:[^>"']|"[^"]*"|'[^']*')*>`)
 
 // ReplaceText swaps old for new in the text of html, never inside a tag or
 // its attributes, so a link's href stays as it is. Both are plain text and

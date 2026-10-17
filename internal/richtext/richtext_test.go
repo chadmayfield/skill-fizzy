@@ -82,3 +82,29 @@ func TestReplaceSkipsTagsAndAttributes(t *testing.T) {
 		t.Errorf("a match across a tag: %v", err)
 	}
 }
+
+func TestReplaceKeepsQuotedGreaterThanInsideTag(t *testing.T) {
+	html := `<p><a title="a>hinge">hinge</a></p>`
+	got, err := ReplaceText(html, "hinge", "latch", false)
+	want := `<p><a title="a>hinge">latch</a></p>`
+	if err != nil || got != want {
+		t.Errorf("double quote: got %q, %v\nwant %q", got, err, want)
+	}
+	html = `<p><a title='a>hinge'>hinge</a></p>`
+	got, err = ReplaceText(html, "hinge", "latch", false)
+	want = `<p><a title='a>hinge'>latch</a></p>`
+	if err != nil || got != want {
+		t.Errorf("single quote: got %q, %v\nwant %q", got, err, want)
+	}
+}
+
+func TestReplaceKeepsComments(t *testing.T) {
+	html := `<p>x</p><!-- a > hinge --><p>y</p>`
+	if _, err := ReplaceText(html, "hinge", "latch", false); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("comment text matched: %v", err)
+	}
+	got, err := ReplaceText(`<!-- a > hinge --><p>hinge</p>`, "hinge", "latch", false)
+	if err != nil || got != `<!-- a > hinge --><p>latch</p>` {
+		t.Errorf("comment kept: %q, %v", got, err)
+	}
+}
