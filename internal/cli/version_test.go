@@ -39,3 +39,16 @@ func TestResolveVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveVersionEmptyStampActsLikeDev(t *testing.T) {
+	read := func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{Main: debug.Module{Version: "v1.2.0"}}, true
+	}
+	if got := resolveVersion("", read); got != "v1.2.0" {
+		t.Errorf("empty stamp with build info: got %q", got)
+	}
+	noInfo := func() (*debug.BuildInfo, bool) { return nil, false }
+	if got := resolveVersion("", noInfo); got != "dev" {
+		t.Errorf("empty stamp without build info: got %q, want dev", got)
+	}
+}

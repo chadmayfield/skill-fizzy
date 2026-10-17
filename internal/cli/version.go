@@ -3,11 +3,14 @@ package cli
 import "runtime/debug"
 
 // resolveVersion returns the version fz reports. A version stamped by the
-// Makefile is used as it is. An unstamped build ("dev"), such as one from
+// Makefile is used as it is. An unstamped build ("dev" or empty), such as one from
 // go install, uses the module version from read, or failing that the first
 // 7 characters of the VCS revision, with "-dirty" when the tree had local
 // changes.
 func resolveVersion(stamp string, read func() (*debug.BuildInfo, bool)) string {
+	if stamp == "" {
+		stamp = "dev"
+	}
 	if stamp != "dev" {
 		return stamp
 	}
