@@ -193,7 +193,7 @@ func TestCardEditErrors(t *testing.T) {
 		{"bad status", []string{"card", "edit", "5", "--status", "gone"}, 2, "invalid choice"},
 		{"bad number", []string{"card", "edit", "abc", "--title", "T"}, 2, "invalid int value"},
 		{"empty old", []string{"card", "edit", "5", "--replace", "", "z"}, 2, "OLD must not be empty"},
-		{"allow-empty alone", []string{"card", "edit", "5", "--allow-empty", "--title", "T"}, 2, "--allow-empty only goes with --description or --description-file"},
+		{"allow-empty alone", []string{"card", "edit", "5", "--allow-empty", "--title", "T"}, 2, "--allow-empty only goes with --description, --description-file or --replace"},
 	}
 	for _, tc := range cases {
 		r := runGo(tc.args)
@@ -247,6 +247,39 @@ func TestCardEditReplaceKeepsLinks(t *testing.T) {
 	}
 	want := `<p>Buy a <a href="https://example.com/hinge">hinges</a></p>`
 	if got := putBody(t, calls())["card"]["description"]; got != want {
+		t.Errorf("description %q", got)
+	}
+}
+
+func TestCardEditReplaceRefusesEmptyResult(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<div class=\"action-text-content\"><p>Hinge</p></div>"}`)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--replace", "Hinge", ""})
+	if r.code != 2 || !strings.Contains(r.stderr, "the new description is empty; add --allow-empty to clear it") {
+		t.Fatalf("got %+v", r)
+	}
+	for _, c := range calls() {
+		if c.method != http.MethodGet {
+			t.Errorf("a refused edit wrote %+v", c)
+		}
+	}
+	r = runGo([]string{"card", "edit", "5", "--replace", "Hinge", "", "--allow-empty"})
+	if r.code != 0 || r.stdout != "card #5 updated: description\n" {
+		t.Fatalf("with --allow-empty: %+v", r)
+	}
+	if got := putBody(t, calls())["card"]["description"]; got != "<p></p>" {
+		t.Errorf("description %q", got)
+	}
+}
+
+func TestCardEditReplaceKeepsImageOnlyResult(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<p>Hinge</p><action-text-attachment sgid=\"x\"></action-text-attachment>"}`)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--replace", "Hinge", ""})
+	if r.code != 0 {
+		t.Fatalf("got %+v", r)
+	}
+	if got := putBody(t, calls())["card"]["description"]; !strings.Contains(got, "action-text-attachment") {
 		t.Errorf("description %q", got)
 	}
 }

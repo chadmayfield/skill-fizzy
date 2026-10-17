@@ -244,8 +244,9 @@ fz card edit 87 --status published
 
 - A new description replaces the whole description, including any embedded
   images.
-- `fz` refuses a new description that is empty or only whitespace. Add
-  `--allow-empty` to clear a description on purpose.
+- `fz` refuses a new description that is empty or only whitespace, and a
+  `--replace` that leaves the description empty. Add `--allow-empty` to clear
+  a description on purpose.
 - `--replace OLD NEW` swaps one phrase in the current description and leaves
   the rest alone. `--all` swaps every match. Use it for small fixes, so
   images survive.
