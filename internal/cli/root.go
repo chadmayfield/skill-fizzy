@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -51,21 +52,52 @@ func NewRoot() *cobra.Command {
 	return root
 }
 
-// run executes root with args and returns the process exit code: 0 on
-// success, 1 for errors, 2 for usage errors.
+// run rewrites old command forms, executes root with args and returns the
+// process exit code: 0 on success, 1 for errors, 2 for usage errors.
 func run(root *cobra.Command, args []string, out, errw io.Writer) int {
+	args = Rewrite(args)
 	root.SetArgs(args)
 	root.SetOut(out)
 	root.SetErr(errw)
-	err := root.Execute()
+	err := unknownSubcommand(root, args)
+	if err == nil {
+		err = root.Execute()
+	}
 	if err == nil {
 		return 0
 	}
-	fmt.Fprintf(errw, "fz: %s\n", err)
+	var code exitCode
+	if errors.As(err, &code) {
+		return int(code)
+	}
+	fmt.Fprintf(errw, "fz: %s\n", errorText(err))
 	if _, ok := err.(usageError); ok || strings.HasPrefix(err.Error(), "unknown command") {
 		return 2
 	}
 	return 1
+}
+
+// unknownSubcommand reports "fz card nope" as a usage error. Cobra only
+// checks unknown commands on the root; a group such as card would print its
+// help and exit 0.
+func unknownSubcommand(root *cobra.Command, args []string) error {
+	cmd, rest, err := root.Find(args)
+	if err != nil || cmd == root || cmd.Runnable() || !cmd.HasSubCommands() {
+		return nil
+	}
+	for i := 0; i < len(rest); i++ {
+		a := rest[i]
+		if !strings.HasPrefix(a, "-") {
+			return usageError{fmt.Errorf("unknown command %q for %q", a, cmd.CommandPath())}
+		}
+		// Skip the value of a long flag that takes one, as in --config x.json.
+		if strings.HasPrefix(a, "--") && !strings.Contains(a, "=") {
+			if f := cmd.Flag(a[2:]); f != nil && f.NoOptDefVal == "" {
+				i++
+			}
+		}
+	}
+	return nil
 }
 
 // Execute runs fz with the process arguments and returns the exit code.
