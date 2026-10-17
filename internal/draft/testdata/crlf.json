@@ -1,0 +1,25 @@
+{
+  "board": "Workshop",
+  "body_md": "Body line one.",
+  "card": null,
+  "column": "Later",
+  "golden": false,
+  "images": [],
+  "links": [],
+  "meta": {
+    "board": "Workshop",
+    "column": "Later"
+  },
+  "steps": [
+    {
+      "content": "First",
+      "done": false
+    },
+    {
+      "content": "Second",
+      "done": true
+    }
+  ],
+  "tags": [],
+  "title": "Windows line endings"
+}

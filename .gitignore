@@ -1,9 +1,19 @@
-__pycache__/
-*.pyc
-*.egg-info/
-build/
-dist/
-.venv/
 # local config and drafts never belong in the repo
 config.json
 drafts/
+
+/fz
+/dist
+
+# private agent and planning files, never published
+.superpowers/
+**/superpowers/
+docs/plans/
+docs/specs/
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
+
+# python bytecode
+__pycache__/
+*.pyc

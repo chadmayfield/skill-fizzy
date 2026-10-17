@@ -1,0 +1,25 @@
+{
+  "board": "Workshop",
+  "body_md": "Some body text.",
+  "card": 87,
+  "column": "Now",
+  "golden": true,
+  "images": [],
+  "links": [],
+  "meta": {
+    "board": "Workshop",
+    "card": "87",
+    "column": "Now",
+    "golden": "Yes",
+    "note": "keep #tag as is",
+    "synced": "2026-10-17T10:00:00Z",
+    "tags": "[#gate, \"Hinge\", , Paint]"
+  },
+  "steps": [],
+  "tags": [
+    "gate",
+    "hinge",
+    "paint"
+  ],
+  "title": "Front matter variants"
+}

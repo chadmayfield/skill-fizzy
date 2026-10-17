@@ -1,0 +1,1074 @@
+{
+  "note": "Captured from the Python fz (bin/fz) on 2026-10-17. Do not regenerate from Go.",
+  "cases": [
+    {
+      "args": [
+        "boards"
+      ],
+      "stdout": "b1  Home  (postpone 30d)\nb2  Garden  (postpone Noned)\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "board",
+        "list"
+      ],
+      "python_args": [
+        "boards"
+      ],
+      "stdout": "b1  Home  (postpone 30d)\nb2  Garden  (postpone Noned)\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "boards"
+      ],
+      "stdout": "[\n  {\n    \"id\": \"b1\",\n    \"name\": \"Home\",\n    \"auto_postpone_period_in_days\": 30,\n    \"url\": \"{{URL}}/1/boards/b1\"\n  },\n  {\n    \"name\": \"Garden\",\n    \"id\": \"b2\",\n    \"all_access\": true\n  }\n]\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "columns",
+        "Home"
+      ],
+      "stdout": "Not now → Maybe? → Later → Next → Now → Done\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "column",
+        "list",
+        "Home"
+      ],
+      "python_args": [
+        "columns",
+        "Home"
+      ],
+      "stdout": "Not now → Maybe? → Later → Next → Now → Done\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "columns",
+        "Garden"
+      ],
+      "stdout": "Not now → Maybe? →  → Done\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "columns",
+        "Home"
+      ],
+      "stdout": "[\n  {\n    \"id\": \"c-later\",\n    \"name\": \"Later\",\n    \"color\": {\n      \"name\": \"Blue\",\n      \"value\": \"var(--color-card-default)\"\n    }\n  },\n  {\n    \"id\": \"c-next\",\n    \"name\": \"Next\",\n    \"color\": {\n      \"name\": \"Blue\",\n      \"value\": \"var(--color-card-1)\"\n    }\n  },\n  {\n    \"id\": \"c-now\",\n    \"name\": \"Now\",\n    \"color\": {\n      \"name\": \"Blue\",\n      \"value\": \"var(--color-card-2)\"\n    }\n  }\n]\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "columns",
+        "b2"
+      ],
+      "stdout": "[]\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "cards"
+      ],
+      "stdout": "#87    [Now] Fix the gate ★ #buy #waiting\n#88    [maybe] Oil the hinge café\n#89    [done] Paint the fence\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "cards",
+        "--board",
+        "Home"
+      ],
+      "stdout": "#87    [Now] Fix the gate ★ #buy #waiting\n#88    [maybe] Oil the hinge café\n#89    [done] Paint the fence\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "card",
+        "list",
+        "--board",
+        "Garden"
+      ],
+      "python_args": [
+        "cards",
+        "--board",
+        "Garden"
+      ],
+      "stdout": "(no cards)\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "cards",
+        "--state",
+        "golden",
+        "--search",
+        "gate hinge"
+      ],
+      "stdout": "#87    [Now] Fix the gate ★ #buy #waiting\n#88    [maybe] Oil the hinge café\n#89    [done] Paint the fence\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "cards",
+        "--search",
+        ""
+      ],
+      "stdout": "#87    [Now] Fix the gate ★ #buy #waiting\n#88    [maybe] Oil the hinge café\n#89    [done] Paint the fence\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "cards",
+        "--board",
+        "Home"
+      ],
+      "stdout": "[\n  {\n    \"id\": \"k87\",\n    \"number\": 87,\n    \"title\": \"Fix the gate\",\n    \"status\": \"published\",\n    \"board\": {\n      \"id\": \"b1\",\n      \"name\": \"Home\"\n    },\n    \"column\": {\n      \"id\": \"c-now\",\n      \"name\": \"Now\",\n      \"color\": {\n        \"name\": \"Blue\",\n        \"value\": \"var(--color-card-default)\"\n      }\n    },\n    \"url\": \"{{URL}}/1/cards/87\",\n    \"closed\": false,\n    \"golden\": true,\n    \"tags\": [\n      \"buy\",\n      \"waiting\"\n    ]\n  },\n  {\n    \"id\": \"k88\",\n    \"number\": 88,\n    \"title\": \"Oil the hinge caf\\u00e9\",\n    \"status\": \"published\",\n    \"board\": {\n      \"id\": \"b1\",\n      \"name\": \"Home\"\n    },\n    \"column\": null,\n    \"url\": \"{{URL}}/1/cards/88\",\n    \"closed\": false,\n    \"golden\": false,\n    \"tags\": []\n  },\n  {\n    \"id\": \"k89\",\n    \"number\": 89,\n    \"title\": \"Paint the fence\",\n    \"status\": \"published\",\n    \"board\": {\n      \"id\": \"b1\",\n      \"name\": \"Home\"\n    },\n    \"column\": {\n      \"id\": \"c-now\",\n      \"name\": \"Now\",\n      \"color\": {\n        \"name\": \"Blue\",\n        \"value\": \"var(--color-card-default)\"\n      }\n    },\n    \"url\": \"{{URL}}/1/cards/89\",\n    \"closed\": true,\n    \"golden\": false,\n    \"tags\": []\n  }\n]\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "cards",
+        "--board",
+        "Garden"
+      ],
+      "stdout": "[]\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "show",
+        "87"
+      ],
+      "stdout": "#87    [Now] Fix the gate ★ #buy #waiting\nboard: Home   url: {{URL}}/1/cards/87\n\nSwap the **hinge**.\n\nThen oil it.\n  [ ] Order the hinge\n  [x] Measure the gap\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "show",
+        "88"
+      ],
+      "stdout": "#88    [maybe] Oil the hinge café\nboard: Home   url: {{URL}}/1/cards/88\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "show",
+        "89"
+      ],
+      "stdout": "#89    [done] Paint the fence\nboard: Home   url: {{URL}}/1/cards/89\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "card",
+        "show",
+        "87"
+      ],
+      "python_args": [
+        "show",
+        "87"
+      ],
+      "stdout": "#87    [Now] Fix the gate ★ #buy #waiting\nboard: Home   url: {{URL}}/1/cards/87\n\nSwap the **hinge**.\n\nThen oil it.\n  [ ] Order the hinge\n  [x] Measure the gap\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "show",
+        "87"
+      ],
+      "stdout": "{\n  \"id\": \"k87\",\n  \"number\": 87,\n  \"title\": \"Fix the gate\",\n  \"status\": \"published\",\n  \"board\": {\n    \"id\": \"b1\",\n    \"name\": \"Home\"\n  },\n  \"column\": {\n    \"id\": \"c-now\",\n    \"name\": \"Now\",\n    \"color\": {\n      \"name\": \"Blue\",\n      \"value\": \"var(--color-card-default)\"\n    }\n  },\n  \"url\": \"{{URL}}/1/cards/87\",\n  \"closed\": false,\n  \"golden\": true,\n  \"tags\": [\n    \"buy\",\n    \"waiting\"\n  ],\n  \"description\": \"  Swap the **hinge**.\\n\\nThen oil it.  \\n\",\n  \"description_html\": \"<p>Swap</p>\",\n  \"last_active_at\": \"2026-10-01T10:00:00Z\",\n  \"steps\": [\n    {\n      \"id\": \"03abc123def456ghi789jkl0mn\",\n      \"content\": \"Order the hinge\",\n      \"completed\": false\n    },\n    {\n      \"id\": \"03zzz999yyy888xxx777www6vu\",\n      \"content\": \"Measure the gap\",\n      \"completed\": true\n    }\n  ],\n  \"score\": 1.5\n}\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "card",
+        "show",
+        "88"
+      ],
+      "python_args": [
+        "--json",
+        "show",
+        "88"
+      ],
+      "stdout": "{\n  \"id\": \"k88\",\n  \"number\": 88,\n  \"title\": \"Oil the hinge caf\\u00e9\",\n  \"status\": \"published\",\n  \"board\": {\n    \"id\": \"b1\",\n    \"name\": \"Home\"\n  },\n  \"column\": null,\n  \"url\": \"{{URL}}/1/cards/88\",\n  \"closed\": false,\n  \"golden\": false,\n  \"tags\": [],\n  \"description\": \"\"\n}\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "board-create",
+        "Patio",
+        "--postpone",
+        "30",
+        "--columns",
+        "Later, Next,,Now"
+      ],
+      "stdout": "board 'Patio' created: None\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards {\"board\": {\"name\": \"Patio\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "board",
+        "create",
+        "Patio"
+      ],
+      "python_args": [
+        "--dry-run",
+        "board-create",
+        "Patio"
+      ],
+      "stdout": "board 'Patio' created: None\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards {\"board\": {\"name\": \"Patio\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "board-create",
+        "Pätio",
+        "--columns",
+        "Später"
+      ],
+      "stdout": "{\n  \"id\": null,\n  \"columns\": [\n    \"Sp\\u00e4ter\"\n  ]\n}\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards {\"board\": {\"name\": \"P\\u00e4tio\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "create",
+        "Home",
+        "Fix the latch",
+        "--description",
+        "Use **two** screws",
+        "--column",
+        "Next",
+        "--tag",
+        "buy"
+      ],
+      "stdout": "dry-run: card not created\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards/b1/cards {\"card\": {\"title\": \"Fix the latch\", \"description\": \"<p>Use <strong>two</strong> screws</p>\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "card",
+        "create",
+        "Home",
+        "Fix the latch"
+      ],
+      "python_args": [
+        "--dry-run",
+        "create",
+        "Home",
+        "Fix the latch"
+      ],
+      "stdout": "dry-run: card not created\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards/b1/cards {\"card\": {\"title\": \"Fix the latch\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "create",
+        "Home",
+        "Fix the latch"
+      ],
+      "stdout": "{\n  \"number\": null\n}\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards/b1/cards {\"card\": {\"title\": \"Fix the latch\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "create",
+        "Home",
+        "Fix the latch",
+        "--description-file",
+        "{{DIR}}/plain.md"
+      ],
+      "stdout": "dry-run: card not created\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards/b1/cards {\"card\": {\"title\": \"Fix the latch\", \"description\": \"<hr>\\n<p>board: Home</p>\\n<hr>\\n<h2>Oil the hinge</h2>\\n<p>Once a year.</p>\\n<h3>Steps</h3>\\n<ul>\\n<li>\\u2610 Buy oil</li>\\n</ul>\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "move",
+        "87",
+        "--to",
+        "Now"
+      ],
+      "stdout": "card #87 moved\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/triage {\"column_id\": \"c-now\"}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "move",
+        "87",
+        "--to",
+        "maybe"
+      ],
+      "stdout": "card #87 moved\n",
+      "stderr": "[dry-run] DELETE {{URL}}/1/cards/87/triage \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "move",
+        "87",
+        "--to",
+        "done"
+      ],
+      "stdout": "card #87 moved\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/closure \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "move",
+        "87",
+        "--to",
+        "Not Now"
+      ],
+      "stdout": "card #87 moved\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/not_now \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "card",
+        "move",
+        "87",
+        "--board",
+        "Garden"
+      ],
+      "python_args": [
+        "--dry-run",
+        "move",
+        "87",
+        "--board",
+        "Garden"
+      ],
+      "stdout": "card #87 moved\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/board {\"board_id\": \"b2\"}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "move",
+        "87",
+        "--board",
+        "Home",
+        "--to",
+        "Next"
+      ],
+      "stdout": "{\n  \"number\": 87\n}\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/board {\"board_id\": \"b1\"}\n[dry-run] POST {{URL}}/1/cards/87/triage {\"column_id\": \"c-next\"}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "reopen",
+        "89"
+      ],
+      "stdout": "card #89 reopened\n",
+      "stderr": "[dry-run] DELETE {{URL}}/1/cards/89/closure \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "reopen",
+        "89"
+      ],
+      "stdout": "{\n  \"number\": 89\n}\n",
+      "stderr": "[dry-run] DELETE {{URL}}/1/cards/89/closure \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "golden",
+        "87"
+      ],
+      "stdout": "card #87 golden=on\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/goldness \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "golden",
+        "87",
+        "--off"
+      ],
+      "stdout": "card #87 golden=off\n",
+      "stderr": "[dry-run] DELETE {{URL}}/1/cards/87/goldness \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "card",
+        "golden",
+        "87",
+        "--off"
+      ],
+      "python_args": [
+        "--dry-run",
+        "--json",
+        "golden",
+        "87",
+        "--off"
+      ],
+      "stdout": "{\n  \"number\": 87,\n  \"golden\": false\n}\n",
+      "stderr": "[dry-run] DELETE {{URL}}/1/cards/87/goldness \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "tag",
+        "87",
+        "#Hinge"
+      ],
+      "stdout": "tag #Hinge added\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/taggings {\"tag_title\": \"hinge\"}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "tag",
+        "87",
+        "buy"
+      ],
+      "stdout": "tag buy already present\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "tag",
+        "87",
+        "buy",
+        "--remove"
+      ],
+      "stdout": "tag buy removed\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/taggings {\"tag_title\": \"buy\"}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "card",
+        "tag",
+        "87",
+        "hinge",
+        "--remove"
+      ],
+      "python_args": [
+        "--dry-run",
+        "tag",
+        "87",
+        "hinge",
+        "--remove"
+      ],
+      "stdout": "tag hinge already absent\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "tag",
+        "87",
+        "hinge"
+      ],
+      "stdout": "{\n  \"changed\": true\n}\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/taggings {\"tag_title\": \"hinge\"}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "step",
+        "87",
+        "Order the hinge",
+        "--done"
+      ],
+      "stdout": "step added: None\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/steps {\"step\": {\"content\": \"Order the hinge\", \"completed\": true}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "step",
+        "add",
+        "87",
+        "Order the hinge"
+      ],
+      "python_args": [
+        "--dry-run",
+        "--json",
+        "step",
+        "87",
+        "Order the hinge"
+      ],
+      "stdout": "{\n  \"id\": null\n}\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/steps {\"step\": {\"content\": \"Order the hinge\", \"completed\": false}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "step",
+        "87",
+        "--check",
+        "03abc123def456ghi789jkl0mn"
+      ],
+      "stdout": "step updated\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/steps/03abc123def456ghi789jkl0mn {\"step\": {\"completed\": true}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "step",
+        "87",
+        "--uncheck=03abc123def456ghi789jkl0mn"
+      ],
+      "stdout": "step updated\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/steps/03abc123def456ghi789jkl0mn {\"step\": {\"completed\": false}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "step",
+        "87",
+        "--check=03abc123def456ghi789jkl0mn"
+      ],
+      "stdout": "{}\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/steps/03abc123def456ghi789jkl0mn {\"step\": {\"completed\": true}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "step",
+        "check",
+        "87",
+        "03abc123def456ghi789jkl0mn"
+      ],
+      "python_args": [
+        "--dry-run",
+        "step",
+        "87",
+        "--check",
+        "03abc123def456ghi789jkl0mn"
+      ],
+      "stdout": "step updated\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/steps/03abc123def456ghi789jkl0mn {\"step\": {\"completed\": true}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "step",
+        "uncheck",
+        "87",
+        "03abc123def456ghi789jkl0mn"
+      ],
+      "python_args": [
+        "--dry-run",
+        "--json",
+        "step",
+        "87",
+        "--uncheck",
+        "03abc123def456ghi789jkl0mn"
+      ],
+      "stdout": "{}\n",
+      "stderr": "[dry-run] PUT {{URL}}/1/cards/87/steps/03abc123def456ghi789jkl0mn {\"step\": {\"completed\": false}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "comment",
+        "87",
+        "Measured: **42 mm**"
+      ],
+      "stdout": "comment added: None\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/comments {\"comment\": {\"body\": \"<p>Measured: <strong>42 mm</strong></p>\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "comment",
+        "add",
+        "87",
+        "ok"
+      ],
+      "python_args": [
+        "--dry-run",
+        "--json",
+        "comment",
+        "87",
+        "ok"
+      ],
+      "stdout": "{\n  \"id\": null\n}\n",
+      "stderr": "[dry-run] POST {{URL}}/1/cards/87/comments {\"comment\": {\"body\": \"<p>ok</p>\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "delete",
+        "87",
+        "--yes"
+      ],
+      "stdout": "card #87 deleted\n",
+      "stderr": "about to delete: #87    [Now] Fix the gate ★ #buy #waiting (board Home)\n[dry-run] DELETE {{URL}}/1/cards/87 \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "card",
+        "delete",
+        "87",
+        "--yes"
+      ],
+      "python_args": [
+        "--dry-run",
+        "--json",
+        "delete",
+        "87",
+        "--yes"
+      ],
+      "stdout": "{\n  \"deleted\": 87\n}\n",
+      "stderr": "about to delete: #87    [Now] Fix the gate ★ #buy #waiting (board Home)\n[dry-run] DELETE {{URL}}/1/cards/87 \n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "upload",
+        "{{DIR}}/hinge.jpg"
+      ],
+      "stdout": "DRY-RUN-SGID\n",
+      "stderr": "[dry-run] POST {{URL}}/1/rails/active_storage/direct_uploads {\"blob\": {\"filename\": \"hinge.jpg\", \"byte_size\": 17, \"checksum\": \"CKg9ZoYoGlopJzJDWyH4Og==\", \"content_type\": \"image/jpeg\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "--json",
+        "upload",
+        "{{DIR}}/hinge.jpg"
+      ],
+      "stdout": "{\n  \"sgid\": \"DRY-RUN-SGID\"\n}\n",
+      "stderr": "[dry-run] POST {{URL}}/1/rails/active_storage/direct_uploads {\"blob\": {\"filename\": \"hinge.jpg\", \"byte_size\": 17, \"checksum\": \"CKg9ZoYoGlopJzJDWyH4Og==\", \"content_type\": \"image/jpeg\"}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "create",
+        "Home",
+        "Fix the latch",
+        "--column",
+        "Next",
+        "--tag",
+        "hinge"
+      ],
+      "stdout": "",
+      "stderr": "fz: GET /1/cards/90 -> HTTP 404: {\"error\":\"Not found\"}\n",
+      "code": 1
+    },
+    {
+      "args": [
+        "--json",
+        "create",
+        "Home",
+        "Fix the latch"
+      ],
+      "stdout": "{\n  \"number\": 90\n}\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "board-create",
+        "Patio",
+        "--postpone",
+        "30",
+        "--columns",
+        "Later,Now"
+      ],
+      "stdout": "board 'Patio' created: b9\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "board-create",
+        "Patio"
+      ],
+      "stdout": "{\n  \"id\": \"b9\",\n  \"columns\": []\n}\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "step",
+        "87",
+        "Order the hinge"
+      ],
+      "stdout": "step added: 03new000000000000000000000\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "comment",
+        "87",
+        "hi"
+      ],
+      "stdout": "comment added: cm1\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "move",
+        "87",
+        "--to",
+        "Now"
+      ],
+      "stdout": "card #87 moved\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "tag",
+        "87",
+        "hinge"
+      ],
+      "stdout": "tag hinge added\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "delete",
+        "87",
+        "--yes"
+      ],
+      "stdout": "card #87 deleted\n",
+      "stderr": "about to delete: #87    [Now] Fix the gate ★ #buy #waiting (board Home)\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "upload",
+        "{{DIR}}/hinge.jpg"
+      ],
+      "stdout": "att-sgid\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--json",
+        "upload",
+        "{{DIR}}/hinge.jpg"
+      ],
+      "stdout": "{\n  \"sgid\": \"att-sgid\"\n}\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "draft",
+        "check",
+        "{{DIR}}/drafts"
+      ],
+      "stdout": "✓ gate.md: 'Fix the gate' → Home / Next, 2 steps, 1 images\n✓ latch.md: 'Fix the latch' → Home / Maybe?, 0 steps, 0 images (already created: #87)\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "draft",
+        "check",
+        "{{DIR}}/drafts/gate.md",
+        "--links"
+      ],
+      "stdout": "✓ gate.md: 'Fix the gate' → Home / Next, 2 steps, 1 images\n    ok  200 {{URL}}/links/ok\n    BAD 404 {{URL}}/links/missing\n",
+      "stderr": "",
+      "code": 1
+    },
+    {
+      "args": [
+        "draft",
+        "check",
+        "{{DIR}}/bad.md",
+        "{{DIR}}/plain.md"
+      ],
+      "stdout": "✗ {{DIR}}/bad.md: {{DIR}}/bad.md: missing front matter (--- board: ... ---)\n✓ plain.md: 'Oil the hinge' → Home / Maybe?, 1 steps, 0 images\n",
+      "stderr": "",
+      "code": 1
+    },
+    {
+      "args": [
+        "draft",
+        "preview",
+        "{{DIR}}/drafts/gate.md",
+        "{{DIR}}/plain.md"
+      ],
+      "stdout": "=== Fix the gate\nboard: Home   column: Next   tags: buy, waiting   golden: True\n<p>Swap the <strong>hinge</strong> on the side gate.</p>\n<p>[image: hinge.jpg]</p>\n<ul>\n<li><a href=\"{{URL}}/links/ok\">Guide</a></li>\n<li><a href=\"{{URL}}/links/missing\">{{URL}}/links/missing</a></li>\n</ul>\n  [ ] Order the hinge\n  [x] Measure the gap\n\n=== Oil the hinge\nboard: Home   column: Maybe?   tags: -   golden: False\n<p>Once a year.</p>\n  [ ] Buy oil\n\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "draft",
+        "preview",
+        "{{DIR}}/drafts"
+      ],
+      "stdout": "=== Fix the gate\nboard: Home   column: Next   tags: buy, waiting   golden: True\n<p>Swap the <strong>hinge</strong> on the side gate.</p>\n<p>[image: hinge.jpg]</p>\n<ul>\n<li><a href=\"{{URL}}/links/ok\">Guide</a></li>\n<li><a href=\"{{URL}}/links/missing\">{{URL}}/links/missing</a></li>\n</ul>\n  [ ] Order the hinge\n  [x] Measure the gap\n\n=== Fix the latch\nboard: Home   column: Maybe?   tags: -   golden: False\n<p>Two screws.</p>\n\n",
+      "stderr": "",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "draft",
+        "apply",
+        "{{DIR}}/drafts"
+      ],
+      "stdout": "[dry-run] Fix the gate → Home / Next\nskip latch.md: already card #87\n",
+      "stderr": "[dry-run] POST {{URL}}/1/rails/active_storage/direct_uploads {\"blob\": {\"filename\": \"hinge.jpg\", \"byte_size\": 10, \"checksum\": \"LM15nzpRMDUEeImUR7aqBg==\", \"content_type\": \"image/jpeg\"}}\n[dry-run] POST {{URL}}/1/boards/b1/cards {\"card\": {\"title\": \"Fix the gate\", \"description\": \"<p>Swap the <strong>hinge</strong> on the side gate.</p>\\n<action-text-attachment sgid=\\\"DRY-RUN-SGID\\\"></action-text-attachment>\\n<ul>\\n<li><a href=\\\"{{URL}}/links/ok\\\">Guide</a></li>\\n<li><a href=\\\"{{URL}}/links/missing\\\">{{URL}}/links/missing</a></li>\\n</ul>\"}}\n[dry-run] POST {{URL}}/1/cards/0/steps {\"step\": {\"content\": \"Order the hinge\", \"completed\": false}}\n[dry-run] POST {{URL}}/1/cards/0/steps {\"step\": {\"content\": \"Measure the gap\", \"completed\": true}}\n[dry-run] tag new card: buy\n[dry-run] tag new card: waiting\n[dry-run] move new card to column: Next\n[dry-run] mark new card golden\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "--dry-run",
+        "draft",
+        "apply",
+        "{{DIR}}/plain.md"
+      ],
+      "stdout": "[dry-run] Oil the hinge → Home / Maybe?\n",
+      "stderr": "[dry-run] POST {{URL}}/1/boards/b1/cards {\"card\": {\"title\": \"Oil the hinge\", \"description\": \"<p>Once a year.</p>\"}}\n[dry-run] POST {{URL}}/1/cards/0/steps {\"step\": {\"content\": \"Buy oil\", \"completed\": false}}\n",
+      "code": 0
+    },
+    {
+      "args": [
+        "cards",
+        "--board",
+        "Nope"
+      ],
+      "stdout": "",
+      "stderr": "fz: no board named 'Nope' (have: Home, Garden)\n",
+      "code": 1
+    },
+    {
+      "args": [
+        "--dry-run",
+        "move",
+        "87",
+        "--to",
+        "Nope"
+      ],
+      "stdout": "",
+      "stderr": "fz: no column 'Nope' (have: Later, Next, Now)\n",
+      "code": 1
+    },
+    {
+      "args": [
+        "--dry-run",
+        "create",
+        "Nope",
+        "x"
+      ],
+      "stdout": "",
+      "stderr": "fz: no board named 'Nope' (have: Home, Garden)\n",
+      "code": 1
+    },
+    {
+      "args": [
+        "delete",
+        "87"
+      ],
+      "stdout": "",
+      "stderr": "about to delete: #87    [Now] Fix the gate ★ #buy #waiting (board Home)\nrefusing without --yes\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "--json",
+        "delete",
+        "87"
+      ],
+      "stdout": "",
+      "stderr": "about to delete: #87    [Now] Fix the gate ★ #buy #waiting (board Home)\nrefusing without --yes\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "show",
+        "999"
+      ],
+      "stdout": "",
+      "stderr": "fz: GET /1/cards/999 -> HTTP 404: {\"error\":\"Not found\"}\n",
+      "code": 1
+    },
+    {
+      "args": [
+        "draft",
+        "apply",
+        "{{DIR}}/bad.md"
+      ],
+      "stdout": "",
+      "stderr": "fz: {{DIR}}/bad.md: missing front matter (--- board: ... ---)\n",
+      "code": 1
+    }
+  ],
+  "usage_cases": [
+    {
+      "args": [
+        "show",
+        "abc"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz show [-h] number\nfz show: error: argument number: invalid int value: 'abc'\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "show"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz show [-h] number\nfz show: error: the following arguments are required: number\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "cards",
+        "--state",
+        "bogus"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz cards [-h] [--board BOARD]\n                [--state {all,maybe,closed,not_now,stalled,postponing_soon,golden}]\n                [--search SEARCH]\nfz cards: error: argument --state: invalid choice: 'bogus' (choose from 'all', 'maybe', 'closed', 'not_now', 'stalled', 'postponing_soon', 'golden')\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "board-create",
+        "X",
+        "--postpone",
+        "5"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz board-create [-h] [--postpone {3,7,11,30,90,365}]\n                       [--columns COLUMNS]\n                       name\nfz board-create: error: argument --postpone: invalid choice: 5 (choose from 3, 7, 11, 30, 90, 365)\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "--nope",
+        "boards"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz [-h] [--version] [--dry-run] [--json] [--config CONFIG]\n          {boards,board-create,columns,cards,show,create,move,reopen,golden,tag,step,comment,delete,upload,draft}\n          ...\nfz: error: unrecognized arguments: --nope\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "nope"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz [-h] [--version] [--dry-run] [--json] [--config CONFIG]\n          {boards,board-create,columns,cards,show,create,move,reopen,golden,tag,step,comment,delete,upload,draft}\n          ...\nfz: error: argument cmd: invalid choice: 'nope' (choose from 'boards', 'board-create', 'columns', 'cards', 'show', 'create', 'move', 'reopen', 'golden', 'tag', 'step', 'comment', 'delete', 'upload', 'draft')\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "create",
+        "Home"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz create [-h] [--description DESCRIPTION]\n                 [--description-file DESCRIPTION_FILE] [--column COLUMN]\n                 [--tag TAG]\n                 board title\nfz create: error: the following arguments are required: title\n",
+      "code": 2
+    },
+    {
+      "args": [
+        "draft",
+        "check"
+      ],
+      "stdout": "",
+      "stderr": "usage: fz draft check [-h] [--links] drafts [drafts ...]\nfz draft check: error: the following arguments are required: drafts\n",
+      "code": 2
+    }
+  ]
+}

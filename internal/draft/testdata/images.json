@@ -1,0 +1,19 @@
+{
+  "board": "Workshop",
+  "body_md": "## Links & media\n![Front view](front.jpg)\n   ![Indented](sub/side.png)  \n- ![In a list](list.jpg)\n![Second front](front.jpg)",
+  "card": null,
+  "column": "Maybe?",
+  "golden": false,
+  "images": [
+    "front.jpg",
+    "sub/side.png",
+    "front.jpg"
+  ],
+  "links": [],
+  "meta": {
+    "board": "Workshop"
+  },
+  "steps": [],
+  "tags": [],
+  "title": "Images"
+}

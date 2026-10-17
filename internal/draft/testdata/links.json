@@ -1,0 +1,20 @@
+{
+  "board": "Workshop",
+  "body_md": "## Links & media\n- [Guide](https://example.com/guide)\n- Bare link https://example.com/bare. And again https://example.com/bare.\n- In parens (https://example.com/paren) and \"https://example.com/quoted\"\n- Trailing punctuation https://example.com/path/x?a=1, then more!\n- [Repeat](https://example.com/guide)\n- Not a link: ftp://example.com/file and xhttps://example.com/glued\n- Query https://example.com/q?x=1&y=2;",
+  "card": null,
+  "column": "Maybe?",
+  "golden": false,
+  "images": [],
+  "links": [
+    "https://example.com/guide",
+    "https://example.com/bare",
+    "https://example.com/path/x?a=1",
+    "https://example.com/q?x=1&y=2"
+  ],
+  "meta": {
+    "board": "Workshop"
+  },
+  "steps": [],
+  "tags": [],
+  "title": "Link finding"
+}

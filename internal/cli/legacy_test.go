@@ -1,0 +1,120 @@
+package cli
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestRewrite(t *testing.T) {
+	cases := []struct{ old, new []string }{
+		{[]string{"boards"}, []string{"board", "list"}},
+		{[]string{"board-create", "Garden", "--postpone", "365"}, []string{"board", "create", "Garden", "--postpone", "365"}},
+		{[]string{"columns", "Home"}, []string{"column", "list", "Home"}},
+		{[]string{"cards", "--board", "Home"}, []string{"card", "list", "--board", "Home"}},
+		{[]string{"show", "87"}, []string{"card", "show", "87"}},
+		{[]string{"create", "Home", "Fix gate"}, []string{"card", "create", "Home", "Fix gate"}},
+		{[]string{"move", "5", "--to", "now"}, []string{"card", "move", "5", "--to", "now"}},
+		{[]string{"reopen", "5"}, []string{"card", "reopen", "5"}},
+		{[]string{"golden", "5", "--off"}, []string{"card", "golden", "5", "--off"}},
+		{[]string{"tag", "5", "buy"}, []string{"card", "tag", "5", "buy"}},
+		{[]string{"delete", "5", "--yes"}, []string{"card", "delete", "5", "--yes"}},
+		{[]string{"comment", "5", "hi"}, []string{"comment", "add", "5", "hi"}},
+		{[]string{"step", "5", "Order it", "--done"}, []string{"step", "add", "5", "Order it", "--done"}},
+		{[]string{"step", "5", "--check", "S1"}, []string{"step", "check", "5", "S1"}},
+		{[]string{"step", "5", "--uncheck", "S1"}, []string{"step", "uncheck", "5", "S1"}},
+		{[]string{"step", "5", "--check=S1"}, []string{"step", "check", "5", "S1"}},
+	}
+	for _, tc := range cases {
+		if got := Rewrite(append([]string{}, tc.old...)); !reflect.DeepEqual(got, tc.new) {
+			t.Errorf("Rewrite(%q) = %q, want %q", tc.old, got, tc.new)
+		}
+	}
+}
+
+func TestRewritePassesNewFormsThrough(t *testing.T) {
+	for _, argv := range [][]string{
+		{"card", "edit", "5", "--title", "x"},
+		{"step", "list", "5"},
+		{"comment", "add", "5", "x"},
+		{"review"},
+		{"draft", "apply", "d/"},
+		{"help", "card"},
+		{},
+	} {
+		if got := Rewrite(append([]string{}, argv...)); !reflect.DeepEqual(got, argv) && !(len(got) == 0 && len(argv) == 0) {
+			t.Errorf("Rewrite(%q) = %q, want it unchanged", argv, got)
+		}
+	}
+}
+
+func TestRewriteWithGlobalFlags(t *testing.T) {
+	cases := []struct{ old, new []string }{
+		{[]string{"--dry-run", "move", "5", "--to", "now"}, []string{"--dry-run", "card", "move", "5", "--to", "now"}},
+		{[]string{"--config", "x.json", "step", "5", "--check=S1"}, []string{"--config", "x.json", "step", "check", "5", "S1"}},
+		{[]string{"--json", "--config=x.json", "show", "5"}, []string{"--json", "--config=x.json", "card", "show", "5"}},
+	}
+	for _, tc := range cases {
+		if got := Rewrite(append([]string{}, tc.old...)); !reflect.DeepEqual(got, tc.new) {
+			t.Errorf("Rewrite(%q) = %q, want %q", tc.old, got, tc.new)
+		}
+	}
+}
+
+// TestOldAndNewReachTheSameCommand ports the Python plan's TestParser: the
+// old form and the new form resolve to the same cobra command.
+func TestOldAndNewReachTheSameCommand(t *testing.T) {
+	pairs := [][2][]string{
+		{{"move", "5", "--to", "now"}, {"card", "move", "5", "--to", "now"}},
+		{{"step", "5", "x"}, {"step", "add", "5", "x"}},
+		{{"comment", "5", "x"}, {"comment", "add", "5", "x"}},
+		{{"step", "5", "--check", "S1"}, {"step", "check", "5", "S1"}},
+	}
+	for _, p := range pairs {
+		root := NewRoot()
+		oldCmd, _, err := root.Find(Rewrite(p[0]))
+		if err != nil {
+			t.Fatalf("Find(%q): %v", p[0], err)
+		}
+		newCmd, _, err := root.Find(p[1])
+		if err != nil {
+			t.Fatalf("Find(%q): %v", p[1], err)
+		}
+		if !oldCmd.Runnable() || oldCmd != newCmd {
+			t.Errorf("%q reached %q, %q reached %q", p[0], oldCmd.CommandPath(), p[1], newCmd.CommandPath())
+		}
+	}
+}
+
+func TestStepCheckArgs(t *testing.T) {
+	root := NewRoot()
+	cmd, rest, err := root.Find(Rewrite([]string{"step", "5", "--check", "S1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.ParseFlags(rest); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cmd.Flags().Args(), " "); got != "5 S1" {
+		t.Errorf("args = %q, want %q", got, "5 S1")
+	}
+}
+
+func TestGlobalFlagsParse(t *testing.T) {
+	root := NewRoot()
+	cmd, rest, err := root.Find([]string{"--dry-run", "--json", "card", "show", "5"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.ParseFlags(rest); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"dry-run", "json"} {
+		if v, err := cmd.Flags().GetBool(name); err != nil || !v {
+			t.Errorf("--%s = %v (%v), want true", name, v, err)
+		}
+	}
+	if cmd.CommandPath() != "fz card show" {
+		t.Errorf("command = %q, want fz card show", cmd.CommandPath())
+	}
+}

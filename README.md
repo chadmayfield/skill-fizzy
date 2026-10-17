@@ -1,131 +1,53 @@
 # skill-fizzy
 
-A small command-line client for the [Fizzy](https://github.com/basecamp/fizzy)
-API, plus a [Claude Code](https://docs.claude.com/en/docs/claude-code) skill
-that turns a card title into a well-researched card: goal, details, links,
-photos and a checklist of steps.
+`fz` is a Go command-line client for the [Fizzy](https://github.com/basecamp/fizzy)
+API. This repo also holds a Claude Code skill that uses `fz` to turn a card
+title into a researched card with a goal, details, links, photos and steps.
+The skill writes a Markdown draft, shows it to you, and creates the card only
+when you say so.
 
-- **`fz`**: create, move, tag, comment on and delete cards from the terminal.
-  Python 3.9+, standard library only, no dependencies.
-- **Markdown drafts**: one file per card; review it, edit it anywhere, then
-  `fz draft apply`.
-- **`skill/SKILL.md`**: the Claude Code skill that asks you questions,
-  researches, writes the draft, previews it, and creates the card only when
-  you say go.
+## Install
 
-## Setup
-
-1. **Create a Fizzy access token:** your profile → API → Personal access
-   tokens → Generate (Read + Write).
-2. **Store the token somewhere a command can read it**, for example the macOS
-   keychain:
-
-   ```sh
-   security add-generic-password -a "$USER" -s fizzy-api -w
-   ```
-
-3. **Configure** `~/.config/fizzy-skill/config.json`:
-
-   ```json
-   {
-     "url": "https://fizzy.example.com",
-     "account": "1",
-     "token_cmd": "security find-generic-password -s fizzy-api -w",
-     "inbox": "~/.fizzy-inbox"
-   }
-   ```
-
-   `account` is the number in your Fizzy URLs (`https://.../1/boards`).
-   Optional: `"rules_card": <number>` points the skill at a card holding your
-   own conventions. Environment variables `FIZZY_URL`, `FIZZY_ACCOUNT`,
-   `FIZZY_TOKEN`, `FIZZY_TOKEN_CMD`, `FIZZY_INBOX`, `FIZZY_RULES_CARD`
-   override the file.
-
-4. **Run it** from the checkout (`bin/fz`) or install it (`pip install .`, which
-   adds `fz` to your PATH). Check with `fz boards`.
-
-5. **Install the skill** for Claude Code by linking it into your skills folder:
-
-   ```sh
-   ln -s "$PWD/skill" ~/.claude/skills/fizzy-cards
-   ```
-
-## Using fz
+Download an archive from the [latest release](https://github.com/chadmayfield/skill-fizzy/releases/latest), or use Go:
 
 ```sh
-fz boards                                   # boards and their auto-postpone period
-fz columns Home                             # lanes, left to right
-fz cards --board Home                       # every card (all pages)
-fz show 87                                  # one card with its steps
-fz create Home "Fix the gate" --column Next --tag buy
-fz move 87 --to Now                         # or --to maybe / not-now / done
-fz golden 87                                # mark top priority (--off to undo)
-fz tag 87 waiting                           # idempotent; --remove to take it off
-fz step 87 "Order the hinge"
-fz comment 87 "Measured: 42 mm"
-fz delete 87 --yes                          # refuses without --yes
-fz board-create Garden --postpone 365 --columns Later,Next,Now
+go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
 ```
 
-`--dry-run` before any command prints what would be sent, without sending it.
-`--json` prints raw JSON. Every write is logged (method, path, status, never
-the token) to `~/.local/state/fizzy-skill/actions.log`.
+From a checkout, `make install` builds `fz` and copies it to `~/.local/bin`.
+Building needs Go 1.27 or later.
 
-## Drafts
+## Configure
 
-```markdown
----
-board: Home
-column: Next          # default: Maybe?
-tags: buy
-golden: false
----
-# Fix the side gate
+Put this in `~/.config/fizzy-skill/config.json`, with your server, your
+account number and a command that prints your access token:
 
-## Goal
-The gate closes and latches by itself.
-
-## Details
-Hinge pin is worn; latch is fine.
-
-## Links & media
-- [Hinge spec](https://example.com/hinge)
-![The worn hinge](hinge.jpg)
-
-## Steps
-- [ ] Order the hinge
-- [ ] Swap it
+```json
+{"url": "https://fizzy.example.com", "account": "1",
+ "token_cmd": "security find-generic-password -s fizzy-api -w"}
 ```
+
+Then check that `fz` can reach the server with `fz board list`.
+
+## Examples
 
 ```sh
-fz draft check drafts/ --links   # validate files, resolve images, test every link
-fz draft preview drafts/gate.md  # what the card will contain
-fz draft apply drafts/           # create the cards; writes "card: N" back
+fz card list --board Home
+fz card create Home "Fix the gate" --column Next --tag buy
+fz step add 87 "Order the hinge"
+fz card move 87 --to done
+fz draft apply --update gate.md
 ```
 
-Image paths resolve against the draft's folder, then the inbox. `apply`
-validates every draft before creating anything, skips drafts that already
-have `card:`, and uploads images through Fizzy's direct-upload flow.
+Add `--dry-run` before any command to print its writes instead of sending
+them. `fz help` lists the commands.
 
-## Fizzy behaviour this tool works around
+## More
 
-- Creating a board with an auto-postpone period in the same request can fail
-  with 422 "Account must exist"; `fz` creates the board, then sets the period.
-- Tagging a card toggles the tag; `fz tag` checks first, so it never removes a
-  tag you meant to add.
-- Lists are paginated with `Link: rel="next"`; `fz` follows every page.
-- Fizzy's API docs say to embed uploads with the direct upload's `signed_id`;
-  that renders as a broken attachment. Rich text needs the blob's
-  `attachable_sgid`, which the same response also returns; `fz` uses it.
-- Lanes Not now, Maybe? and Done are fixed; only custom columns are created
-  or reordered.
-
-## Tests
-
-```sh
-python3 -m unittest discover -s tests
-```
-
-## License
-
-MIT, see [LICENSE](LICENSE).
+- [User guide](docs/USERGUIDE.md): setup, every command, drafts, the skill
+  and the session hook.
+- [Security](SECURITY.md): how `fz` handles your token, and how to report a
+  problem.
+- [AGENTS.md](AGENTS.md): how to build, test and change this repo, for people
+  and coding agents.
+- [License](LICENSE): MIT.
