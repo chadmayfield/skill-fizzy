@@ -24,7 +24,7 @@ import (
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
-// APIError is returned for any HTTP status of 400 or above.
+// APIError is returned for any HTTP status of 300 or above.
 type APIError struct {
 	Status int
 	Method string
@@ -163,7 +163,7 @@ func (c *Client) URL(path string, accountScoped bool) string {
 }
 
 // Do sends one request. In dry-run mode a non-GET request is printed, not
-// sent, and Do returns status 0 with no payload. A status of 400 or above
+// sent, and Do returns status 0 with no payload. A status of 300 or above
 // returns an *APIError along with the status, header and payload.
 func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.Header, []byte, error) {
 	var o reqOpts
