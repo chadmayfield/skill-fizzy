@@ -181,3 +181,23 @@ func thLine(page string) string {
 	}
 	return ""
 }
+
+// The config file never holds the token: config.Load reads it only from
+// FIZZY_TOKEN, or runs token_cmd.
+func TestManFilesNoTokenKey(t *testing.T) {
+	var files string
+	for _, s := range rootSections {
+		if s.title == "FILES" {
+			files = s.body
+		}
+	}
+	if files == "" {
+		t.Fatal("no FILES section")
+	}
+	if strings.Contains(files, "or token") || strings.Contains(files, " token,") {
+		t.Errorf("FILES lists a token key:\n%s", files)
+	}
+	if !strings.Contains(files, "token_cmd") {
+		t.Error("FILES should list token_cmd")
+	}
+}

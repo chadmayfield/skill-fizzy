@@ -46,7 +46,7 @@ var rootSections = []helpSection{
     - [x] Order the hinge
 
 The board is required. The column, tags and golden lines are optional. Everything except the title and the Steps section becomes the card description. Each step becomes a Fizzy step. Relative image paths resolve against the draft's folder, then the inbox. After a successful apply, fz writes card: N back into the front matter so a draft is never created twice.`},
-	{"FILES", `- ~/.config/fizzy-skill/config.json holds url, account, token_cmd or token, inbox and rules_card.
+	{"FILES", `- ~/.config/fizzy-skill/config.json holds url, account, token_cmd, inbox and rules_card. The token itself comes only from FIZZY_TOKEN or the command in token_cmd.
 - ~/.local/state/fizzy-skill/actions.log gets one JSON line per write with the time, method, path and status. It never holds the token.
 - ~/.fizzy-inbox/ is the default inbox. Draft images resolve against the draft's folder, then here.`},
 	{"ENVIRONMENT", `- FIZZY_CONFIG is the path of the config file.
