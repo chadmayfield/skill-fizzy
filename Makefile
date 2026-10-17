@@ -20,6 +20,7 @@ vuln: ## Scan for known vulnerabilities
 
 install: build ## Copy fz to ~/.local/bin
 	install -d $(HOME)/.local/bin
+	rm -f $(HOME)/.local/bin/$(BINARY)
 	cp $(BINARY) $(HOME)/.local/bin/$(BINARY)
 
 man: build ## Write the man page to ~/.local/share/man

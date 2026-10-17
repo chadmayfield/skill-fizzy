@@ -78,7 +78,7 @@ func TestListsKeepRawPerElement(t *testing.T) {
 }
 
 func TestErrorTextsMatchPython(t *testing.T) {
-	// Expected strings come from running fizzy_skill/api.py.
+	// Expected strings come from running the Python fz's api.py (removed in 562a4a9).
 	boards := `[{"id":"B1","name":"Home"},{"id":"B2","name":"it's"},{"id":"B3","name":"Dup"},{"id":"B4","name":"dup"}]`
 	cols := `[{"id":"C1","name":"Now"},{"id":"C2","name":"Café"}]`
 	f, _, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {

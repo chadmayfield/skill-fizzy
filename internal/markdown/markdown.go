@@ -1,6 +1,7 @@
 // Package markdown converts card-draft Markdown to the HTML Fizzy stores.
 //
-// It is a port of fizzy_skill/markdown.py and must produce the same bytes.
+// It is a port of the Python fz's markdown.py (removed in 562a4a9) and must
+// produce the same bytes.
 // It supports what card drafts need and nothing more: ATX headings,
 // paragraphs, bullet and numbered lists (one level), task-list items, fenced
 // code blocks, blockquotes, links, bold, italic, inline code, horizontal
