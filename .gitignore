@@ -7,3 +7,6 @@ dist/
 # local config and drafts never belong in the repo
 config.json
 drafts/
+
+/fz
+/dist
