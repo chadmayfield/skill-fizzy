@@ -26,11 +26,12 @@ func walk(cmd *cobra.Command, f func(*cobra.Command)) {
 // wantCommands is the command tree Task 6 builds. Later tasks add to it.
 var wantCommands = []string{
 	"fz board create", "fz board list",
-	"fz card create", "fz card delete", "fz card golden", "fz card list", "fz card move",
+	"fz card create", "fz card delete", "fz card edit", "fz card golden", "fz card list", "fz card move",
 	"fz card reopen", "fz card show", "fz card tag",
 	"fz column list",
 	"fz comment add",
 	"fz draft apply", "fz draft check", "fz draft preview",
+	"fz hook session-start", "fz man", "fz review",
 	"fz step add", "fz step check", "fz step delete", "fz step edit", "fz step list", "fz step uncheck",
 	"fz upload",
 }
