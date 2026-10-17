@@ -53,8 +53,9 @@ func addDraftCommands(root *cobra.Command) {
 			"New draft steps are added. Card steps and tags the draft does not have are kept and reported; " +
 			"--prune deletes the unticked steps and removes the tags. A closed card is never reopened. " +
 			"Images are uploaded again on every update.\n\n" +
-			"If the card changed in Fizzy since the draft's synced: time, or the draft has no synced: line, " +
-			"--update refuses that draft unless --force is given.",
+			"After every apply, fz writes synced: into the draft: a fingerprint of the card's title, description, " +
+			"steps, tags, golden mark, column, board and closed state. If the card changed in Fizzy since then, " +
+			"or the draft has no synced: fingerprint, --update refuses that draft unless --force is given.",
 		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
 			"fz draft apply --update gate.md", "fz draft apply --update --prune --force gate.md"),
 		Args: args(cobra.MinimumNArgs(1)),
@@ -372,7 +373,7 @@ func draftApply(c *cmdContext, a []string) error {
 	return nil
 }
 
-// recordSynced writes the card's last_active_at into the draft as synced:,
+// recordSynced writes the card's fingerprint into the draft as synced:,
 // read after every write so the next --update can tell whether someone
 // changed the card in Fizzy since.
 func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
@@ -380,5 +381,5 @@ func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
 	if err != nil {
 		return err
 	}
-	return draft.RecordFields(path, draft.KV{Key: "synced", Value: card.LastActiveAt})
+	return draft.RecordFields(path, draft.KV{Key: "synced", Value: cardFingerprint(card)})
 }

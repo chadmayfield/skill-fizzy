@@ -18,15 +18,20 @@ func lane(name string) string {
 	return strings.TrimRight(strings.ToLower(strings.TrimSpace(name)), "?")
 }
 
-// checkSynced is the conflict guard. It refuses a draft with no synced: line,
-// or one whose card's last_active_at differs from synced:, because then the
-// card may hold changes made in Fizzy that the draft would overwrite.
+// checkSynced is the conflict guard. It refuses a draft whose synced: line
+// is missing or is not a card fingerprint, or whose card's fingerprint
+// differs from synced:, because then the card may hold changes made in Fizzy
+// that the draft would overwrite.
 func checkSynced(d *draft.Draft, card fizzy.Card) error {
 	name := filepath.Base(d.Path)
-	if d.Synced == "" {
+	switch {
+	case d.Synced == "":
 		return fmt.Errorf("%s: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force", name)
-	}
-	if card.LastActiveAt != d.Synced {
+	case isTimestamp(d.Synced):
+		return fmt.Errorf("%s: synced: is a time written by an older fz, so changes made in Fizzy cannot be detected; rerun with --force", name)
+	case !isFingerprint(d.Synced):
+		return fmt.Errorf("%s: synced: is not a card fingerprint, so changes made in Fizzy cannot be detected; rerun with --force", name)
+	case cardFingerprint(card) != d.Synced:
 		return fmt.Errorf("%s: card #%d changed in Fizzy since the last sync; check it, then rerun with --force", name, d.Card)
 	}
 	return nil
@@ -53,8 +58,8 @@ func guardDrafts(fz *fizzy.Fizzy, drafts []*draft.Draft) ([]error, error) {
 
 // syncDraft pushes a draft onto its existing card d.Card and returns one
 // report line per change. Unless force is set, it refuses a draft with no
-// synced: line, or one whose card changed in Fizzy since synced:, before
-// sending any write. Steps are never unticked. With prune, unticked card
+// usable synced: line, or one whose card changed in Fizzy since synced:,
+// before sending any write. Steps are never unticked. With prune, unticked card
 // steps and card tags the draft lacks are removed; ticked steps always stay.
 func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool) ([]string, error) {
 	card, err := fz.Card(d.Card)
