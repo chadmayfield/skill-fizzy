@@ -1,6 +1,10 @@
 package fizzy
 
-import "github.com/chadmayfield/skill-fizzy/internal/draft"
+import (
+	"encoding/json"
+
+	"github.com/chadmayfield/skill-fizzy/internal/draft"
+)
 
 // Board is a Fizzy board. AutoPostponePeriodInDays is nil when the server
 // omits it.
@@ -8,6 +12,8 @@ type Board struct {
 	ID                       string `json:"id"`
 	Name                     string `json:"name"`
 	AutoPostponePeriodInDays *int   `json:"auto_postpone_period_in_days"`
+
+	raw json.RawMessage
 }
 
 // Column is a board column. Color is the CSS value the server returns.
@@ -15,6 +21,8 @@ type Column struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Color string `json:"color"`
+
+	raw json.RawMessage
 }
 
 // Card holds the card fields the commands read. Column is nil when the card
@@ -32,12 +40,81 @@ type Card struct {
 	DescriptionHTML string           `json:"description_html"`
 	LastActiveAt    string           `json:"last_active_at"`
 	Steps           []draft.CardStep `json:"steps"`
+
+	raw json.RawMessage
 }
 
 // Tag is an entry from the account tag list.
 type Tag struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"created_at"`
+	URL       string `json:"url"`
+
+	raw json.RawMessage
+}
+
+// Each type below keeps the server's bytes as received, with key order and
+// unknown fields, so --json can print exactly what the server sent.
+
+// Raw returns the server's JSON for this board.
+func (b Board) Raw() json.RawMessage { return b.raw }
+
+// Raw returns the server's JSON for this column.
+func (c Column) Raw() json.RawMessage { return c.raw }
+
+// Raw returns the server's JSON for this card.
+func (c Card) Raw() json.RawMessage { return c.raw }
+
+// Raw returns the server's JSON for this tag.
+func (t Tag) Raw() json.RawMessage { return t.raw }
+
+// UnmarshalJSON decodes the known fields and keeps the raw bytes.
+func (b *Board) UnmarshalJSON(data []byte) error {
+	type plain Board
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*b = Board(p)
+	b.raw = append(json.RawMessage(nil), data...)
+	return nil
+}
+
+// UnmarshalJSON decodes the known fields and keeps the raw bytes.
+func (c *Column) UnmarshalJSON(data []byte) error {
+	type plain Column
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*c = Column(p)
+	c.raw = append(json.RawMessage(nil), data...)
+	return nil
+}
+
+// UnmarshalJSON decodes the known fields and keeps the raw bytes.
+func (c *Card) UnmarshalJSON(data []byte) error {
+	type plain Card
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*c = Card(p)
+	c.raw = append(json.RawMessage(nil), data...)
+	return nil
+}
+
+// UnmarshalJSON decodes the known fields and keeps the raw bytes.
+func (t *Tag) UnmarshalJSON(data []byte) error {
+	type plain Tag
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*t = Tag(p)
+	t.raw = append(json.RawMessage(nil), data...)
+	return nil
 }
 
 // CardFields are the fields UpdateCard can change. Nil fields are not sent.

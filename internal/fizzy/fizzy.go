@@ -94,9 +94,9 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 		for i, b := range boards {
 			names[i] = b.Name
 		}
-		return Board{}, fmt.Errorf("no board named %q (have: %s)", nameOrID, strings.Join(names, ", "))
+		return Board{}, fmt.Errorf("no board named %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
 	}
-	return Board{}, fmt.Errorf("%d boards are named %q; use the board id", len(matches), nameOrID)
+	return Board{}, fmt.Errorf("%d boards are named %s; use the board id", len(matches), pyRepr(nameOrID))
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
@@ -109,7 +109,7 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
 			ok = ok || d == postponeDays
 		}
 		if !ok {
-			return "", fmt.Errorf("auto-postpone must be one of %v", AutoPostponeDays)
+			return "", errors.New("auto-postpone must be one of " + pyIntTuple(AutoPostponeDays))
 		}
 	}
 	id, err := f.C.Create("/boards", wrap("board", struct {
@@ -144,7 +144,7 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 		}
 		names[i] = c.Name
 	}
-	return Column{}, fmt.Errorf("no column %q (have: %s)", nameOrID, strings.Join(names, ", "))
+	return Column{}, fmt.Errorf("no column %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
 }
 
 // CreateColumn creates a column. A color that does not start with "var(" is
