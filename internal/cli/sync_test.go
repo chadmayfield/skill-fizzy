@@ -50,6 +50,7 @@ const card90 = `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"
 type cardState struct {
 	title, desc, tags, column string
 	golden, measureDone       bool
+	postponed                 bool
 }
 
 func defaultCardState() cardState {
@@ -59,7 +60,7 @@ func defaultCardState() cardState {
 // syncCard is card n as the fake server returns it.
 func syncCard(n int, st cardState) string {
 	return `{"number":` + strconv.Itoa(n) + `,"title":` + strconv.Quote(st.title) + `,"board":{"id":"b1","name":"Home"},"closed":false,` +
-		`"golden":` + strconv.FormatBool(st.golden) + `,"description_html":` + strconv.Quote(st.desc) + `,` +
+		`"golden":` + strconv.FormatBool(st.golden) + `,"postponed":` + strconv.FormatBool(st.postponed) + `,"description_html":` + strconv.Quote(st.desc) + `,` +
 		`"tags":` + st.tags + `,"last_active_at":"2026-10-17T10:00:00Z","column":` + st.column + `,"steps":[` +
 		`{"id":"` + stepMeasure + `","content":"Measure the gap","completed":` + strconv.FormatBool(st.measureDone) + `},` +
 		`{"id":"` + stepOld + `","content":"Old step","completed":false},` +
@@ -165,6 +166,8 @@ var fizzyEdits = map[string]func(*cardState){
 	"golden":      func(c *cardState) { c.golden = true },
 	"title":       func(c *cardState) { c.title = "Fix the gate today" },
 	"column":      func(c *cardState) { c.column = `{"id":"c1","name":"Next","color":{"name":"Blue","value":"#00f"}}` },
+	// Maybe? and Not now both report column null; only postponed differs.
+	"not now": func(c *cardState) { c.postponed = true },
 }
 
 // writes returns the non-GET requests the server saw.
@@ -340,6 +343,57 @@ func TestSyncMovesColumnAndGolden(t *testing.T) {
 	}
 }
 
+func TestSyncLaneTellsNotNowFromMaybe(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		column    string
+		postponed bool
+		move      string // the write expected, or "" for none
+	}{
+		{"not now stays", "Not now", true, ""},
+		{"not-now spelling stays", "not-now", true, ""},
+		{"maybe to not now", "Not now", false, "POST /1/cards/87/not_now"},
+		{"not now to maybe", "Maybe?", true, "DELETE /1/cards/87/triage"},
+		{"maybe stays", "Maybe?", false, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newSyncServer(t)
+			srv.edit(func(c *cardState) { c.postponed = tc.postponed })
+			dir := t.TempDir()
+			cfg := &config.Config{URL: srv.URL, Account: "1", Token: "T", Inbox: dir, LogPath: filepath.Join(dir, "actions.log")}
+			path := filepath.Join(dir, "gate.md")
+			text := strings.Replace(syncDraftText, "column: Maybe?\n", "column: "+tc.column+"\n", 1)
+			writeFile(t, path, srv.draft(t, text))
+			d, err := draft.Parse(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fz := &fizzy.Fizzy{C: client.New(cfg, false, io.Discard)}
+			report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var moves []string
+			for _, w := range srv.writes() {
+				if strings.HasSuffix(w, "/not_now") || strings.HasSuffix(w, "/triage") {
+					moves = append(moves, w)
+				}
+			}
+			moved := false
+			for _, line := range report {
+				moved = moved || strings.HasPrefix(line, "moved to ")
+			}
+			if tc.move == "" {
+				if len(moves) != 0 || moved {
+					t.Errorf("sent a move for a card already there: %q, report %q", moves, report)
+				}
+			} else if len(moves) != 1 || moves[0] != tc.move || !moved {
+				t.Errorf("moves = %q, want [%q]; report %q", moves, tc.move, report)
+			}
+		})
+	}
+}
+
 // runApply runs fz against srv with the given arguments.
 func syncRun(t *testing.T, srv *syncServer, args ...string) result {
 	t.Helper()
@@ -396,7 +450,7 @@ func TestApplyUpdateRecordsSynced(t *testing.T) {
 }
 
 func TestApplyUpdatePreflightRefusesFizzySideEdits(t *testing.T) {
-	for _, name := range []string{"description", "step tick", "tag", "golden"} {
+	for _, name := range []string{"description", "step tick", "tag", "golden", "not now"} {
 		t.Run(name, func(t *testing.T) {
 			srv := newSyncServer(t)
 			path := filepath.Join(t.TempDir(), "gate.md")

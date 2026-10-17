@@ -9,13 +9,29 @@ import (
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
 
-// lane normalizes a column name for comparison: no column is Maybe?, and case
-// and a trailing ? are ignored.
+// lane normalizes a column name for comparison: no column is Maybe?, case
+// and a trailing ? are ignored, and "not-now" is the same lane as "Not now".
 func lane(name string) string {
 	if name == "" {
 		name = "maybe"
 	}
-	return strings.TrimRight(strings.ToLower(strings.TrimSpace(name)), "?")
+	l := strings.TrimRight(strings.ToLower(strings.TrimSpace(name)), "?")
+	if l == "not-now" {
+		l = "not now"
+	}
+	return l
+}
+
+// cardLane is the lane a card is in. Maybe? and Not now both have no
+// column; only postponed tells them apart.
+func cardLane(card fizzy.Card) string {
+	switch {
+	case card.Column != nil:
+		return lane(card.Column.Name)
+	case card.Postponed:
+		return lane("Not now")
+	}
+	return lane("")
 }
 
 // checkSynced is the conflict guard. It refuses a draft whose synced: line
@@ -147,14 +163,10 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 		}
 	}
 
-	current := ""
-	if card.Column != nil {
-		current = card.Column.Name
-	}
 	switch {
 	case card.Closed:
 		report = append(report, "card is closed; column left alone")
-	case lane(current) != lane(d.Column):
+	case cardLane(card) != lane(d.Column):
 		if err := fz.MoveCard(d.Card, d.Column, board.ID); err != nil {
 			return nil, err
 		}

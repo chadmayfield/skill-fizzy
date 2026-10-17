@@ -33,10 +33,12 @@ type fingerprintState struct {
 	Column          string            `json:"column"`
 	Board           string            `json:"board"`
 	Closed          bool              `json:"closed"`
+	Postponed       bool              `json:"postponed"`
 }
 
 // cardFingerprint returns "sha256:" and the first 16 hex characters of the
-// SHA-256 of the card's canonical state. fz stores it in a draft's synced:
+// SHA-256 of the card's canonical state. Postponed is in it because Maybe?
+// and Not now both have no column. fz stores it in a draft's synced:
 // line. last_active_at is not used: Fizzy leaves it alone when a description,
 // step, tag or golden mark changes.
 func cardFingerprint(c fizzy.Card) string {
@@ -48,6 +50,7 @@ func cardFingerprint(c fizzy.Card) string {
 		Golden:          c.Golden,
 		Board:           c.Board.ID,
 		Closed:          c.Closed,
+		Postponed:       c.Postponed,
 	}
 	for _, s := range c.Steps {
 		st.Steps = append(st.Steps, fingerprintStep{ID: s.ID, Content: s.Content, Completed: s.Completed})

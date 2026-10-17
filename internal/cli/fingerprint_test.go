@@ -10,7 +10,7 @@ import (
 )
 
 const fpCard = `{"number":87,"title":"Fix the gate","board":{"id":"b1","name":"Home"},` +
-	`"column":{"id":"c1","name":"Next"},"closed":false,"golden":false,"tags":["buy","build"],` +
+	`"column":{"id":"c1","name":"Next"},"closed":false,"postponed":false,"golden":false,"tags":["buy","build"],` +
 	`"description_html":"<p>Gate latches.</p>","last_active_at":"2026-10-17T10:00:00Z","steps":[` +
 	`{"id":"03abc123def456ghi789jkl0mn","content":"Measure the gap","completed":false},` +
 	`{"id":"03old000000000000000000000","content":"Order the hinge","completed":true}]}`
@@ -39,7 +39,7 @@ func TestFingerprintIgnoresKeyOrderAndUnwatchedFields(t *testing.T) {
 		`{"completed":false,"content":"Measure the gap","id":"03abc123def456ghi789jkl0mn"},` +
 		`{"content":"Order the hinge","id":"03old000000000000000000000","completed":true}],` +
 		`"tags":["buy","build"],"golden":false,"description_html":"<p>Gate latches.</p>",` +
-		`"column":{"name":"Next","id":"c1"},"board":{"name":"Home","id":"b1"},"closed":false,` +
+		`"column":{"name":"Next","id":"c1"},"board":{"name":"Home","id":"b1"},"postponed":false,"closed":false,` +
 		`"title":"Fix the gate","number":87,"last_active_at":"2026-10-18T09:00:00Z","url":"https://fizzy.example.com/1/cards/87"}`
 	if a, b := cardFingerprint(fpDecode(t, fpCard)), cardFingerprint(fpDecode(t, reordered)); a != b {
 		t.Errorf("key order or last_active_at changed the fingerprint: %q %q", a, b)
@@ -69,6 +69,7 @@ func TestFingerprintChangesWithEachField(t *testing.T) {
 		"maybe":       {`"column":{"id":"c1","name":"Next"}`, `"column":null`},
 		"board":       {`"board":{"id":"b1"`, `"board":{"id":"b2"`},
 		"closed":      {`"closed":false`, `"closed":true`},
+		"postponed":   {`"postponed":false`, `"postponed":true`},
 	} {
 		changed := strings.Replace(fpCard, edit[0], edit[1], 1)
 		if changed == fpCard {

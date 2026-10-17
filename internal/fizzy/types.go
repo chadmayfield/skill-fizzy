@@ -32,13 +32,15 @@ type Column struct {
 }
 
 // Card holds the card fields the commands read. Column is nil when the card
-// is in Maybe?. List responses omit Steps.
+// is in Maybe? or Not now; Postponed is true only in Not now. List responses
+// omit Steps.
 type Card struct {
 	Number          int              `json:"number"`
 	Title           string           `json:"title"`
 	Board           Board            `json:"board"`
 	Column          *Column          `json:"column"`
 	Closed          bool             `json:"closed"`
+	Postponed       bool             `json:"postponed"`
 	Golden          bool             `json:"golden"`
 	Tags            []string         `json:"tags"`
 	URL             string           `json:"url"`
