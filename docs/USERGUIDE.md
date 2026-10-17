@@ -1,0 +1,646 @@
+# fz user guide
+
+`fz` is a command-line client for the [Fizzy](https://github.com/basecamp/fizzy)
+API. It lists, creates, edits, moves, tags and deletes cards, and works on
+their steps and comments. It also turns Markdown drafts into cards and pushes
+later draft edits back to them.
+
+The repo also holds the fizzy-cards skill for Claude Code. The skill asks you
+about a card, researches it, writes a draft and creates the card through `fz`
+once you approve it.
+
+This guide is for anyone who keeps work in Fizzy and wants to manage it from
+a terminal or from Claude Code.
+
+## Contents
+
+- [Before you start](#before-you-start)
+- [Setup](#setup)
+- [Using fz](#using-fz)
+- [Drafts](#drafts)
+- [The skill](#the-skill)
+- [The session hook](#the-session-hook)
+- [Troubleshooting](#troubleshooting)
+
+## Before you start
+
+You need these:
+
+- Go 1.27 or later, to build `fz`.
+- A Fizzy server. A self-hosted server works. The hosted Fizzy service has not
+  been tested with `fz`.
+- A Fizzy personal access token that can read and write.
+
+On macOS, a newly built `fz` may need Local Network permission before it can
+reach a server on your local network. Grant it in System Settings, under
+Privacy & Security, Local Network. An outbound firewall such as Little Snitch
+can also block a newly built binary, so allow `fz` there too.
+
+## Setup
+
+### Install
+
+```sh
+go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
+```
+
+That puts `fz` in `$(go env GOPATH)/bin`. From a checkout, `make install`
+builds `fz` and copies it to `~/.local/bin`. Check the install with
+`fz --version`.
+
+### Store the token
+
+`fz` never stores the token. It takes the token from `FIZZY_TOKEN`, or runs a
+token command each time it needs one and uses what the command prints.
+
+Keep the token in a keychain or another secret store. On macOS, this command
+prompts for the token and saves it in the login keychain:
+
+```sh
+security add-generic-password -a "$USER" -s fizzy-api -w
+```
+
+The matching token command is
+`security find-generic-password -s fizzy-api -w`.
+
+### The config file
+
+`fz` reads `~/.config/fizzy-skill/config.json`:
+
+```json
+{
+  "url": "https://fizzy.example.com",
+  "account": "1",
+  "token_cmd": "security find-generic-password -s fizzy-api -w",
+  "inbox": "~/.fizzy-inbox",
+  "rules_card": 87
+}
+```
+
+| Key | What it holds |
+|---|---|
+| `url` | The server's address. Required. |
+| `account` | The account number, the `1` in `https://fizzy.example.com/1/boards`. Required. |
+| `token_cmd` | A command that prints the token. `fz` splits it into words like a shell does, but does not run it through a shell. |
+| `inbox` | The inbox folder. The default is `~/.fizzy-inbox`. |
+| `rules_card` | The number of a card that holds your own conventions for the skill. Optional. |
+
+A missing config file is not an error, as long as the environment supplies
+the URL and account.
+
+### Environment variables
+
+Each variable overrides the matching key in the file.
+
+| Variable | Overrides |
+|---|---|
+| `FIZZY_URL` | `url` |
+| `FIZZY_ACCOUNT` | `account` |
+| `FIZZY_TOKEN_CMD` | `token_cmd` |
+| `FIZZY_INBOX` | `inbox` |
+| `FIZZY_RULES_CARD` | `rules_card` |
+| `FIZZY_TOKEN` | Has no key in the file. When set, `fz` uses it and runs no token command. |
+
+`FIZZY_CONFIG` names a different config file to load. The `--config` flag
+does the same for one command and wins over `FIZZY_CONFIG`.
+
+### The inbox
+
+The inbox is a folder for drafts and the images they use. The skill writes
+drafts to `<inbox>/drafts/`. When a draft names an image by a relative path,
+`fz` looks next to the draft first, then in the inbox.
+
+### The rules card
+
+`rules_card` points the skill at one card on your server. Its description
+holds your own rules, such as which columns to use or what every card needs.
+The skill reads it with `fz card show` before it starts and follows it over
+its own defaults. `fz` itself only reads the number from the config.
+
+### Check it
+
+```sh
+fz board list
+```
+
+This prints each board's id, name and auto-postpone period. If it fails, see
+[Troubleshooting](#troubleshooting).
+
+## Using fz
+
+Commands are a noun and then a verb, such as `fz card show 87`. Run
+`fz help` for the nouns and `fz help card` for the verbs under one noun.
+`fz card edit --help` shows one command's flags and examples.
+
+### Flags for every command
+
+| Flag | Effect |
+|---|---|
+| `--dry-run` | Prints each write instead of sending it. Reads still go to the server, so a dry run shows real ids and names. |
+| `--json` | Prints JSON instead of text. |
+| `--config FILE` | Loads this config file. |
+
+```sh
+fz --dry-run card move 87 --to done
+fz --json card show 87
+```
+
+### Exit status
+
+| Code | Meaning |
+|---|---|
+| 0 | Success. |
+| 1 | An API, config or draft error. The message says which. |
+| 2 | A usage error, such as a bad flag or an unknown command, or a delete refused without `--yes`. |
+
+### Boards
+
+```sh
+fz board list
+fz board create Garden --postpone 365 --columns Later,Next,Now
+```
+
+`--postpone` is the number of days without activity before Fizzy moves a card
+to Not now. `--columns` takes custom columns, left to right. `fz` creates the
+board first and then sets the period, because Fizzy can refuse both in one
+request.
+
+### Columns
+
+```sh
+fz column list Home
+```
+
+This prints a board's lanes from Not now to Done. Not now, Maybe? and Done
+are fixed. Custom columns sit between Maybe? and Done.
+
+### Cards
+
+A card is named by its number, the `87` in `/cards/87`.
+
+List and show:
+
+```sh
+fz card list --board Home
+fz card list --state golden
+fz card list --search "gate hinge"
+fz card show 87
+```
+
+`card list` reads every page Fizzy returns. `--state` passes Fizzy's index
+filter, such as `maybe`, `closed`, `not_now` or `golden`. `card show` prints
+the title, board, link, description and steps.
+
+Create:
+
+```sh
+fz card create Home "Fix the gate"
+fz card create Home "Fix the gate" --column Next --tag buy --tag gate
+fz card create Home "Fix the gate" --description-file gate.md
+```
+
+A new card lands in Maybe? unless `--column` names another lane. A
+description is Markdown, given with `--description` or read from a file with
+`--description-file`.
+
+Edit:
+
+```sh
+fz card edit 87 --title "Fix the gate hinge"
+fz card edit 87 --description-file gate.md
+fz card edit 87 --replace "two hinges" "three hinges"
+fz card edit 87 --replace hinge hinges --all
+fz card edit 87 --description "" --allow-empty
+fz card edit 87 --status published
+```
+
+- A new description replaces the whole description, including any embedded
+  images.
+- `fz` refuses a new description that is empty or only whitespace. Add
+  `--allow-empty` to clear a description on purpose.
+- `--replace OLD NEW` swaps one phrase in the current description and leaves
+  the rest alone. `--all` swaps every match. Use it for small fixes, so
+  images survive.
+- `--replace` matches only the text you can read. It never matches a tag
+  name or an attribute, such as a link's address, and a match cannot cross
+  formatting. OLD must not be empty.
+- `--status` takes `drafted` or `published`.
+
+Move and reopen:
+
+```sh
+fz card move 87 --to Now
+fz card move 87 --to maybe
+fz card move 87 --to not-now
+fz card move 87 --to done
+fz card move 87 --board Garden --to Next
+fz card reopen 87
+```
+
+`--to` takes a column name, or `maybe`, `not-now` or `done`. `--board` moves
+the card to another board. `card reopen` moves a closed card out of Done.
+
+Golden:
+
+```sh
+fz card golden 87
+fz card golden 87 --off
+```
+
+Golden cards are a board's current priorities.
+
+Tag:
+
+```sh
+fz card tag 87 waiting
+fz card tag 87 waiting --remove
+```
+
+Fizzy's tag call toggles a tag on or off. `fz` reads the card first and only
+sends a change when one is needed, so tagging twice never removes the tag.
+
+Delete:
+
+```sh
+fz card delete 87 --yes
+```
+
+`fz` prints the card first. Without `--yes` it deletes nothing and exits with
+status 2. A deleted card is gone for good.
+
+### Steps
+
+Steps are the checklist on a card. Each one has an id, which `fz step list`
+prints.
+
+```sh
+fz step list 87
+fz step add 87 "Order the hinge"
+fz step add 87 "Measure the gap" --done
+fz step check 87 03abc123def456ghi789jkl0mn
+fz step uncheck 87 03abc123def456ghi789jkl0mn
+fz step edit 87 03abc123def456ghi789jkl0mn "Order two hinges"
+fz step delete 87 03abc123def456ghi789jkl0mn --yes
+```
+
+`step add` puts the step at the end of the list. `--done` adds it already
+ticked. `step delete` needs `--yes`, like a card delete.
+
+### Comments
+
+```sh
+fz comment add 87 "Measured the gap: 42 mm"
+```
+
+The text is Markdown.
+
+### Upload
+
+```sh
+fz upload hinge.jpg
+```
+
+This uploads a file through Fizzy's direct upload and prints its
+`attachable_sgid`, which embeds the file in rich text. Fizzy's API docs say
+to embed the `signed_id` instead, but that renders as a broken attachment.
+Drafts upload their images for you, so most people never need this command.
+
+### Review
+
+```sh
+fz review
+fz review Home Garden
+fz --json review Home
+```
+
+For each board, `review` lists the cards in the last column before Done and
+counts the cards in the other columns and in Maybe?. It also lists golden
+cards, cards about to be postponed, and stalled cards. Closed cards are left
+out. With no board names it reviews every board.
+
+### Man pages
+
+```sh
+fz man
+fz man --dir /tmp/fz-man
+```
+
+This writes one man page per command, such as `fz.1` and `fz-card-list.1`,
+into `DIR/man1`. The default DIR is `~/.local/share/man`. It needs no config
+file.
+
+### Shell completion
+
+```sh
+fz completion zsh
+fz completion bash
+```
+
+This prints a completion script. `fish` and `powershell` also work. Run
+`fz completion zsh --help` for how to load the script.
+
+### Help
+
+```sh
+fz help
+fz help card
+fz card edit --help
+```
+
+### Commands from fz 0.1
+
+The older command forms still work:
+
+```sh
+fz boards
+fz show 87
+fz move 87 --to Now
+fz tag 87 buy
+fz step 87 "Order the hinge"
+fz step 87 --check 03abc123def456ghi789jkl0mn
+fz comment 87 "Measured the gap: 42 mm"
+```
+
+The full list is `boards`, `board-create`, `columns`, `cards`, `show`,
+`create`, `move`, `reopen`, `golden`, `delete` and `tag`, plus the
+numbered forms of `step` and `comment`.
+
+## Drafts
+
+A draft is one Markdown file per card. Write it in any editor, check it,
+preview it, then apply it to create the card.
+
+### The format
+
+```markdown
+---
+board: Home
+column: Next
+tags: buy, gate
+golden: false
+---
+# Fix the side gate
+
+## Goal
+The gate closes and latches by itself.
+
+## Details
+The hinge pin is worn. The latch is fine.
+
+## Links & media
+- [Hinge spec](https://example.com/hinge)
+
+![The worn hinge](hinge.jpg)
+
+## Steps
+- [ ] Order the hinge
+- [ ] Swap it
+- [x] Measure the gap
+```
+
+- The front matter needs `board`. `column`, `tags` and `golden` are
+  optional. A draft with no column goes to Maybe?.
+- The `# ` line is the card title.
+- Everything except the title and the Steps section becomes the description.
+- Each `- [ ]` or `- [x]` line under `## Steps` becomes a step, ticked or not.
+- `skill/templates/card.md` in this repo is a blank draft to copy.
+
+### Images
+
+An image line, `![alt](file.jpg)`, must sit on a line by itself. Inside a
+list item it is refused, because Fizzy would show it as text.
+
+Every image line names a local file. A relative path is looked up next to the
+draft, then under the inbox, so `gate/hinge.jpg` can mean
+`~/.fizzy-inbox/gate/hinge.jpg`. A web image cannot be embedded. Link to it
+with a normal link instead.
+
+`apply` uploads each image and embeds it in the description.
+
+### Check, preview, apply
+
+```sh
+fz draft check gate.md
+fz draft check gate.md --links
+fz draft preview gate.md
+fz draft apply gate.md
+fz draft apply ~/.fizzy-inbox/drafts/
+```
+
+- `check` parses each draft and finds its images. `--links` also fetches
+  every link and reports its status. Those fetches carry no token.
+- `preview` prints the title, board, column, tags, description HTML and steps.
+  It sends nothing.
+- `apply` parses every draft and finds its images before it creates
+  anything. Then it creates one card per draft and writes `card: N` into the
+  draft, so the same draft never makes a second card.
+- A draft that already has `card:` is skipped, unless you pass `--update`.
+- Each command takes files, folders or both. A folder means the `.md` files
+  directly inside it.
+
+### Updating a card from its draft
+
+```sh
+fz --dry-run draft apply --update gate.md
+fz draft apply --update gate.md
+fz draft apply --update --prune gate.md
+fz draft apply --update --force gate.md
+```
+
+`--update` pushes the draft's board, title, description, tags, column, golden
+mark and steps to the card named by `card:`. Run it with `--dry-run` first to
+see what it would send.
+
+How steps are matched:
+
+- A draft step matches a card step with the same text.
+- A matched step is left alone. If the draft ticks it, the card step is
+  ticked.
+- Nothing is ever unticked. A tick made in Fizzy is newer than the draft.
+- A draft step with no match is added. Changing a step's text in the draft
+  therefore adds a new step and leaves the old one.
+- Card steps and tags the draft does not have are kept and reported.
+
+`--prune` deletes those extra card steps if they are unticked, and removes the
+extra tags. Ticked steps always stay. A closed card is never reopened, and
+images are uploaded again on every update.
+
+### The synced fingerprint
+
+After every apply, `fz` writes two more lines into the draft's front matter.
+
+- `synced:` is a fingerprint of the card as Fizzy then holds it. It covers
+  the title, description, steps, tags, golden mark, column, board, closed
+  state and Not now state.
+- `synced-fields:` holds a short hash of each of those fields.
+
+Leave both lines alone. On the next `--update`, `fz` reads the card and
+compares. If someone changed the card in Fizzy since the last sync, `fz`
+refuses the draft and names what changed:
+
+```text
+fz: gate.md: card #87 changed in Fizzy since the last sync (description, steps); check it, then rerun with --force
+```
+
+A refusal means the update would overwrite an edit made in Fizzy. Look at the
+card with `fz card show 87`. Copy anything you want to keep into the draft,
+then rerun with `--force`. A draft written by an older `fz` has no
+`synced-fields:` line, so its refusal does not name the fields.
+
+`fz` also refuses a draft that has no `synced:` line, or one that holds
+something other than a fingerprint, because it cannot tell what changed.
+`--force` overrides both.
+
+`apply --update` checks every draft before it writes anything, so one refused
+draft stops the whole run and nothing is half applied.
+
+## The skill
+
+The fizzy-cards skill lets Claude Code build cards with you. It needs only
+`fz` on your PATH.
+
+### Install the skill
+
+Link the repo's `skill/` folder into your Claude Code skills folder:
+
+```sh
+ln -s "$PWD/skill" ~/.claude/skills/fizzy-cards
+```
+
+Run that from the root of a checkout. The folder holds `SKILL.md` and
+`templates/card.md`.
+
+### What it does
+
+Give it a card title and a board. The skill then:
+
+1. Checks that `fz` is installed and can reach your server, and reads your
+   rules card if you set one.
+2. Asks three to five questions, one at a time. It always asks how deep to
+   research: quick, a few key links, or deep, comparing options.
+3. Researches to that depth, preferring primary sources.
+4. Writes a draft to `<inbox>/drafts/<card-slug>.md` from the template.
+5. Runs `fz draft check --links` and fixes or removes every link that fails.
+6. Shows you the draft in chat.
+7. Runs `fz draft apply` when you say go, and gives you the card's link.
+
+Later changes go through the same draft and `fz draft apply --update`. The
+skill asks before it uses `--prune`.
+
+For a list of titles, it works in batch mode. It asks once which board the
+list belongs to, drafts every card into one folder, checks them, and shows a
+compact list. One go creates them all.
+
+The skill never creates, changes, moves or deletes anything in Fizzy until
+you approve that draft or batch. It never prints your token.
+
+### While you work in a mapped repo
+
+When a session's work matches a card:
+
+- After you finish one of its steps, the skill offers once to tick it.
+- When the card's goal is met, it asks before moving the card to Done.
+- It never creates, moves, ticks or deletes anything without your OK.
+
+### Your rules card
+
+Set `rules_card` in the config to a card holding your own conventions. The
+skill reads that card first and follows it over its own defaults.
+
+## The session hook
+
+`fz hook session-start` shows the open cards for the repo a Claude Code
+session starts in. It prints the cards in Now and Next on that repo's board,
+and Claude Code adds them to the session. If the map entry names a card, it
+prints only that card.
+
+### Turn it on
+
+Add this to `~/.claude/settings.json`:
+
+```json
+{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "fz hook session-start"}]}]}}
+```
+
+The last line it prints tells Claude to follow the skill's rules. `--note`
+changes that line, and `--note ""` drops it:
+
+```sh
+fz hook session-start --note "Ask before moving a card."
+```
+
+### The repos map
+
+The hook reads `~/.config/fizzy-skill/repos.json`, or the file named by
+`FIZZY_REPOS_MAP`. Each key is a folder name:
+
+```json
+{
+  "gatehouse": {"board": "Home"},
+  "latch": {"board": "Home", "card": 87}
+}
+```
+
+Inside a git worktree, the main checkout's folder name is tried first. Then
+each folder in the path is tried, from the deepest up. The first name found
+in the map wins.
+
+A folder that is not in the map prints nothing and reads no config. Any
+failure also prints nothing and exits 0, so the hook never blocks a session.
+That covers a missing map, a config error, a network error and the 5 second
+time limit.
+
+### The Python version
+
+`examples/hooks/fizzy-session-hook.py` does the same job in Python 3. Use it
+or `fz hook session-start`, not both. `examples/hooks/README.md` covers its
+setup.
+
+## Troubleshooting
+
+### Config errors
+
+| Message | Fix |
+|---|---|
+| `set FIZZY_URL and FIZZY_ACCOUNT, or url/account in <file>` | The file is missing or lacks `url` or `account`. Check the path `fz` names. |
+| `<file>: invalid JSON (...)` | Fix the JSON in the config file. |
+| `rules_card "<value>" is not a number` | `rules_card` must be a card number. |
+| `no token: set FIZZY_TOKEN or FIZZY_TOKEN_CMD (or token_cmd in the config file)` | Give `fz` a token or a token command. |
+
+### Token command failures
+
+`token command failed` means the command exited with an error.
+`token command printed nothing` means it ran but printed no token. The
+message never includes the command's output, because that output may hold
+the token.
+
+Run the command yourself in a terminal to see its error.
+
+### Timeouts
+
+A request that takes longer than 60 seconds fails. If every command times
+out but the server works in a browser, something on your machine is
+blocking `fz`. On macOS, check Local Network permission in System Settings,
+under Privacy & Security, Local Network. Check any outbound firewall, such
+as Little Snitch, too. A rebuilt binary may need permission again.
+
+### "Changed in Fizzy" refusals
+
+`fz draft apply --update` refuses a draft when the card changed in Fizzy
+since the last sync. This protects the change made in Fizzy. Read the card,
+move what you want to keep into the draft, then rerun with `--force`. See
+[The synced fingerprint](#the-synced-fingerprint).
+
+### The action log
+
+`fz` appends one JSON line per write to
+`~/.local/state/fizzy-skill/actions.log`:
+
+```json
+{"t": "2026-10-17T15:04:05Z", "method": "POST", "path": "/1/cards/87/steps", "status": 201}
+```
+
+`t` is the time in UTC. `method` and `path` name the request. `status` is the
+HTTP status the server returned. A status of 300 or above means the write
+failed. The log never holds the token or the request and response bodies. A
+dry run sends nothing, so it logs nothing.
