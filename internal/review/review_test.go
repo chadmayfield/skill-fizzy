@@ -93,11 +93,11 @@ func TestGatherRequestOrder(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/1/boards/B1/columns":
-			fmt.Fprint(w, `[{"id":"C1","name":"Next"},{"id":"C2","name":"Now"}]`)
+			fmt.Fprint(w, `[{"id":"C1","name":"Next","color":{"name":"Blue","value":"var(--color-card-default)"}},{"id":"C2","name":"Now","color":{"name":"Blue","value":"var(--color-card-default)"}}]`)
 		case "/1/boards/B1/columns/C1/cards":
-			fmt.Fprint(w, `[{"number":11,"title":"a","closed":false}]`)
+			fmt.Fprint(w, `[{"number":11,"title":"a","closed":false,"column":{"id":"C1","name":"Next","color":{"name":"Blue","value":"var(--color-card-default)"}}}]`)
 		case "/1/boards/B1/columns/C2/cards":
-			fmt.Fprint(w, `[{"number":87,"title":"Order the hinge","closed":false},{"number":9,"title":"old","closed":true}]`)
+			fmt.Fprint(w, `[{"number":87,"title":"Order the hinge","closed":false,"column":{"id":"C2","name":"Now","color":{"name":"Blue","value":"var(--color-card-default)"}}},{"number":9,"title":"old","closed":true,"column":{"id":"C2","name":"Now","color":{"name":"Blue","value":"var(--color-card-default)"}}}]`)
 		case "/1/cards":
 			switch r.URL.Query().Get("indexed_by") {
 			case "maybe":
