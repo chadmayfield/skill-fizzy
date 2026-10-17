@@ -10,7 +10,7 @@ import (
 
 // private matches the paths of planning and agent files. None of them may be
 // tracked, because the repository is public.
-var private = regexp.MustCompile(`(?i)superpowers|(^|/)plans/|(^|/)specs/|CLAUDE\.local\.md|\.claude/settings\.local\.json`)
+var private = regexp.MustCompile(`(?i)superpowers|(^|/)plans/|(^|/)specs/|CLAUDE\.local\.md|\.claude/settings\.local\.json|\.claude/worktrees/`)
 
 func TestNoPlanningFilesTracked(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -34,5 +34,19 @@ func TestNoPlanningFilesTracked(t *testing.T) {
 	}
 	if len(bad) > 0 {
 		t.Errorf("planning or agent files are tracked:\n  %s", strings.Join(bad, "\n  "))
+	}
+}
+
+func TestPrivatePatternCoversEveryListedPath(t *testing.T) {
+	for _, p := range []string{
+		".superpowers/a.md", "docs/superpowers/a.md", "docs/plans/a.md", "docs/specs/a.md",
+		"CLAUDE.local.md", ".claude/settings.local.json", ".claude/worktrees/x/a.go", ".Claude/Worktrees/x/a.go",
+	} {
+		if !private.MatchString(p) {
+			t.Errorf("%q is not flagged", p)
+		}
+	}
+	if private.MatchString("docs/USERGUIDE.md") {
+		t.Error("flagged an ordinary file")
 	}
 }
