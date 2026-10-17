@@ -13,9 +13,9 @@ Go binary and must be on the PATH.
 ## Before you start
 
 1. Check `fz` is installed: `fz --version`. If the command is not found, tell
-   the user to install it (the README's install section) and stop.
+   the user to install it (see Install in the README) and stop.
 2. Check it can reach Fizzy: `fz board list`. If it fails with a config error,
-   point the user at the README's setup section and stop.
+   point the user at Configure in the README and Setup in docs/USERGUIDE.md, and stop.
 3. If a rules card is configured (`rules_card` in the config), read it with
    `fz card show <number>` and follow it. It overrides anything below.
 
