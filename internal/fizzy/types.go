@@ -16,10 +16,27 @@ type Board struct {
 	raw json.RawMessage
 }
 
-// ColumnColor is the color object the server sends with a column.
+// ColumnColor is a column's color. Some servers send a {name, value}
+// object and Fizzy's API docs show a plain string such as
+// "var(--color-card-4)". A string fills only Value.
 type ColumnColor struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+// UnmarshalJSON accepts the color as a string, an object or null.
+func (c *ColumnColor) UnmarshalJSON(data []byte) error {
+	if len(data) > 0 && data[0] == '"' {
+		*c = ColumnColor{}
+		return json.Unmarshal(data, &c.Value)
+	}
+	type plain ColumnColor
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	*c = ColumnColor(p)
+	return nil
 }
 
 // Column is a board column.

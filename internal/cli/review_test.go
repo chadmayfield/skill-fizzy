@@ -16,7 +16,7 @@ func reviewServer(t *testing.T) *httptest.Server {
 		case "/1/boards":
 			fmt.Fprint(w, `[{"id":"B1","name":"Garage","auto_postpone_period_in_days":90}]`)
 		case "/1/boards/B1/columns":
-			fmt.Fprint(w, `[{"id":"C1","name":"Now"}]`)
+			fmt.Fprint(w, `[{"id":"C1","name":"Now","color":{"name":"Blue","value":"var(--color-card-default)"}}]`)
 		case "/1/boards/B1/columns/C1/cards":
 			fmt.Fprint(w, `[{"number":87,"title":"Order the hinge","closed":false}]`)
 		case "/1/cards":

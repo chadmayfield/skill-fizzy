@@ -44,3 +44,43 @@ func TestDecodeLiveShapes(t *testing.T) {
 		}
 	}
 }
+
+// Fizzy's published API docs show a column color as a plain string, while
+// the server this was tested against sends a {name, value} object. Both
+// must decode.
+func TestDecodeColumnColorShapes(t *testing.T) {
+	cases := []struct {
+		json string
+		want ColumnColor
+	}{
+		{shapeColumn, ColumnColor{Name: "Blue", Value: "var(--color-card-default)"}},
+		{`{"id":"c1","name":"Hinge","color":"var(--color-card-4)"}`, ColumnColor{Value: "var(--color-card-4)"}},
+		{`{"id":"c1","name":"Hinge","color":null}`, ColumnColor{}},
+		{`{"id":"c1","name":"Hinge"}`, ColumnColor{}},
+	}
+	for _, c := range cases {
+		var col Column
+		if err := json.Unmarshal([]byte(c.json), &col); err != nil {
+			t.Errorf("%s: %v", c.json, err)
+			continue
+		}
+		if col.Color != c.want {
+			t.Errorf("%s: color = %+v, want %+v", c.json, col.Color, c.want)
+		}
+		if string(col.Raw()) != c.json {
+			t.Errorf("%s: raw changed", c.json)
+		}
+	}
+	card := shapeCardA + `[]` + shapeCardB + `,"column":{"id":"c1","name":"Hinge","color":"var(--color-card-4)"}` + shapeCardC + `}`
+	var k Card
+	if err := json.Unmarshal([]byte(card), &k); err != nil {
+		t.Fatalf("card with a string color: %v", err)
+	}
+	if k.Column == nil || k.Column.Color.Value != "var(--color-card-4)" {
+		t.Errorf("card column = %+v", k.Column)
+	}
+	var bad Column
+	if err := json.Unmarshal([]byte(`{"id":"c1","color":4}`), &bad); err == nil {
+		t.Errorf("a number color decoded without error")
+	}
+}
