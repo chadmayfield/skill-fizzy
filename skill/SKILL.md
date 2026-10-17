@@ -37,7 +37,9 @@ Go binary and must be on the PATH.
    - Constraints: budget, time, tools, safety, must it be reversible?
    - What is already known or decided?
    - Any deadline or season?
-   - Photos or screenshots to attach? (They go in `<inbox>/<card-slug>/`.)
+   - Photos or screenshots to attach? (Put the file next to the draft, or
+     under the inbox and write the path relative to it, such as
+     `<card-slug>/file.jpg`.)
    - **How deep should research go for this card:** quick (a few key links)
      or deep (compare options)? Ask this every card.
 3. **Research** to the depth chosen. Prefer primary sources: manufacturer
@@ -62,7 +64,7 @@ Go binary and must be on the PATH.
 8. **Changing the card later:** edit the draft, then run
    `fz draft apply --update <file>`. It pushes the draft to the card and
    refuses a card that changed in Fizzy since the last sync unless you add
-   `--force`. It never unticks a step. `--prune` also deletes steps and tags
+   `--force`. It never unticks a step. `--prune` also deletes unticked steps and tags
    the draft no longer has, so use it only with approval. Run
    `fz --dry-run draft apply --update <file>` first.
 
@@ -101,7 +103,7 @@ Commands are nouns followed by a verb. Run `fz help <noun>` or
 | Delete a step | `fz step delete <n> <step-id> --yes` (only with approval) |
 | Comment | `fz comment add <n> "Markdown text"` |
 | Upload a file | `fz upload <file>` prints the sgid for rich text |
-| Weekly look | `fz review [<board>...]` lists Now, golden and stale cards per board |
+| Weekly look | `fz review [<board>...]` lists the last column before Done (whatever its name), counts the other columns and Maybe?, and lists golden, postponing-soon and stalled cards, per board |
 | Delete | `fz card delete <n> --yes` (only with approval) |
 
 A new description from `fz card edit` replaces the whole description,

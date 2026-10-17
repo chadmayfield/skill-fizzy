@@ -65,8 +65,9 @@ fz completion zsh       # completion script for zsh; bash, fish and powershell a
    `account` is the number in your Fizzy URLs (`https://.../1/boards`).
    Optional: `"rules_card": <number>` points the skill at a card holding your
    own conventions. Environment variables `FIZZY_URL`, `FIZZY_ACCOUNT`,
-   `FIZZY_TOKEN`, `FIZZY_TOKEN_CMD`, `FIZZY_INBOX`, `FIZZY_RULES_CARD` and
-   `FIZZY_CONFIG` override the file. `fz` never stores the token. It reads
+   `FIZZY_TOKEN`, `FIZZY_TOKEN_CMD`, `FIZZY_INBOX` and `FIZZY_RULES_CARD`
+   override the file's values. `FIZZY_CONFIG` (or `--config`) chooses which
+   file to load. `fz` never stores the token. It reads
    `FIZZY_TOKEN`, or runs `token_cmd` each time.
 
 4. **Check it:** `fz board list`.
@@ -101,7 +102,7 @@ fz step list 87                             # shows each step's id
 fz step check 87 03abc123def456ghi789jkl0mn
 fz comment add 87 "Measured: 42 mm"
 fz upload hinge.jpg                         # prints the sgid for rich text
-fz review Home                              # Now, golden and stale cards
+fz review Home                              # last lane before Done, counts, golden and stale
 fz card delete 87 --yes                     # refuses without --yes
 fz board create Garden --postpone 365 --columns Later,Next,Now
 ```
@@ -109,7 +110,8 @@ fz board create Garden --postpone 365 --columns Later,Next,Now
 Commands from fz 0.1 still work, so `fz boards`, `fz show 87` and
 `fz step 87 "Order the hinge"` run as before.
 
-`--dry-run` before any command prints what would be sent, without sending it.
+`--dry-run` before any command prints each write instead of sending it. Reads
+still go to the server.
 `--json` prints raw JSON. Every write is logged (time, method, path and
 status, never the token) to `~/.local/state/fizzy-skill/actions.log`.
 

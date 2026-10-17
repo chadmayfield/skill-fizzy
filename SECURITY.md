@@ -24,6 +24,7 @@ secret store, and restrict who can read the config file.
 
 ## Scope
 
-`fz` sends the token only to the server named in your config file or
-environment. `fz draft check --links` fetches the links in a draft without an
+`fz` sends the token to the server named in your config file or environment,
+and to any pagination URL that server returns in a Link header.
+`fz draft check --links` fetches the links in a draft without an
 Authorization header.
