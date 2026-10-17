@@ -25,7 +25,7 @@ Each command lives in its own file under `internal/cli/` and registers itself by
 - Every write honors `--dry-run`. Every delete, and anything that publishes or changes access, needs `--yes`.
 - Old command forms keep working.
 - Help text, README, man page and commit messages follow the unslop rules: no em dashes, plain words, sentence case. No emojis.
-- Work on the `go-port` branch. Never commit to `main` directly.
+- Feature work happens on a branch and merges to `main` by pull request. Never commit to `main` directly.
 - Never `git add docs/` or `.superpowers/`. Stage files by explicit path.
 
 ## Commits
