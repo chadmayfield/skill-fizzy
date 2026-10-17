@@ -77,6 +77,20 @@ Go binary and must be on the PATH.
    a compact list (title, column, step count), with full text on request.
 4. On go: `fz draft apply <folder>`. Report each card's number and link.
 
+## While you work on a mapped repo
+
+A repo can map to a board, or to one card on it. When the session's work
+matches a card:
+
+- When you finish one of its steps, offer once to tick it:
+  `fz step check <n> <step-id>`. Get the id from `fz step list <n>`.
+- When the card's goal is met, ask before moving it to Done.
+- Never create, move, tick or delete anything without the user's OK.
+
+To see the board's Now and Next cards at the start of every session, run
+`fz hook session-start` from a Claude Code SessionStart hook. Setup is in
+`examples/hooks/README.md` in the fz repo.
+
 ## Other operations
 
 Commands are nouns followed by a verb. Run `fz help <noun>` or
