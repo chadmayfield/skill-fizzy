@@ -1,0 +1,207 @@
+package cli
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+)
+
+type seenCall struct{ method, path, body string }
+
+// editServer answers GET /1/cards/5 with card and records every call.
+func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall) {
+	t.Helper()
+	var mu sync.Mutex
+	var calls []seenCall
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		calls = append(calls, seenCall{r.Method, r.URL.Path, string(b)})
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			io.WriteString(w, card)
+			return
+		}
+		io.WriteString(w, "{}")
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []seenCall {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]seenCall(nil), calls...)
+	}
+}
+
+func editEnv(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	parityEnv(t, srv)
+}
+
+func putBody(t *testing.T, calls []seenCall) map[string]map[string]string {
+	t.Helper()
+	for _, c := range calls {
+		if c.method == http.MethodPut {
+			var m map[string]map[string]string
+			if err := json.Unmarshal([]byte(c.body), &m); err != nil {
+				t.Fatalf("PUT body %q: %v", c.body, err)
+			}
+			return m
+		}
+	}
+	t.Fatal("no PUT sent")
+	return nil
+}
+
+func TestCardEditCommandRegistered(t *testing.T) {
+	cmd, _, err := NewRoot().Find([]string{"card", "edit"})
+	if err != nil || cmd.Name() != "edit" || cmd.Parent().Name() != "card" {
+		t.Fatalf("card edit not found: %v", err)
+	}
+	if cmd.Short == "" || cmd.Long == "" || cmd.Example == "" {
+		t.Error("card edit needs Short, Long and Example")
+	}
+}
+
+func TestCardEditTitleOnly(t *testing.T) {
+	srv, calls := editServer(t, "{}")
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--title", "New"})
+	if r.code != 0 || r.stdout != "card #5 updated: title\n" {
+		t.Fatalf("got %+v", r)
+	}
+	cs := calls()
+	if len(cs) != 1 || cs[0].path != "/1/cards/5" || cs[0].body != `{"card":{"title":"New"}}` {
+		t.Errorf("calls %+v", cs)
+	}
+}
+
+func TestCardEditDescriptionAndStatusSorted(t *testing.T) {
+	srv, calls := editServer(t, "{}")
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--description", "Gate latches.", "--status", "published", "--title", "T"})
+	if r.code != 0 || r.stdout != "card #5 updated: description, status, title\n" {
+		t.Fatalf("got %+v", r)
+	}
+	m := putBody(t, calls())
+	if m["card"]["description"] != "<p>Gate latches.</p>" || m["card"]["status"] != "published" || m["card"]["title"] != "T" {
+		t.Errorf("body %+v", m)
+	}
+}
+
+func TestCardEditDescriptionFile(t *testing.T) {
+	srv, calls := editServer(t, "{}")
+	editEnv(t, srv)
+	f := filepath.Join(t.TempDir(), "goal.md")
+	if err := os.WriteFile(f, []byte("## Goal\r\nGate latches.\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := runGo([]string{"card", "edit", "5", "--description-file", f})
+	if r.code != 0 {
+		t.Fatalf("got %+v", r)
+	}
+	d := putBody(t, calls())["card"]["description"]
+	if !strings.Contains(d, "<h3>Goal</h3>") || strings.Contains(d, "\r") {
+		t.Errorf("description %q", d)
+	}
+}
+
+func TestCardEditJSON(t *testing.T) {
+	srv, _ := editServer(t, "{}")
+	editEnv(t, srv)
+	r := runGo([]string{"--json", "card", "edit", "5", "--title", "New", "--status", "drafted"})
+	want := "{\n  \"number\": 5,\n  \"changed\": [\n    \"status\",\n    \"title\"\n  ]\n}\n"
+	if r.code != 0 || r.stdout != want {
+		t.Fatalf("got %+v\nwant %q", r, want)
+	}
+}
+
+func TestCardEditReplaceReadsThenPutsUnwrapped(t *testing.T) {
+	card := `{"description_html": "<div class=\"action-text-content\">\n  <p>Hinge H1 is serviced</p>\n</div>\n"}`
+	srv, calls := editServer(t, card)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--replace", "Hinge H1 ", "Hinge H1S "})
+	if r.code != 0 || r.stdout != "card #5 updated: description\n" {
+		t.Fatalf("got %+v", r)
+	}
+	cs := calls()
+	if len(cs) != 2 || cs[0].method != "GET" || cs[1].method != "PUT" {
+		t.Fatalf("calls %+v", cs)
+	}
+	if got := putBody(t, cs)["card"]["description"]; got != "<p>Hinge H1S is serviced</p>" {
+		t.Errorf("description %q", got)
+	}
+}
+
+func TestCardEditReplaceAmbiguousNeedsAll(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<p>H1 and H1S</p>"}`)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--replace", "H1", "H1S"})
+	if r.code != 1 || !strings.Contains(r.stderr, "2 times") {
+		t.Fatalf("got %+v", r)
+	}
+	for _, c := range calls() {
+		if c.method != "GET" {
+			t.Errorf("wrote %+v", c)
+		}
+	}
+	r = runGo([]string{"card", "edit", "5", "--replace", "H1", "H2", "--all"})
+	if r.code != 0 {
+		t.Fatalf("with --all: %+v", r)
+	}
+	if got := putBody(t, calls())["card"]["description"]; got != "<p>H2 and H2S</p>" {
+		t.Errorf("description %q", got)
+	}
+}
+
+func TestCardEditReplaceDryRun(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<p>gate</p>"}`)
+	editEnv(t, srv)
+	r := runGo([]string{"--dry-run", "card", "edit", "5", "--replace", "gate", "hinge"})
+	if r.code != 0 || !strings.Contains(r.stderr, `[dry-run] PUT `+srv.URL+`/1/cards/5 {"card": {"description": "<p>hinge</p>"}}`) {
+		t.Fatalf("got %+v", r)
+	}
+	for _, c := range calls() {
+		if c.method != "GET" {
+			t.Errorf("wrote %+v", c)
+		}
+	}
+}
+
+func TestCardEditErrors(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<p>x</p>"}`)
+	editEnv(t, srv)
+	cases := []struct {
+		name     string
+		args     []string
+		wantCode int
+		wantErr  string
+	}{
+		{"nothing", []string{"card", "edit", "5"}, 1, "nothing to update"},
+		{"missing phrase", []string{"card", "edit", "5", "--replace", "y", "z"}, 1, "not found"},
+		{"replace needs both", []string{"card", "edit", "5", "--replace", "y"}, 2, "--replace needs OLD and NEW"},
+		{"extra args", []string{"card", "edit", "5", "y", "z"}, 2, "OLD and NEW only go with --replace"},
+		{"all alone", []string{"card", "edit", "5", "--all", "--title", "T"}, 2, "--all only goes with --replace"},
+		{"replace and description", []string{"card", "edit", "5", "--replace", "x", "y", "--description", "d"}, 1, "use --replace or a new description, not both"},
+		{"description and file", []string{"card", "edit", "5", "--description", "d", "--description-file", "f"}, 2, "not allowed with"},
+		{"bad status", []string{"card", "edit", "5", "--status", "gone"}, 2, "invalid choice"},
+		{"bad number", []string{"card", "edit", "abc", "--title", "T"}, 2, "invalid int value"},
+	}
+	for _, tc := range cases {
+		r := runGo(tc.args)
+		if r.code != tc.wantCode || !strings.Contains(r.stderr, tc.wantErr) {
+			t.Errorf("%s: got %+v, want code %d and %q", tc.name, r, tc.wantCode, tc.wantErr)
+		}
+	}
+	for _, c := range calls() {
+		if c.method != "GET" {
+			t.Errorf("an error case wrote %+v", c)
+		}
+	}
+}
