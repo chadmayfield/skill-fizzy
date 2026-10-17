@@ -46,7 +46,7 @@ change the guide and the command's help text in the same commit.
 - `make vuln` runs `govulncheck ./...`, if you have it installed.
 - `make tidy` runs `go mod tidy`.
 - Releases: push a tag named `vMAJOR.MINOR.PATCH`, with an optional `-suffix`, on a commit that is already on `main`.
-  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name or a commit not on `origin/main`.
+  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name (no leading zeros, no line breaks) or a commit not on `origin/main`, and records the kind in `GITHUB_OUTPUT`.
   It then runs the tests, runs `make dist`, attests the archives and publishes the GitHub release. A tag with a suffix is published as a prerelease.
 - CI runs the gofmt check, `go vet`, the race tests and a build, plus `govulncheck` as advisory only.
 

@@ -23,7 +23,7 @@ jobs:
         id: guard
         run: |
           git fetch origin main
-          echo "kind=$(sh scripts/release-guard.sh)" >> "$GITHUB_OUTPUT"
+          sh scripts/release-guard.sh
       - name: Test
         run: go test -race -count=1 ./...
       - name: Build archives
@@ -37,6 +37,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           KIND: ${{ steps.guard.outputs.kind }}
         run: |
+          if [ "$KIND" != release ] && [ "$KIND" != prerelease ]; then
+            echo "tag check did not set kind to release or prerelease" >&2
+            exit 1
+          fi
           flag=""
           if [ "$KIND" = prerelease ]; then flag="--prerelease"; fi
           gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt \

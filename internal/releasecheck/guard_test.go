@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -34,46 +35,68 @@ func TestReleaseGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	repo := t.TempDir()
-	gitIn(t, repo, "init", "-q")
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	repo := filepath.Join(root, "work")
+	gitIn(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	gitIn(t, root, "clone", "-q", origin, repo)
+	gitIn(t, repo, "checkout", "-q", "-b", "main")
 	commit := func(msg string) string {
 		gitIn(t, repo, "commit", "-q", "--allow-empty", "-m", msg)
 		return gitIn(t, repo, "rev-parse", "HEAD")
 	}
 	onMain := commit("on main")
-	gitIn(t, repo, "branch", "-M", "main")
-	// The workflow fetches origin/main; here the ref is set by hand.
-	gitIn(t, repo, "update-ref", "refs/remotes/origin/main", onMain)
+	gitIn(t, repo, "push", "-q", "origin", "main")
 	gitIn(t, repo, "checkout", "-q", "-b", "side")
 	onSide := commit("on a side branch")
+	// The same fetch the workflow runs.
+	gitIn(t, repo, "fetch", "-q", "origin", "main")
 
 	cases := []struct {
 		tag, sha string
-		wantOut  string
-		wantFail bool
+		wantKind string
 	}{
-		{"v1.2.3", onMain, "release", false},
-		{"v1.2.3-rc1", onMain, "prerelease", false},
-		{"vtest", onMain, "", true},
-		{"v1.2.4", onSide, "", true},
+		{"v1.2.3", onMain, "release"},
+		{"v0.0.1", onMain, "release"},
+		{"v1.2.3-rc1", onMain, "prerelease"},
+		{"vtest", onMain, ""},
+		{"v1.2.4", onSide, ""},
+		{"v1.2.3\nx", onMain, ""},
+		{"x\nv1.2.3", onMain, ""},
+		{"v1.2.3\r", onMain, ""},
+		{"v01.2.3", onMain, ""},
+		{"v1.02.3", onMain, ""},
+		{"v1.2.03", onMain, ""},
+		{"v1.2", onMain, ""},
+		{"v1.2.3.4", onMain, ""},
+		{"v1.2.3-", onMain, ""},
+		{"v1.2.3 ", onMain, ""},
 	}
-	for _, c := range cases {
-		t.Run(c.tag, func(t *testing.T) {
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i)+"/"+strings.NewReplacer("\n", "NL", "\r", "CR", " ", "_").Replace(c.tag), func(t *testing.T) {
+			outFile := filepath.Join(t.TempDir(), "output")
 			cmd := exec.Command("sh", script)
 			cmd.Dir = repo
-			cmd.Env = append(os.Environ(), "GITHUB_REF_NAME="+c.tag, "GITHUB_SHA="+c.sha)
+			cmd.Env = append(os.Environ(), "GITHUB_REF_NAME="+c.tag, "GITHUB_SHA="+c.sha, "GITHUB_OUTPUT="+outFile)
 			out, err := cmd.Output()
-			if c.wantFail {
+			written, _ := os.ReadFile(outFile)
+			if c.wantKind == "" {
 				if err == nil {
-					t.Fatalf("guard passed %s, output %q", c.tag, out)
+					t.Fatalf("guard passed %q, output %q", c.tag, out)
+				}
+				if len(written) != 0 {
+					t.Errorf("a rejected tag wrote %q to GITHUB_OUTPUT", written)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("guard failed %s: %v", c.tag, err)
+				t.Fatalf("guard failed %q: %v", c.tag, err)
 			}
-			if got := strings.TrimSpace(string(out)); got != c.wantOut {
-				t.Errorf("output %q, want %q", got, c.wantOut)
+			if got := strings.TrimSpace(string(out)); got != c.wantKind {
+				t.Errorf("stdout %q, want %q", got, c.wantKind)
+			}
+			if string(written) != "kind="+c.wantKind+"\n" {
+				t.Errorf("GITHUB_OUTPUT = %q", written)
 			}
 		})
 	}
