@@ -108,3 +108,20 @@ func TestReplaceKeepsComments(t *testing.T) {
 		t.Errorf("comment kept: %q, %v", got, err)
 	}
 }
+
+func TestReplaceSkipsMatchesInsideEntities(t *testing.T) {
+	for _, old := range []string{"gt", "amp", "39", "lt"} {
+		html := `<p>a &gt; b &amp; c &#39; d &lt; e</p>`
+		if _, err := ReplaceText(html, old, "x", true); err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Errorf("%q matched inside an entity: %v", old, err)
+		}
+	}
+	got, err := ReplaceText(`<p>gt &gt; gt</p>`, "gt", "lt", true)
+	if err != nil || got != `<p>lt &gt; lt</p>` {
+		t.Errorf("text next to an entity: %q, %v", got, err)
+	}
+	got, err = ReplaceText(`<p>a &gt; b</p>`, ">", "<", false)
+	if err != nil || got != `<p>a &lt; b</p>` {
+		t.Errorf("whole entity as the phrase: %q, %v", got, err)
+	}
+}

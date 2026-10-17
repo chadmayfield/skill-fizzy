@@ -36,8 +36,41 @@ func escapeText(s string) string { return escaper.Replace(s) }
 // > inside a comment or a quoted attribute does not end it early.
 var tag = regexp.MustCompile(`<!--[\s\S]*?-->|<(?:[^>"']|"[^"]*"|'[^']*')*>`)
 
-// ReplaceText swaps old for new in the text of html, never inside a tag or
-// its attributes, so a link's href stays as it is. Both are plain text and
+// entity matches a character reference such as &gt; or &#39;.
+var entity = regexp.MustCompile(`&[#a-zA-Z0-9]+;`)
+
+// findMatches returns the start of each non-overlapping occurrence of o in
+// s, left to right, skipping any occurrence that starts or ends inside an
+// entity. A phrase that covers a whole entity, such as &amp;, still matches.
+func findMatches(s, o string) []int {
+	ents := entity.FindAllStringIndex(s, -1)
+	inside := func(pos int) bool {
+		for _, e := range ents {
+			if pos > e[0] && pos < e[1] {
+				return true
+			}
+		}
+		return false
+	}
+	var out []int
+	for from := 0; from <= len(s)-len(o); {
+		i := strings.Index(s[from:], o)
+		if i < 0 {
+			break
+		}
+		i += from
+		if inside(i) || inside(i+len(o)) {
+			from = i + 1
+			continue
+		}
+		out = append(out, i)
+		from = i + len(o)
+	}
+	return out
+}
+
+// ReplaceText swaps old for new in the text of html, never inside a tag, a comment,
+// an entity or an attribute, so a link's href stays as it is. Both are plain text and
 // are escaped before matching. A match cannot span a tag. More than one
 // match is an error unless all is true, so a short phrase inside a longer
 // word does not change by accident.
@@ -58,7 +91,7 @@ func ReplaceText(html, old, new string, all bool) (string, error) {
 	texts = append(texts, html[at:])
 	count := 0
 	for _, s := range texts {
-		count += strings.Count(s, o)
+		count += len(findMatches(s, o))
 	}
 	if count == 0 {
 		return "", fmt.Errorf("%q not found in the description (text that spans formatting cannot be matched)", old)
@@ -68,7 +101,13 @@ func ReplaceText(html, old, new string, all bool) (string, error) {
 	}
 	var b strings.Builder
 	for i, s := range texts {
-		b.WriteString(strings.ReplaceAll(s, o, n))
+		at := 0
+		for _, m := range findMatches(s, o) {
+			b.WriteString(s[at:m])
+			b.WriteString(n)
+			at = m + len(o)
+		}
+		b.WriteString(s[at:])
 		if i < len(tags) {
 			b.WriteString(html[tags[i][0]:tags[i][1]])
 		}
