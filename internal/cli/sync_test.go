@@ -98,7 +98,7 @@ func newSyncServer(t *testing.T) *syncServer {
 	mux.HandleFunc("GET /1/boards", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `[{"id":"b1","name":"Home"},{"id":"b2","name":"Garage"}]`)
 	})
-	mux.HandleFunc("POST /rails/active_storage/direct_uploads", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /1/rails/active_storage/direct_uploads", func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{}`)
 	})
 	mux.HandleFunc("POST /1/boards/{id}/cards", func(w http.ResponseWriter, r *http.Request) {
@@ -711,6 +711,9 @@ func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
 	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
 	if err == nil {
 		t.Fatal("an incomplete upload reply did not fail the sync")
+	}
+	if !strings.Contains(err.Error(), "direct upload reply has no direct_upload.url") {
+		t.Errorf("error = %q, want the incomplete-reply error", err)
 	}
 	w := srv.writes()
 	if len(w) != 1 || w[0] != "POST /1/rails/active_storage/direct_uploads" {
