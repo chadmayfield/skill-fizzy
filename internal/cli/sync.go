@@ -18,23 +18,52 @@ func lane(name string) string {
 	return strings.TrimRight(strings.ToLower(strings.TrimSpace(name)), "?")
 }
 
+// checkSynced is the conflict guard. It refuses a draft with no synced: line,
+// or one whose card's last_active_at differs from synced:, because then the
+// card may hold changes made in Fizzy that the draft would overwrite.
+func checkSynced(d *draft.Draft, card fizzy.Card) error {
+	name := filepath.Base(d.Path)
+	if d.Synced == "" {
+		return fmt.Errorf("%s: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force", name)
+	}
+	if card.LastActiveAt != d.Synced {
+		return fmt.Errorf("%s: card #%d changed in Fizzy since the last sync; check it, then rerun with --force", name, d.Card)
+	}
+	return nil
+}
+
+// guardDrafts runs checkSynced for every draft that has a card, before any
+// write, and returns every refusal in draft order.
+func guardDrafts(fz *fizzy.Fizzy, drafts []*draft.Draft) ([]error, error) {
+	var refused []error
+	for _, d := range drafts {
+		if d.Card == 0 {
+			continue
+		}
+		card, err := fz.Card(d.Card)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkSynced(d, card); err != nil {
+			refused = append(refused, err)
+		}
+	}
+	return refused, nil
+}
+
 // syncDraft pushes a draft onto its existing card d.Card and returns one
 // report line per change. Unless force is set, it refuses a draft with no
 // synced: line, or one whose card changed in Fizzy since synced:, before
 // sending any write. Steps are never unticked. With prune, unticked card
 // steps and card tags the draft lacks are removed; ticked steps always stay.
 func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool) ([]string, error) {
-	name := filepath.Base(d.Path)
 	card, err := fz.Card(d.Card)
 	if err != nil {
 		return nil, err
 	}
 	if !force {
-		if d.Synced == "" {
-			return nil, fmt.Errorf("%s: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force", name)
-		}
-		if card.LastActiveAt != d.Synced {
-			return nil, fmt.Errorf("%s: card #%d changed in Fizzy since the last sync; check it, then rerun with --force", name, d.Card)
+		if err := checkSynced(d, card); err != nil {
+			return nil, err
 		}
 	}
 	var report []string
@@ -100,7 +129,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 	}
 	if prune {
 		for _, t := range card.Tags {
-			if hasTag(d.Tags, strings.ToLower(t)) {
+			if hasTag(d.Tags, tagKey(t)) {
 				continue
 			}
 			changed, err := fz.RemoveTag(d.Card, t)
@@ -137,6 +166,12 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 		}
 	}
 	return report, nil
+}
+
+// tagKey normalizes a tag the way fizzy's AddTag and RemoveTag do, so a card
+// tag written "#Buy" matches the draft tag "buy".
+func tagKey(t string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(t, "#")))
 }
 
 func hasTag(tags []string, t string) bool {

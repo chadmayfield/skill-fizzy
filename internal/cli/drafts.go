@@ -318,6 +318,20 @@ func draftApply(c *cmdContext, a []string) error {
 		}
 		drafts = append(drafts, d)
 	}
+	// With --update, check every card for changes made in Fizzy before any
+	// write, so one refusal reports them all and nothing is half applied.
+	if update && !force {
+		refused, err := guardDrafts(fz, drafts)
+		if err != nil {
+			return err
+		}
+		for _, r := range refused {
+			fmt.Fprintf(c.errw(), "fz: %s\n", r)
+		}
+		if len(refused) > 0 {
+			return exitCode(1)
+		}
+	}
 	w := c.out()
 	for _, d := range drafts {
 		if d.Card != 0 {

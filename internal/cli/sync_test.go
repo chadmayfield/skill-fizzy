@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -40,32 +41,38 @@ const (
 	stepDone    = "03done00000000000000000000"
 )
 
-// syncCard is card 87 as the fake server returns it. lastActive replaces
-// its last_active_at.
-func syncCard(lastActive string) string {
-	return `{"number":87,"title":"Fix the gate","board":{"id":"b1","name":"Home"},"closed":false,"golden":false,` +
-		`"tags":["buy"],"last_active_at":"` + lastActive + `","column":null,"steps":[` +
+// syncCard is card n as the fake server returns it, with the given
+// last_active_at and tags (a JSON array).
+func syncCard(n int, lastActive, tags string) string {
+	return `{"number":` + strconv.Itoa(n) + `,"title":"Fix the gate","board":{"id":"b1","name":"Home"},"closed":false,"golden":false,` +
+		`"tags":` + tags + `,"last_active_at":"` + lastActive + `","column":null,"steps":[` +
 		`{"id":"` + stepMeasure + `","content":"Measure the gap","completed":false},` +
 		`{"id":"` + stepOld + `","content":"Old step","completed":false},` +
 		`{"id":"` + stepDone + `","content":"Done elsewhere","completed":true}]}`
 }
 
-// syncServer serves card 87 and the boards list, accepts every write, and
-// records each request as "METHOD /path".
+// syncServer serves cards 87 and 88 (same content) and 90, and the boards
+// list, accepts every write, and records each request as "METHOD /path".
+// tags is the JSON tag array cards 87 and 88 report.
 type syncServer struct {
 	*httptest.Server
 	mu    sync.Mutex
 	calls []string
+	tags  string
 }
 
 func newSyncServer(t *testing.T, lastActive string) *syncServer {
 	t.Helper()
-	s := &syncServer{}
+	s := &syncServer{tags: `["buy"]`}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /1/cards/{n}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("n") {
-		case "87":
-			io.WriteString(w, syncCard(lastActive))
+		case "87", "88":
+			n, _ := strconv.Atoi(r.PathValue("n"))
+			s.mu.Lock()
+			tags := s.tags
+			s.mu.Unlock()
+			io.WriteString(w, syncCard(n, lastActive, tags))
 		case "90":
 			io.WriteString(w, `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"Home"},"last_active_at":"2026-10-17T12:00:00Z","tags":[],"steps":[]}`)
 		default:
@@ -371,5 +378,104 @@ func TestApplyHasUpdateFlags(t *testing.T) {
 	_ = cmd.Help()
 	if !strings.Contains(b.String(), "--update") {
 		t.Errorf("help does not list --update")
+	}
+}
+
+func TestSyncPruneKeepsTagWrittenDifferently(t *testing.T) {
+	srv, fz, cfg, d := syncFixture(t, "2026-10-17T10:00:00Z", syncDraftText)
+	srv.mu.Lock()
+	srv.tags = `["#Buy"]`
+	srv.mu.Unlock()
+	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range report {
+		if strings.HasPrefix(line, "tag removed") {
+			t.Errorf("pruned a tag the draft has: %q", report)
+		}
+	}
+	// One GET for the sync and one for AddTag. A third would be RemoveTag
+	// reading the card before toggling "#Buy" off.
+	srv.mu.Lock()
+	gets := 0
+	for _, c := range srv.calls {
+		if c == "GET /1/cards/87" {
+			gets++
+		}
+	}
+	srv.mu.Unlock()
+	if gets != 2 {
+		t.Errorf("GET /1/cards/87 sent %d times, want 2: prune tried to remove a tag the draft has", gets)
+	}
+}
+
+// conflictDraft is syncDraftText for card n with a synced: time the fake
+// server does not report.
+func conflictDraft(n int) string {
+	return strings.NewReplacer("card: 87", "card: "+strconv.Itoa(n), "synced: 2026-10-17T10:00:00Z", "synced: 2026-10-01T00:00:00Z").Replace(syncDraftText)
+}
+
+func TestApplyUpdateReportsEveryConflictAndWritesNothing(t *testing.T) {
+	srv := newSyncServer(t, "2026-10-17T10:00:00Z")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), conflictDraft(87))
+	writeFile(t, filepath.Join(dir, "b.md"), conflictDraft(88))
+	got := syncRun(t, srv, "draft", "apply", "--update", dir)
+	want := "fz: a.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force\n" +
+		"fz: b.md: card #88 changed in Fizzy since the last sync; check it, then rerun with --force\n"
+	if got.code != 1 || got.stderr != want || got.stdout != "" {
+		t.Errorf("code %d\nstdout %q\nstderr %q\nwant stderr %q", got.code, got.stdout, got.stderr, want)
+	}
+	if w := srv.writes(); len(w) != 0 {
+		t.Errorf("writes reached the server: %q", w)
+	}
+}
+
+func TestApplyUpdateConflictBlocksNewCards(t *testing.T) {
+	srv := newSyncServer(t, "2026-10-17T10:00:00Z")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n")
+	text := strings.Replace(syncDraftText, "synced: 2026-10-17T10:00:00Z\n", "", 1)
+	writeFile(t, filepath.Join(dir, "b.md"), text)
+	got := syncRun(t, srv, "draft", "apply", "--update", dir)
+	want := "fz: b.md: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force\n"
+	if got.code != 1 || got.stderr != want {
+		t.Errorf("code %d stderr %q", got.code, got.stderr)
+	}
+	if w := srv.writes(); len(w) != 0 {
+		t.Errorf("writes reached the server: %q", w)
+	}
+	if strings.Contains(syncReadDraft(t, filepath.Join(dir, "a.md")), "card:") {
+		t.Errorf("the new draft was recorded as created")
+	}
+}
+
+func TestApplyUpdateConflictDryRunWritesNothing(t *testing.T) {
+	srv := newSyncServer(t, "2026-10-17T10:00:00Z")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n")
+	writeFile(t, filepath.Join(dir, "b.md"), conflictDraft(87))
+	got := syncRun(t, srv, "--dry-run", "draft", "apply", "--update", dir)
+	if got.code != 1 || strings.Contains(got.stderr, "[dry-run]") || got.stdout != "" {
+		t.Errorf("code %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if w := srv.writes(); len(w) != 0 {
+		t.Errorf("writes reached the server: %q", w)
+	}
+}
+
+func TestApplyUpdateForceSkipsGuardForAll(t *testing.T) {
+	srv := newSyncServer(t, "2026-10-17T10:00:00Z")
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), conflictDraft(87))
+	writeFile(t, filepath.Join(dir, "b.md"), conflictDraft(88))
+	got := syncRun(t, srv, "draft", "apply", "--update", "--force", dir)
+	if got.code != 0 {
+		t.Fatalf("code %d stderr %q", got.code, got.stderr)
+	}
+	w := srv.writes()
+	if !syncHas(w, "PUT /1/cards/87") || !syncHas(w, "PUT /1/cards/88") {
+		t.Errorf("writes = %q", w)
 	}
 }
