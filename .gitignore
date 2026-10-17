@@ -13,3 +13,7 @@ docs/specs/
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
+
+# python bytecode
+__pycache__/
+*.pyc
