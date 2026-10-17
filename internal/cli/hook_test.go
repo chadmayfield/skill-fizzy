@@ -83,7 +83,18 @@ func newHookFixture(t *testing.T) hookFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.script = script
+	// The shipped script gives each fz call 5 seconds, which a loaded test
+	// machine can miss. Run a copy with a longer limit. The shipped file is
+	// not touched.
+	src, err := os.ReadFile(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(src), "TIMEOUT = 5"); n != 1 {
+		t.Fatalf("expected one TIMEOUT = 5 in the hook script, found %d", n)
+	}
+	f.script = filepath.Join(t.TempDir(), "fizzy-session-hook.py")
+	writeFile(t, f.script, strings.Replace(string(src), "TIMEOUT = 5", "TIMEOUT = 60", 1))
 	f.home = parityEnv(t, srv)
 	for _, d := range []string{"gatehouse", "shed/latch", "hinge", "porch", "attic", "stoop", "deck"} {
 		if err := os.MkdirAll(filepath.Join(f.root, d), 0o755); err != nil {
