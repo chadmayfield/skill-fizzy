@@ -16,11 +16,17 @@ type Board struct {
 	raw json.RawMessage
 }
 
-// Column is a board column. Color is the CSS value the server returns.
-type Column struct {
-	ID    string `json:"id"`
+// ColumnColor is the color object the server sends with a column.
+type ColumnColor struct {
 	Name  string `json:"name"`
-	Color string `json:"color"`
+	Value string `json:"value"`
+}
+
+// Column is a board column.
+type Column struct {
+	ID    string      `json:"id"`
+	Name  string      `json:"name"`
+	Color ColumnColor `json:"color"`
 
 	raw json.RawMessage
 }
