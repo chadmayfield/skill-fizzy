@@ -70,7 +70,7 @@ func TestFormatBoardEmptyLastLane(t *testing.T) {
 }
 
 func TestFormatBoardNoPostponeDays(t *testing.T) {
-	if got := FormatBoard(Result{Board: "X"}); !strings.HasPrefix(got, "== X (postpone Noned)") {
+	if got := FormatBoard(Result{Board: "X"}); !strings.HasPrefix(got, "== X\n") {
 		t.Errorf("got %q", got)
 	}
 }

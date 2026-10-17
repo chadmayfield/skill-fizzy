@@ -79,6 +79,14 @@ func TestReviewHelp(t *testing.T) {
 			if c.Short == "" || c.Long == "" || c.Example == "" {
 				t.Error("review needs Short, Long and Example")
 			}
+			if strings.Contains(c.Short, ":") {
+				t.Errorf("review Short uses a colon: %q", c.Short)
+			}
+			for _, w := range []string{"last column", "count", "golden", "postponing-soon", "stalled"} {
+				if !strings.Contains(c.Short, w) {
+					t.Errorf("review Short %q does not mention %q", c.Short, w)
+				}
+			}
 			return
 		}
 	}

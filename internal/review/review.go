@@ -3,7 +3,6 @@ package review
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -80,11 +79,11 @@ func short(cards []fizzy.Card) string {
 // FormatBoard prints one board's block. The last lane (nearest Done) is
 // listed in full, the other lanes are counted from right to left.
 func FormatBoard(r Result) string {
-	days := "None"
+	head := "== " + r.Board
 	if r.PostponeDays != nil {
-		days = strconv.Itoa(*r.PostponeDays)
+		head += fmt.Sprintf(" (postpone %dd)", *r.PostponeDays)
 	}
-	lines := []string{fmt.Sprintf("== %s (postpone %sd)", r.Board, days)}
+	lines := []string{head}
 	var counts []string
 	if n := len(r.Lanes); n > 0 {
 		last := r.Lanes[n-1]

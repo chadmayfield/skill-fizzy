@@ -13,7 +13,7 @@ func init() { register(addReviewCommand) }
 func addReviewCommand(root *cobra.Command) {
 	root.AddCommand(&cobra.Command{
 		Use:   "review [BOARD...]",
-		Short: "the weekly look: Now, golden and stale cards per board",
+		Short: "list the last column before Done, count the other columns, and show golden, postponing-soon and stalled cards",
 		Long: "For each board, list the cards in the last column (nearest Done), count the other columns and " +
 			"Maybe?, and list golden, postponing-soon and stalled cards. Closed cards are left out.",
 		Example: examples("fz review", "fz review Garage Home", "fz --json review Garage"),
