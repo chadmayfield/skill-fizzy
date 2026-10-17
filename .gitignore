@@ -5,6 +5,11 @@ drafts/
 /fz
 /dist
 
-# private plans and working notes, never published
-docs/superpowers/
+# private agent and planning files, never published
 .superpowers/
+**/superpowers/
+docs/plans/
+docs/specs/
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/worktrees/
