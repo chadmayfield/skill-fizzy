@@ -143,10 +143,24 @@ func TestManNoPrivateText(t *testing.T) {
 	dir := t.TempDir()
 	runMan(t, dir)
 	home, _ := os.UserHomeDir()
+	bad := []string{"/Users/", "@", "github.com"}
+	if home != "" {
+		bad = append(bad, home)
+	}
+	// Private strings come from the environment so they never enter the repo.
+	if extra := os.Getenv("FZ_PRIVATE_PATTERNS"); extra != "" {
+		for _, p := range strings.Split(extra, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				bad = append(bad, p)
+			}
+		}
+	} else {
+		t.Log("FZ_PRIVATE_PATTERNS is unset: running the generic checks only")
+	}
 	for name, page := range readPages(t, dir) {
-		for _, bad := range []string{"redacted", "redacted", "redacted", "github.com", "basecamp", home} {
-			if bad != "" && strings.Contains(page, bad) {
-				t.Errorf("%s contains %q", name, bad)
+		for _, pat := range bad {
+			if strings.Contains(strings.ToLower(page), strings.ToLower(pat)) {
+				t.Errorf("%s contains %q", name, pat)
 			}
 		}
 		// SEE ALSO may only point at other fz pages.
