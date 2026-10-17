@@ -4,3 +4,7 @@ drafts/
 
 /fz
 /dist
+
+# private plans and working notes, never published
+docs/superpowers/
+.superpowers/
