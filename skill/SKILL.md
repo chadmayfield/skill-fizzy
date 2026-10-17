@@ -7,27 +7,30 @@ description: Build well-researched Fizzy cards with the user. Use when the user 
 
 You help the user turn a title (or a curated list) into Fizzy cards that hold
 everything needed to act: a goal, details, links and media, and steps. You
-work through the `fz` command-line client in this repository.
+work through `fz`, a command-line client for the Fizzy API. `fz` is a single
+Go binary and must be on the PATH.
 
 ## Before you start
 
-1. Check `fz` works: `fz boards`. If it fails with a config error, point the
-   user at the README's setup section and stop.
-2. If a rules card is configured (`rules_card` in the config), read it with
-   `fz show <number>` and follow it. It overrides anything below.
+1. Check `fz` is installed: `fz --version`. If the command is not found, tell
+   the user to install it (the README's install section) and stop.
+2. Check it can reach Fizzy: `fz board list`. If it fails with a config error,
+   point the user at the README's setup section and stop.
+3. If a rules card is configured (`rules_card` in the config), read it with
+   `fz card show <number>` and follow it. It overrides anything below.
 
 ## Golden rules
 
 - **Nothing is created, changed, moved or deleted in Fizzy until the user says
   go** for that specific draft or batch. Previews are free; writes are not.
 - **Never delete** a card, board, column or tag without explicit approval,
-  and use `fz delete <n> --yes` only after showing what will be deleted.
+  and use `fz card delete <n> --yes` only after showing what will be deleted.
 - **Never print or echo the API token.** `fz` reads it itself.
 - Use `--dry-run` whenever you are unsure what a command will send.
 
 ## One card
 
-1. **Get a title and a board.** Board names come from `fz boards`.
+1. **Get a title and a board.** Board names come from `fz board list`.
 2. **Ask questions one at a time** (3 to 5 total, fewer if the answers are
    obvious). Choose questions for this card, for example:
    - What does "done" look like?
@@ -42,7 +45,7 @@ work through the `fz` command-line client in this repository.
    images on the web rather than copying them; embed only the user's own
    files.
 4. **Write the draft** to `<inbox>/drafts/<card-slug>.md` using
-   `templates/card.md`: front matter (board, column, tags, golden), then
+   `templates/card.md` (in this skill's folder): front matter (board, column, tags, golden), then
    `# Title`, `## Goal`, `## Details`, `## Links & media`, `## Steps`.
    - Column defaults to **Maybe?** unless the user names one.
    - Steps are concrete actions, `- [ ] ...`.
@@ -56,6 +59,12 @@ work through the `fz` command-line client in this repository.
 7. **On the user's go:** `fz draft apply <file>`, then give the card link.
    `apply` writes `card: <number>` back into the draft so it is never created
    twice.
+8. **Changing the card later:** edit the draft, then run
+   `fz draft apply --update <file>`. It pushes the draft to the card and
+   refuses a card that changed in Fizzy since the last sync unless you add
+   `--force`. It never unticks a step. `--prune` also deletes steps and tags
+   the draft no longer has, so use it only with approval. Run
+   `fz --dry-run draft apply --update <file>` first.
 
 ## A batch (a curated list)
 
@@ -68,17 +77,35 @@ work through the `fz` command-line client in this repository.
 
 ## Other operations
 
+Commands are nouns followed by a verb. Run `fz help <noun>` or
+`fz <noun> <verb> --help` for flags. Commands from fz 0.1 (`fz boards`,
+`fz show 87`, `fz step 87 "text"`) still work.
+
 | Want | Command |
 |---|---|
-| List cards | `fz cards --board "<board>" [--state maybe/closed/not_now/golden]` |
-| Show a card | `fz show <n>` |
-| Move | `fz move <n> --to "<column>"`, `--to maybe`, `--to not-now`, `--to done`; `--board "<board>"` to change board |
-| Reopen | `fz reopen <n>` |
-| Golden | `fz golden <n>` / `fz golden <n> --off` |
-| Tag | `fz tag <n> <tag>` / `--remove` (safe: checks before toggling) |
-| Step | `fz step <n> "text"`, `fz step <n> --check <step-id>` |
-| Comment | `fz comment <n> "Markdown text"` |
-| Delete | `fz delete <n> --yes` (only with approval) |
+| List boards | `fz board list` |
+| List lanes | `fz column list <board>` |
+| List cards | `fz card list --board "<board>" [--state maybe/closed/not_now/golden] [--search "<terms>"]` |
+| Show a card | `fz card show <n>` |
+| Create a card | `fz card create "<board>" "<title>" [--column "<column>"] [--tag <tag>]` |
+| Move | `fz card move <n> --to "<column>"`, `--to maybe`, `--to not-now`, `--to done`; `--board "<board>"` to change board |
+| Reopen | `fz card reopen <n>` |
+| Golden | `fz card golden <n>` / `fz card golden <n> --off` |
+| Tag | `fz card tag <n> <tag>` / `--remove` (safe: checks before toggling) |
+| Retitle or redescribe | `fz card edit <n> --title "<title>"` or `--description-file <file>` |
+| Fix one phrase | `fz card edit <n> --replace "<old>" "<new>"` (add `--all` for every match) |
+| List steps | `fz step list <n>` (shows each step id) |
+| Add a step | `fz step add <n> "text"` |
+| Tick a step | `fz step check <n> <step-id>` / `fz step uncheck <n> <step-id>` |
+| Edit a step | `fz step edit <n> <step-id> "text"` |
+| Delete a step | `fz step delete <n> <step-id> --yes` (only with approval) |
+| Comment | `fz comment add <n> "Markdown text"` |
+| Upload a file | `fz upload <file>` prints the sgid for rich text |
+| Weekly look | `fz review [<board>...]` lists Now, golden and stale cards per board |
+| Delete | `fz card delete <n> --yes` (only with approval) |
+
+A new description from `fz card edit` replaces the whole description,
+including embedded images. For a small fix, use `--replace`.
 
 ## Fizzy facts worth knowing
 
