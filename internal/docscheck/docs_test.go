@@ -46,9 +46,16 @@ func TestSkillDoesNotNeedTheRepo(t *testing.T) {
 }
 
 func TestNoEmDashes(t *testing.T) {
-	for _, rel := range []string{"README.md", "skill/SKILL.md", "SECURITY.md", "CLAUDE.md"} {
+	for _, rel := range []string{"README.md", "skill/SKILL.md", "SECURITY.md", "CLAUDE.md", "AGENTS.md", "docs/USERGUIDE.md"} {
 		if strings.ContainsRune(read(t, rel), '—') {
 			t.Errorf("%s contains an em dash (U+2014)", rel)
 		}
+	}
+}
+
+// CLAUDE.md only imports AGENTS.md, so the two can never drift apart.
+func TestClaudeMDImportsAgents(t *testing.T) {
+	if got := read(t, "CLAUDE.md"); got != "@AGENTS.md\n" {
+		t.Errorf("CLAUDE.md = %q, want %q", got, "@AGENTS.md\n")
 	}
 }
