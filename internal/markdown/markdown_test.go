@@ -9,7 +9,8 @@ import (
 )
 
 // TestToHTMLMatchesPython compares ToHTML with the Python converter's output.
-// The .html files come from scripts/gen_markdown_golden.py.
+// The .html files were written by the Python converter's to_html, which is
+// no longer in this repo. Fix ToHTML, not the golden files.
 func TestToHTMLMatchesPython(t *testing.T) {
 	sources, err := filepath.Glob(filepath.Join("testdata", "*.md"))
 	if err != nil {
@@ -26,7 +27,7 @@ func TestToHTMLMatchesPython(t *testing.T) {
 			}
 			want, err := os.ReadFile(strings.TrimSuffix(src, ".md") + ".html")
 			if err != nil {
-				t.Fatalf("missing golden file, run scripts/gen_markdown_golden.py: %v", err)
+				t.Fatalf("missing golden file: %v", err)
 			}
 			got := ToHTML(string(md))
 			if got != string(want) {

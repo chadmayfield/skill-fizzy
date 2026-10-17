@@ -27,9 +27,6 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race -count=1 ./...
-      # Remove this step when the Python code is deleted.
-      - name: Python tests
-        run: python3 -m unittest discover -s tests
       - name: Build
         run: go build -o fz ./cmd/fz
       # Reports vulnerabilities but does not fail the build: most findings are

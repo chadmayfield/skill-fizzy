@@ -182,7 +182,7 @@ func readGolden(t *testing.T, md string) golden {
 	t.Helper()
 	raw, err := os.ReadFile(strings.TrimSuffix(md, ".md") + ".json")
 	if err != nil {
-		t.Fatalf("missing golden file, run scripts/gen_draft_golden.py: %v", err)
+		t.Fatalf("missing golden file: %v", err)
 	}
 	var g golden
 	if err := json.Unmarshal(raw, &g); err != nil {
@@ -191,7 +191,8 @@ func readGolden(t *testing.T, md string) golden {
 	return g
 }
 
-// The .json files come from scripts/gen_draft_golden.py.
+// The .json files were written from the Python draft parser, which is no
+// longer in this repo. Fix Parse, not the golden files.
 func TestGoldenFromPython(t *testing.T) {
 	sources, err := filepath.Glob(filepath.Join("testdata", "*.md"))
 	if err != nil || len(sources) == 0 {

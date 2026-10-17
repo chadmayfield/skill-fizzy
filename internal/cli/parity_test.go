@@ -111,25 +111,18 @@ func runGo(args []string) result {
 }
 
 // parityEnv points fz at srv with a throwaway home, so it neither reads the
-// real config nor writes the real action log.
-func parityEnv(t *testing.T, srv *httptest.Server) []string {
+// real config nor writes the real action log. It returns the home.
+func parityEnv(t *testing.T, srv *httptest.Server) string {
 	t.Helper()
 	home := t.TempDir()
 	vars := map[string]string{
 		"FIZZY_URL": srv.URL, "FIZZY_ACCOUNT": "1", "FIZZY_TOKEN": "T", "FIZZY_CONFIG": "/nonexistent",
 		"FIZZY_TOKEN_CMD": "", "FIZZY_INBOX": filepath.Join(home, "inbox"), "FIZZY_RULES_CARD": "", "HOME": home,
 	}
-	var env []string
-	for _, kv := range os.Environ() {
-		if _, ok := vars[strings.SplitN(kv, "=", 2)[0]]; !ok {
-			env = append(env, kv)
-		}
-	}
 	for k, v := range vars {
 		t.Setenv(k, v)
-		env = append(env, k+"="+v)
 	}
-	return env
+	return home
 }
 
 func writeFile(t *testing.T, path, text string) {
@@ -141,9 +134,10 @@ func writeFile(t *testing.T, path, text string) {
 
 // pythonGolden holds what the Python fz printed for each parity case. It was
 // captured once from the Python fz (bin/fz, Python 3.9) on 2026-10-17, while
-// that code still existed, and is the reference the Go fz must match. Nothing
-// regenerates it: the Python fz is gone, and writing this file from Go output
-// would turn the test into Go checking itself. Fix Go, not the file.
+// that code still existed, by parity_capture_test.go, which left the repo with
+// it. It is the reference the Go fz must match. Nothing regenerates it, since
+// writing this file from Go output would turn the test into Go checking
+// itself. Fix Go, not the file.
 const pythonGolden = "testdata/parity/python-fz.json"
 
 // URL, DIR and HOME placeholders stand for the per-run fake server URL, the
@@ -172,55 +166,35 @@ type parityFile struct {
 	UsageCases []parityCase `json:"usage_cases"`
 }
 
-// parityFixture is the fake server, the environment and the files the
-// parity cases read.
+// parityFixture is the fake server, the throwaway home and the directory
+// holding the files the parity cases read.
 type parityFixture struct {
-	srv                           *httptest.Server
-	env                           []string
-	home, dir                     string
-	img, drafts, good, bad, plain string
+	srv       *httptest.Server
+	home, dir string
 }
 
 func newParityFixture(t *testing.T) parityFixture {
 	t.Helper()
 	srv := fakeFizzy(t)
-	env := parityEnv(t, srv)
-	f := parityFixture{srv: srv, env: env, home: os.Getenv("HOME"), dir: t.TempDir()}
-	f.img = filepath.Join(f.dir, "hinge.jpg")
-	writeFile(t, f.img, "not really a jpeg")
-	f.drafts = filepath.Join(f.dir, "drafts")
-	if err := os.Mkdir(f.drafts, 0o755); err != nil {
+	f := parityFixture{srv: srv, home: parityEnv(t, srv), dir: t.TempDir()}
+	writeFile(t, filepath.Join(f.dir, "hinge.jpg"), "not really a jpeg")
+	drafts := filepath.Join(f.dir, "drafts")
+	if err := os.Mkdir(drafts, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(f.drafts, "hinge.jpg"), "jpeg bytes")
-	f.good = filepath.Join(f.drafts, "gate.md")
-	writeFile(t, f.good, "---\nboard: Home\ncolumn: Next\ntags: buy, #Waiting\ngolden: true\n---\n# Fix the gate\n\n"+
+	writeFile(t, filepath.Join(drafts, "hinge.jpg"), "jpeg bytes")
+	writeFile(t, filepath.Join(drafts, "gate.md"), "---\nboard: Home\ncolumn: Next\ntags: buy, #Waiting\ngolden: true\n---\n# Fix the gate\n\n"+
 		"Swap the **hinge** on the side gate.\n\n![Hinge](hinge.jpg)\n\n- [Guide]("+srv.URL+"/links/ok)\n- "+srv.URL+"/links/missing\n\n"+
 		"## Steps\n- [ ] Order the hinge\n- [x] Measure the gap\n")
-	writeFile(t, filepath.Join(f.drafts, "latch.md"), "---\nboard: Home\ncard: 87\n---\n# Fix the latch\n\nTwo screws.\n")
-	f.bad = filepath.Join(f.dir, "bad.md")
-	writeFile(t, f.bad, "# No front matter\n")
-	f.plain = filepath.Join(f.dir, "plain.md")
-	writeFile(t, f.plain, "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n\n## Steps\n- [ ] Buy oil\n")
+	writeFile(t, filepath.Join(drafts, "latch.md"), "---\nboard: Home\ncard: 87\n---\n# Fix the latch\n\nTwo screws.\n")
+	writeFile(t, filepath.Join(f.dir, "bad.md"), "# No front matter\n")
+	writeFile(t, filepath.Join(f.dir, "plain.md"), "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n\n## Steps\n- [ ] Buy oil\n")
 	return f
-}
-
-// mark replaces this run's server URL and directories with placeholders.
-func (f parityFixture) mark(s string) string {
-	return strings.NewReplacer(f.srv.URL, urlMark, f.dir, dirMark, f.home, homeMark).Replace(s)
 }
 
 // unmark turns placeholders back into this run's server URL and directories.
 func (f parityFixture) unmark(s string) string {
 	return strings.NewReplacer(urlMark, f.srv.URL, dirMark, f.dir, homeMark, f.home).Replace(s)
-}
-
-func (f parityFixture) markAll(args []string) []string {
-	out := make([]string, len(args))
-	for i, a := range args {
-		out[i] = f.mark(a)
-	}
-	return out
 }
 
 func (f parityFixture) unmarkAll(args []string) []string {

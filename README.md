@@ -27,7 +27,9 @@ builds `fz` and copies it to `~/.local/bin`. Check with `fz --version`.
 
 On macOS, a newly built binary may need Local Network permission (System
 Settings, Privacy & Security, Local Network) before it can reach a Fizzy
-server on your local network.
+server on your local network. An outbound firewall such as Little Snitch can
+also block a newly built `fz`, so allow it there if `fz` times out reaching
+the server.
 
 Optional:
 

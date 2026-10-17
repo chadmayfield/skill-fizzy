@@ -1,9 +1,3 @@
-__pycache__/
-*.pyc
-*.egg-info/
-build/
-dist/
-.venv/
 # local config and drafts never belong in the repo
 config.json
 drafts/
