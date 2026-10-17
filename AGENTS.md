@@ -43,6 +43,7 @@ change the guide and the command's help text in the same commit.
 - `make install` copies `./fz` to `~/.local/bin/fz`. `make man` writes the man pages to `~/.local/share/man`.
 - `make vuln` runs `govulncheck ./...`, if you have it installed.
 - `make tidy` runs `go mod tidy`.
+- Releases: push a `v*` tag. `.github/workflows/release.yml` runs the tests, runs `make dist`, attests the archives and publishes the GitHub release.
 - CI runs the gofmt check, `go vet`, the race tests and a build, plus `govulncheck` as advisory only.
 
 ## Adding a command

@@ -8,6 +8,8 @@ when you say so.
 
 ## Install
 
+Download an archive from the [latest release](https://github.com/chadmayfield/skill-fizzy/releases/latest), or use Go:
+
 ```sh
 go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
 ```

@@ -40,6 +40,34 @@ can also block a newly built binary, so allow `fz` there too.
 
 ### Install
 
+Download the archive for your system (macOS or Linux, arm64 or amd64) and
+`checksums.txt` from the latest GitHub release. In the folder that holds them,
+check the archive against the checksums:
+
+```sh
+shasum -a 256 -c checksums.txt --ignore-missing
+```
+
+Each archive also carries a Sigstore build-provenance attestation. To check
+that GitHub Actions built it from this repo:
+
+```sh
+gh attestation verify fz_<version>_<os>_<arch>.tar.gz -R chadmayfield/skill-fizzy
+```
+
+Unpack the archive and put the `fz` binary on your PATH, for example:
+
+```sh
+tar -xzf fz_<version>_<os>_<arch>.tar.gz
+install fz_<version>_<os>_<arch>/fz ~/.local/bin/fz
+```
+
+macOS may block a downloaded binary the first time you run it. Remove the
+quarantine flag with `xattr -d com.apple.quarantine ~/.local/bin/fz`, or allow
+it in System Settings, Privacy & Security.
+
+Two other ways to install:
+
 ```sh
 go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
 ```
