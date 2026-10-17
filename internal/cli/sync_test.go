@@ -440,10 +440,10 @@ func TestApplyUpdateRecordsSynced(t *testing.T) {
 	}
 
 	// A description edit in Fizzy, which leaves last_active_at alone, blocks
-	// the one after.
+	// the one after, and the refusal names it from synced-fields:.
 	srv.edit(fizzyEdits["description"])
 	got = syncRun(t, srv, "draft", "apply", "--update", path)
-	want := "fz: gate.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force\n"
+	want := "fz: gate.md: card #87 changed in Fizzy since the last sync (description); check it, then rerun with --force\n"
 	if got.code != 1 || got.stderr != want {
 		t.Errorf("after a Fizzy edit: code %d stderr %q", got.code, got.stderr)
 	}
@@ -520,7 +520,12 @@ func TestApplyNewCardRecordsCardAndSynced(t *testing.T) {
 	if got.code != 0 {
 		t.Fatalf("exit %d: %s", got.code, got.stderr)
 	}
-	want := "---\nboard: Home\ncard: 90\nsynced: " + fingerprintOf(t, card90) + "\n---\n# Oil the hinge\n\nOnce a year.\n"
+	var c90 fizzy.Card
+	if err := json.Unmarshal([]byte(card90), &c90); err != nil {
+		t.Fatal(err)
+	}
+	want := "---\nboard: Home\ncard: 90\nsynced: " + fingerprintOf(t, card90) + "\nsynced-fields: " + syncedFields(c90) +
+		"\n---\n# Oil the hinge\n\nOnce a year.\n"
 	if text := syncReadDraft(t, path); text != want {
 		t.Errorf("draft after apply:\n%q\nwant\n%q", text, want)
 	}
@@ -660,5 +665,37 @@ func TestApplyUpdateForceSkipsGuardForAll(t *testing.T) {
 	w := srv.writes()
 	if !syncHas(w, "PUT /1/cards/87") || !syncHas(w, "PUT /1/cards/88") {
 		t.Errorf("writes = %q", w)
+	}
+}
+
+// After an apply has recorded synced-fields:, a refusal names what changed.
+func TestApplyUpdateNamesChangedFields(t *testing.T) {
+	for edit, want := range map[string]string{
+		"description": "description",
+		"step tick":   "steps",
+		"tag":         "tags",
+		"golden":      "golden",
+		"title":       "title",
+		"column":      "column",
+		"not now":     "postponed",
+	} {
+		t.Run(edit, func(t *testing.T) {
+			srv := newSyncServer(t)
+			path := filepath.Join(t.TempDir(), "gate.md")
+			writeFile(t, path, srv.draft(t, syncDraftText))
+			if got := syncRun(t, srv, "draft", "apply", "--update", path); got.code != 0 {
+				t.Fatalf("first update: %+v", got)
+			}
+			text := syncReadDraft(t, path)
+			if strings.Count(text, "\nsynced-fields: ") != 1 {
+				t.Fatalf("no synced-fields: line:\n%s", text)
+			}
+			srv.edit(fizzyEdits[edit])
+			got := syncRun(t, srv, "draft", "apply", "--update", path)
+			msg := "fz: gate.md: card #87 changed in Fizzy since the last sync (" + want + "); check it, then rerun with --force\n"
+			if got.code != 1 || got.stderr != msg {
+				t.Errorf("code %d stderr %q\nwant %q", got.code, got.stderr, msg)
+			}
+		})
 	}
 }

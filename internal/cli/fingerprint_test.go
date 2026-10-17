@@ -89,3 +89,70 @@ func TestFingerprintChangesWithEachField(t *testing.T) {
 		t.Errorf("step order did not change the fingerprint")
 	}
 }
+
+// The fingerprint value is stored in drafts, so it must never change for
+// the same card. This value was captured before synced-fields: existed.
+func TestFingerprintPinned(t *testing.T) {
+	if got := cardFingerprint(fpDecode(t, fpCard)); got != "sha256:d0222dca45771598" {
+		t.Errorf("fingerprint = %q", got)
+	}
+}
+
+func TestSyncedFieldsFormat(t *testing.T) {
+	got := syncedFields(fpDecode(t, fpCard))
+	if !regexp.MustCompile(`^title=[0-9a-f]{8} description=[0-9a-f]{8} steps=[0-9a-f]{8} tags=[0-9a-f]{8} ` +
+		`golden=[0-9a-f]{8} column=[0-9a-f]{8} board=[0-9a-f]{8} closed=[0-9a-f]{8} postponed=[0-9a-f]{8}$`).MatchString(got) {
+		t.Errorf("synced-fields = %q", got)
+	}
+}
+
+func TestChangedFieldsNamesEachField(t *testing.T) {
+	stored := syncedFields(fpDecode(t, fpCard))
+	for want, edit := range map[string][2]string{
+		"title":       {`"title":"Fix the gate"`, `"title":"Fix the gate now"`},
+		"description": {`<p>Gate latches.</p>`, `<p>Gate latches shut.</p>`},
+		"steps":       {`"completed":false`, `"completed":true`},
+		"tags":        {`"tags":["buy","build"]`, `"tags":["buy"]`},
+		"golden":      {`"golden":false`, `"golden":true`},
+		"column":      {`"column":{"id":"c1","name":"Next"}`, `"column":null`},
+		"board":       {`"board":{"id":"b1"`, `"board":{"id":"b2"`},
+		"closed":      {`"closed":false`, `"closed":true`},
+		"postponed":   {`"postponed":false`, `"postponed":true`},
+		"description, steps": {`"description_html":"<p>Gate latches.</p>","last_active_at":"2026-10-17T10:00:00Z","steps":[`,
+			`"description_html":"<p>New.</p>","last_active_at":"2026-10-17T10:00:00Z","steps":[{"id":"03add000000000000000000000","content":"Oil it","completed":false},`},
+	} {
+		changed := strings.Replace(fpCard, edit[0], edit[1], 1)
+		if changed == fpCard {
+			t.Fatalf("%s: edit did not apply", want)
+		}
+		if got := strings.Join(changedFields(stored, fpDecode(t, changed)), ", "); got != want {
+			t.Errorf("changed %q, want %q", got, want)
+		}
+	}
+	// Tag spelling is not a change, as in the fingerprint.
+	same := strings.Replace(fpCard, `"tags":["buy","build"]`, `"tags":["build","#Buy"]`, 1)
+	if got := changedFields(stored, fpDecode(t, same)); len(got) != 0 {
+		t.Errorf("tag spelling: %q", got)
+	}
+}
+
+// When the stored line is missing, malformed or incomplete, fz cannot say
+// what changed, so changedFields returns nothing.
+func TestChangedFieldsUnknown(t *testing.T) {
+	card := fpDecode(t, strings.Replace(fpCard, `"golden":false`, `"golden":true`, 1))
+	full := syncedFields(fpDecode(t, fpCard))
+	for name, stored := range map[string]string{
+		"missing":       "",
+		"garbage":       "not a list",
+		"bad hash":      strings.Replace(full, "golden=", "golden=zz", 1),
+		"field missing": strings.Replace(full, " closed=", " closedx=", 1),
+	} {
+		if got := changedFields(stored, card); len(got) != 0 {
+			t.Errorf("%s: %q", name, got)
+		}
+	}
+	// A field fz does not know, from a newer fz, is ignored.
+	if got := changedFields(full+" color=0123abcd", card); strings.Join(got, ",") != "golden" {
+		t.Errorf("extra field: %q", got)
+	}
+}

@@ -54,8 +54,9 @@ func addDraftCommands(root *cobra.Command) {
 			"--prune deletes the unticked steps and removes the tags. A closed card is never reopened. " +
 			"Images are uploaded again on every update.\n\n" +
 			"After every apply, fz writes a fingerprint of the card's title, description, steps, tags, golden mark, " +
-			"column, board, closed state and Not now state into the draft's synced: line. If the card changed in Fizzy since then, " +
-			"or the draft has no synced: fingerprint, --update refuses that draft unless --force is given.",
+			"column, board, closed state and Not now state into the draft's synced: line, and a short hash of each into synced-fields:. " +
+			"If the card changed in Fizzy since then, or the draft has no synced: fingerprint, --update refuses that draft unless --force is given. " +
+			"The refusal names the fields that changed when synced-fields: is there.",
 		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
 			"fz draft apply --update gate.md", "fz draft apply --update --prune --force gate.md"),
 		Args: args(cobra.MinimumNArgs(1)),
@@ -374,8 +375,9 @@ func draftApply(c *cmdContext, a []string) error {
 }
 
 // recordSynced writes the card's fingerprint into the draft as synced:,
-// read after every write so the next --update can tell whether someone
-// changed the card in Fizzy since.
+// and its per-field hashes as synced-fields:, read after every write so the
+// next --update can tell whether someone changed the card in Fizzy since,
+// and which fields.
 func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
 	// Known limit: an edit made in Fizzy between fz's writes and this read is
 	// folded into the new fingerprint, so the next --update cannot see it.
@@ -383,5 +385,7 @@ func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
 	if err != nil {
 		return err
 	}
-	return draft.RecordFields(path, draft.KV{Key: "synced", Value: cardFingerprint(card)})
+	return draft.RecordFields(path,
+		draft.KV{Key: "synced", Value: cardFingerprint(card)},
+		draft.KV{Key: "synced-fields", Value: syncedFields(card)})
 }

@@ -37,7 +37,8 @@ func cardLane(card fizzy.Card) string {
 // checkSynced is the conflict guard. It refuses a draft whose synced: line
 // is missing or is not a card fingerprint, or whose card's fingerprint
 // differs from synced:, because then the card may hold changes made in Fizzy
-// that the draft would overwrite.
+// that the draft would overwrite. When the draft has a usable
+// synced-fields: line, the refusal names the fields that changed.
 func checkSynced(d *draft.Draft, card fizzy.Card) error {
 	name := filepath.Base(d.Path)
 	switch {
@@ -48,7 +49,11 @@ func checkSynced(d *draft.Draft, card fizzy.Card) error {
 	case !isFingerprint(d.Synced):
 		return fmt.Errorf("%s: synced: is not a card fingerprint, so changes made in Fizzy cannot be detected; rerun with --force", name)
 	case cardFingerprint(card) != d.Synced:
-		return fmt.Errorf("%s: card #%d changed in Fizzy since the last sync; check it, then rerun with --force", name, d.Card)
+		what := ""
+		if fields := changedFields(d.Meta["synced-fields"], card); len(fields) > 0 {
+			what = " (" + strings.Join(fields, ", ") + ")"
+		}
+		return fmt.Errorf("%s: card #%d changed in Fizzy since the last sync%s; check it, then rerun with --force", name, d.Card, what)
 	}
 	return nil
 }
