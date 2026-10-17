@@ -583,3 +583,37 @@ func TestUploadMissingFile(t *testing.T) {
 		t.Error("expected error")
 	}
 }
+
+// A direct-upload reply without a storage URL or an id is an error, and
+// nothing more is sent: no PUT to the server root, no sgid="" to embed.
+func TestUploadIncompleteReply(t *testing.T) {
+	for name, reply := range map[string]map[string]any{
+		"empty":     {},
+		"no url":    {"signed_id": "B", "attachable_sgid": "A", "direct_upload": map[string]any{"headers": map[string]string{}}},
+		"no ids":    {"direct_upload": map[string]any{"url": "/disk/put"}},
+		"empty ids": {"signed_id": "", "attachable_sgid": "", "direct_upload": map[string]any{"url": "/disk/put"}},
+		"empty url": {"signed_id": "B", "direct_upload": map[string]any{"url": ""}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+				if r.URL.Path == "/1/rails/active_storage/direct_uploads" {
+					jsonOK(w, reply)
+					return
+				}
+				w.WriteHeader(204)
+			})
+			p := filepath.Join(t.TempDir(), "a.png")
+			os.WriteFile(p, []byte("png"), 0o644)
+			sgid, err := f.Upload(p)
+			if err == nil || sgid != "" {
+				t.Fatalf("sgid=%q err=%v", sgid, err)
+			}
+			if !strings.Contains(err.Error(), "direct upload reply") {
+				t.Errorf("err = %v", err)
+			}
+			if len(s.calls) != 1 {
+				t.Errorf("calls %+v", s.calls)
+			}
+		})
+	}
+}

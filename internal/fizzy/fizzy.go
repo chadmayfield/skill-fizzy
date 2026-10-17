@@ -390,6 +390,12 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	if err := json.NewDecoder(bytes.NewReader(payload)).Decode(&info); err != nil {
 		return "", err
 	}
+	if info.DirectUpload.URL == "" {
+		return "", errors.New("direct upload reply has no direct_upload.url")
+	}
+	if info.SignedID == "" && info.AttachableSgid == "" {
+		return "", errors.New("direct upload reply has no signed_id or attachable_sgid")
+	}
 	// The storage URL is absolute for cloud services; a disk service may
 	// return a site-relative path, which already carries any account prefix
 	// it needs.
