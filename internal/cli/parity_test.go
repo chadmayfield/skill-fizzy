@@ -262,6 +262,10 @@ func TestParityWithPython(t *testing.T) {
 	}
 	for _, args := range cases {
 		py := runPython(t, fz, env, oldForm(args))
+		// Go's skip line names --update, which Python's fz does not have.
+		// That one line is the only intended difference in draft apply.
+		py.stdout = strings.ReplaceAll(py.stdout, "skip latch.md: already card #87\n",
+			"skip latch.md: already card #87 (use --update to push changes)\n")
 		got := runGo(args)
 		if got != py {
 			t.Errorf("fz %q\n go: code %d\n%s--- stderr\n%s\n py: code %d\n%s--- stderr\n%s",

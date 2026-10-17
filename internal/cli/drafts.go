@@ -44,13 +44,25 @@ func addDraftCommands(root *cobra.Command) {
 		RunE:    action(draftPreview),
 	}
 	apply := &cobra.Command{
-		Use:     "apply DRAFT...",
-		Short:   "create cards from drafts",
-		Long:    "Create a card for each draft and write card: N back into it. Drafts that already have card: are skipped.",
-		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md"),
-		Args:    args(cobra.MinimumNArgs(1)),
-		RunE:    action(draftApply),
+		Use:   "apply DRAFT...",
+		Short: "create cards from drafts, or --update them",
+		Long: "Create a card for each draft and write card: N and synced: back into it. " +
+			"Drafts that already have card: are skipped, unless --update is given.\n\n" +
+			"With --update, a draft with card: N pushes its board, title, description, tags, column, golden mark and steps to card N. " +
+			"Matching steps are left alone, a draft tick ticks a card step, and nothing is ever unticked. " +
+			"New draft steps are added. Card steps and tags the draft does not have are kept and reported; " +
+			"--prune deletes the unticked steps and removes the tags. A closed card is never reopened. " +
+			"Images are uploaded again on every update.\n\n" +
+			"If the card changed in Fizzy since the draft's synced: time, or the draft has no synced: line, " +
+			"--update refuses that draft unless --force is given.",
+		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
+			"fz draft apply --update gate.md", "fz draft apply --update --prune --force gate.md"),
+		Args: args(cobra.MinimumNArgs(1)),
+		RunE: action(draftApply),
 	}
+	apply.Flags().Bool("update", false, "push changes to cards that drafts already made")
+	apply.Flags().Bool("prune", false, "with --update, delete unticked steps and tags the draft no longer has")
+	apply.Flags().Bool("force", false, "with --update, overwrite a card changed in Fizzy since the last sync")
 	g.AddCommand(check, preview, apply)
 }
 
@@ -270,6 +282,17 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 }
 
 func draftApply(c *cmdContext, a []string) error {
+	update, _ := c.cmd.Flags().GetBool("update")
+	prune, _ := c.cmd.Flags().GetBool("prune")
+	force, _ := c.cmd.Flags().GetBool("force")
+	if !update {
+		if prune {
+			return usagef("--prune needs --update")
+		}
+		if force {
+			return usagef("--force needs --update")
+		}
+	}
 	cfg, err := c.config()
 	if err != nil {
 		return err
@@ -298,7 +321,22 @@ func draftApply(c *cmdContext, a []string) error {
 	w := c.out()
 	for _, d := range drafts {
 		if d.Card != 0 {
-			fmt.Fprintf(w, "skip %s: already card #%d\n", filepath.Base(d.Path), d.Card)
+			if !update {
+				fmt.Fprintf(w, "skip %s: already card #%d (use --update to push changes)\n", filepath.Base(d.Path), d.Card)
+				continue
+			}
+			report, err := syncDraft(fz, d, cfg.InboxPath(), prune, force)
+			if err != nil {
+				return err
+			}
+			for _, line := range report {
+				fmt.Fprintf(w, "#%d %s\n", d.Card, line)
+			}
+			if !c.dryRun {
+				if err := recordSynced(fz, d.Path, d.Card); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		n, err := applyDraft(c, fz, d, cfg.InboxPath())
@@ -312,7 +350,21 @@ func draftApply(c *cmdContext, a []string) error {
 		if err := draft.RecordCard(d.Path, n); err != nil {
 			return err
 		}
+		if err := recordSynced(fz, d.Path, n); err != nil {
+			return err
+		}
 		fmt.Fprintf(w, "#%d %s → %s / %s   %s/%s/cards/%d\n", n, d.Title, d.Board, d.Column, cfg.URL, cfg.Account, n)
 	}
 	return nil
+}
+
+// recordSynced writes the card's last_active_at into the draft as synced:,
+// read after every write so the next --update can tell whether someone
+// changed the card in Fizzy since.
+func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
+	card, err := fz.Card(n)
+	if err != nil {
+		return err
+	}
+	return draft.RecordFields(path, draft.KV{Key: "synced", Value: card.LastActiveAt})
 }

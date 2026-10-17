@@ -1,0 +1,149 @@
+package cli
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/chadmayfield/skill-fizzy/internal/draft"
+	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+)
+
+// lane normalizes a column name for comparison: no column is Maybe?, and case
+// and a trailing ? are ignored.
+func lane(name string) string {
+	if name == "" {
+		name = "maybe"
+	}
+	return strings.TrimRight(strings.ToLower(strings.TrimSpace(name)), "?")
+}
+
+// syncDraft pushes a draft onto its existing card d.Card and returns one
+// report line per change. Unless force is set, it refuses a draft with no
+// synced: line, or one whose card changed in Fizzy since synced:, before
+// sending any write. Steps are never unticked. With prune, unticked card
+// steps and card tags the draft lacks are removed; ticked steps always stay.
+func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool) ([]string, error) {
+	name := filepath.Base(d.Path)
+	card, err := fz.Card(d.Card)
+	if err != nil {
+		return nil, err
+	}
+	if !force {
+		if d.Synced == "" {
+			return nil, fmt.Errorf("%s: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force", name)
+		}
+		if card.LastActiveAt != d.Synced {
+			return nil, fmt.Errorf("%s: card #%d changed in Fizzy since the last sync; check it, then rerun with --force", name, d.Card)
+		}
+	}
+	var report []string
+	board, err := fz.Board(d.Board)
+	if err != nil {
+		return nil, err
+	}
+	if card.Board.ID != board.ID {
+		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
+			return nil, err
+		}
+		report = append(report, "moved to board "+board.Name)
+	}
+	sgids := map[string]string{}
+	for _, img := range d.Images() {
+		path, err := d.ResolveImage(img, inbox)
+		if err != nil {
+			return nil, err
+		}
+		if sgids[img], err = fz.Upload(path); err != nil {
+			return nil, err
+		}
+	}
+	title, desc := d.Title, d.DescriptionHTML(sgids)
+	if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
+		return nil, err
+	}
+	report = append(report, "title and description sent")
+
+	plan := draft.PlanSteps(d.Steps, card.Steps)
+	for _, s := range plan.Add {
+		if _, err := fz.AddStep(d.Card, s.Content, s.Done); err != nil {
+			return nil, err
+		}
+		report = append(report, "step added: "+s.Content)
+	}
+	ticked := true
+	for _, id := range plan.Tick {
+		if err := fz.UpdateStep(d.Card, id, nil, &ticked); err != nil {
+			return nil, err
+		}
+		report = append(report, "step ticked: "+id)
+	}
+	for _, s := range plan.Extra {
+		if prune && !s.Completed {
+			if err := fz.DeleteStep(d.Card, s.ID); err != nil {
+				return nil, err
+			}
+			report = append(report, "step deleted: "+s.Content)
+		} else {
+			report = append(report, "step kept, not in draft: "+s.Content)
+		}
+	}
+
+	for _, t := range d.Tags {
+		changed, err := fz.AddTag(d.Card, t)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			report = append(report, "tag added: "+t)
+		}
+	}
+	if prune {
+		for _, t := range card.Tags {
+			if hasTag(d.Tags, strings.ToLower(t)) {
+				continue
+			}
+			changed, err := fz.RemoveTag(d.Card, t)
+			if err != nil {
+				return nil, err
+			}
+			if changed {
+				report = append(report, "tag removed: "+t)
+			}
+		}
+	}
+
+	current := ""
+	if card.Column != nil {
+		current = card.Column.Name
+	}
+	switch {
+	case card.Closed:
+		report = append(report, "card is closed; column left alone")
+	case lane(current) != lane(d.Column):
+		if err := fz.MoveCard(d.Card, d.Column, board.ID); err != nil {
+			return nil, err
+		}
+		report = append(report, "moved to "+d.Column)
+	}
+	if card.Golden != d.Golden {
+		if err := fz.SetGolden(d.Card, d.Golden); err != nil {
+			return nil, err
+		}
+		if d.Golden {
+			report = append(report, "golden on")
+		} else {
+			report = append(report, "golden off")
+		}
+	}
+	return report, nil
+}
+
+func hasTag(tags []string, t string) bool {
+	for _, x := range tags {
+		if x == t {
+			return true
+		}
+	}
+	return false
+}
