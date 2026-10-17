@@ -12,12 +12,6 @@ import (
 // commandDocs are the docs whose fz lines must parse.
 var commandDocs = []string{"README.md", "docs/USERGUIDE.md", "AGENTS.md"}
 
-// pendingFlags are flags the docs describe before the code has them. A line
-// that uses one is skipped. Remove an entry once its flag is merged.
-var pendingFlags = []string{
-	"--allow-empty", // card edit, from the final-review fix wave
-}
-
 // fzLines returns every line inside a fenced code block that starts with
 // "fz ", with any trailing shell comment removed.
 func fzLines(text string) []string {
@@ -103,13 +97,7 @@ func TestDocCommandsParse(t *testing.T) {
 		if len(lines) == 0 && rel != "AGENTS.md" {
 			t.Errorf("%s: no fz lines found in code blocks", rel)
 		}
-	lines:
 		for _, line := range lines {
-			for _, flag := range pendingFlags {
-				if strings.Contains(line, flag) {
-					continue lines
-				}
-			}
 			if msg := checkLine(line); msg != "" {
 				t.Errorf("%s: %q: %s", rel, line, msg)
 			}

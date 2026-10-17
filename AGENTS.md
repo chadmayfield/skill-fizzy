@@ -105,7 +105,7 @@ fails the build until the docs catch up.
 
 ### Behavior every command keeps
 
-- Every write honors `--dry-run`. Every delete, and anything that publishes or changes access, needs `--yes`.
+- Every write honors `--dry-run`. Every delete needs `--yes`. So does publishing a board's public link and changing who can access a board. Changing a card's drafted or published status with `card edit --status` does not.
 - Old command forms keep working.
 - Dependencies: cobra and cobra/doc only. Ask Chad before adding any other.
 
