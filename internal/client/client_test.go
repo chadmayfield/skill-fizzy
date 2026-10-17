@@ -280,3 +280,74 @@ func TestTokenResolvedLazily(t *testing.T) {
 		t.Errorf("want config error on first authenticated request, got %v", err)
 	}
 }
+
+func TestGetAllRejectsPageLoop(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Link", fmt.Sprintf(`<%s%s>; rel="next"`, srv.URL, r.URL.RequestURI()))
+		fmt.Fprint(w, `[{"n":1}]`)
+	}))
+	defer srv.Close()
+	c, _, _ := newTestClient(t, srv, false)
+	_, err := c.GetAll("/tags")
+	if err == nil || !strings.Contains(err.Error(), "loop") {
+		t.Errorf("want pagination loop error, got %v", err)
+	}
+}
+
+func TestRedirectOnDeleteIsNotFollowed(t *testing.T) {
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		w.Header().Set("Location", "/1/elsewhere")
+		w.WriteHeader(301)
+	}))
+	defer srv.Close()
+	c, _, logPath := newTestClient(t, srv, false)
+	status, _, _, err := c.Do("DELETE", "/cards/87", nil)
+	var ae *APIError
+	if !errors.As(err, &ae) || status != 301 {
+		t.Fatalf("status=%d err=%v", status, err)
+	}
+	if len(methods) != 1 || methods[0] != "DELETE" {
+		t.Errorf("requests = %v", methods)
+	}
+	if data, _ := os.ReadFile(logPath); !strings.Contains(string(data), `"status": 301`) {
+		t.Errorf("log = %q", data)
+	}
+}
+
+func TestRedirectRules(t *testing.T) {
+	var methods []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method+" "+r.URL.Path)
+		switch r.URL.Path {
+		case "/1/old":
+			w.Header().Set("Location", "/1/new")
+			w.WriteHeader(302)
+		case "/1/perm":
+			w.Header().Set("Location", "/1/new")
+			w.WriteHeader(308)
+		default:
+			fmt.Fprint(w, `{"ok":true}`)
+		}
+	}))
+	defer srv.Close()
+	c, _, _ := newTestClient(t, srv, false)
+
+	var v map[string]bool
+	if err := c.Get("/old", &v); err != nil || !v["ok"] {
+		t.Errorf("GET 302 not followed: err=%v v=%v", err, v)
+	}
+	methods = nil
+	if _, err := c.Write("POST", "/old", map[string]int{"a": 1}); err != nil {
+		t.Errorf("POST 302 should follow as GET: %v", err)
+	}
+	if len(methods) != 2 || methods[1] != "GET /1/new" {
+		t.Errorf("POST redirect requests = %v", methods)
+	}
+	methods = nil
+	if err := c.Get("/perm", &v); err == nil || len(methods) != 1 {
+		t.Errorf("308 must not be followed: err=%v requests=%v", err, methods)
+	}
+}

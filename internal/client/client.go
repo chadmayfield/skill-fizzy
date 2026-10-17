@@ -114,7 +114,29 @@ type Client struct {
 
 // New returns a client. Dry-run lines go to out.
 func New(cfg *config.Config, dryRun bool, out io.Writer) *Client {
-	return &Client{cfg: cfg, dryRun: dryRun, out: out, http: &http.Client{Timeout: 60 * time.Second}}
+	return &Client{cfg: cfg, dryRun: dryRun, out: out, http: &http.Client{Timeout: 60 * time.Second, CheckRedirect: checkRedirect}}
+}
+
+// checkRedirect follows redirects the way Python's urllib does: GET follows
+// 301, 302, 303 and 307; POST follows 301, 302 and 303 (as a GET). Anything
+// else, including every PUT, PATCH and DELETE and any 308, returns the 3xx
+// response, which Do reports as an *APIError.
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return http.ErrUseLastResponse
+	}
+	code := req.Response.StatusCode
+	switch via[len(via)-1].Method {
+	case http.MethodGet, http.MethodHead:
+		if code == 301 || code == 302 || code == 303 || code == 307 {
+			return nil
+		}
+	case http.MethodPost:
+		if code == 301 || code == 302 || code == 303 {
+			return nil
+		}
+	}
+	return http.ErrUseLastResponse
 }
 
 func (c *Client) auth() (string, error) {
@@ -216,7 +238,7 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	if isWrite {
 		c.logAction(method, reqPath, resp.StatusCode)
 	}
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 300 {
 		return resp.StatusCode, resp.Header, payload, &APIError{resp.StatusCode, method, reqPath, string(payload)}
 	}
 	return resp.StatusCode, resp.Header, payload, nil
@@ -258,7 +280,12 @@ func (c *Client) Get(path string, v any) error {
 func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
 	var items []json.RawMessage
 	next := c.URL(path, true)
+	seen := map[string]bool{}
 	for next != "" {
+		if seen[next] {
+			return nil, fmt.Errorf("pagination loop: %s linked again", next)
+		}
+		seen[next] = true
 		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
 		if err != nil {
 			return nil, err
