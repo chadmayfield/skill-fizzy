@@ -28,6 +28,8 @@ change the guide and the command's help text in the same commit.
 | `internal/richtext/` | Small edits to Fizzy rich text, used by `card edit --replace`. |
 | `internal/review/` | Gathering and formatting `fz review`. |
 | `internal/docscheck/` | Tests that keep the Markdown docs honest. |
+| `internal/repocheck/` | A test that fails if git tracks a private planning or agent file. |
+| `internal/releasecheck/` | Tests for the release build. |
 | `skill/` | The Claude Code skill. Users link this folder into `~/.claude/skills/`. |
 | `examples/hooks/` | A Python SessionStart hook and its README. |
 | `internal/*/testdata/` | Golden files. See [Tests that pin behavior](#tests-that-pin-behavior). |
@@ -82,6 +84,9 @@ fails the build until the docs catch up.
 - **Docs checks.** `internal/docscheck` checks the skill's template paths, the
   em dash rule, the `fz` lines in the docs, and that `CLAUDE.md` is exactly
   `@AGENTS.md`.
+- **Tracked private files.** `internal/repocheck` fails if `git ls-files`
+  lists a path from the never-commit list under Git.
+- **Release checks.** `internal/releasecheck` checks the `make dist` output.
 - **Private text in man pages.** `TestManNoPrivateText` fails if a man page
   holds a home directory, an `@` or `github.com`. Set `FZ_PRIVATE_PATTERNS`
   to a comma-separated list to check more strings. Keep that list in your
@@ -119,8 +124,11 @@ fails the build until the docs catch up.
 ### Git
 
 - Feature work happens on a branch and merges to `main` by pull request. Never commit to `main` directly.
-- Nothing under `docs/superpowers/` or `.superpowers/` is committed. Those
-  folders hold private plans. Stage files by explicit path.
+- Never commit these paths: `.superpowers/`, any `superpowers/` folder,
+  `docs/plans/`, `docs/specs/`, `CLAUDE.local.md`,
+  `.claude/settings.local.json` and `.claude/worktrees/`. They hold private
+  plans and local settings. `internal/repocheck` fails if git tracks one.
+  Stage files by explicit path.
 
 ## Commits
 
