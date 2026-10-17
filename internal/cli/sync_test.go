@@ -96,7 +96,10 @@ func newSyncServer(t *testing.T) *syncServer {
 		}
 	})
 	mux.HandleFunc("GET /1/boards", func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, `[{"id":"b1","name":"Home"}]`)
+		io.WriteString(w, `[{"id":"b1","name":"Home"},{"id":"b2","name":"Garage"}]`)
+	})
+	mux.HandleFunc("POST /rails/active_storage/direct_uploads", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{}`)
 	})
 	mux.HandleFunc("POST /1/boards/{id}/cards", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", s.URL+"/1/cards/90.json")
@@ -697,5 +700,20 @@ func TestApplyUpdateNamesChangedFields(t *testing.T) {
 				t.Errorf("code %d stderr %q\nwant %q", got.code, got.stderr, msg)
 			}
 		})
+	}
+}
+
+func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
+	text := strings.Replace(syncDraftText, "board: Home", "board: Garage", 1)
+	text = strings.Replace(text, "Gate latches.\n", "Gate latches.\n\n![the gap](gap.png)\n", 1)
+	srv, fz, cfg, d := syncFixture(t, text)
+	writeFile(t, filepath.Join(filepath.Dir(d.Path), "gap.png"), "png")
+	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	if err == nil {
+		t.Fatal("an incomplete upload reply did not fail the sync")
+	}
+	w := srv.writes()
+	if len(w) != 1 || w[0] != "POST /1/rails/active_storage/direct_uploads" {
+		t.Errorf("writes other than the upload: %q", w)
 	}
 }

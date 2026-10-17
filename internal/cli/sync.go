@@ -80,7 +80,7 @@ func guardDrafts(fz *fizzy.Fizzy, drafts []*draft.Draft) ([]error, error) {
 // syncDraft pushes a draft onto its existing card d.Card and returns one
 // report line per change. Unless force is set, it refuses a draft with no
 // usable synced: line, or one whose card changed in Fizzy since synced:,
-// before sending any write. Steps are never unticked. With prune, unticked card
+// before sending any write, and uploads images before any card write. Steps are never unticked. With prune, unticked card
 // steps and card tags the draft lacks are removed; ticked steps always stay.
 func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool) ([]string, error) {
 	card, err := fz.Card(d.Card)
@@ -97,12 +97,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 	if err != nil {
 		return nil, err
 	}
-	if card.Board.ID != board.ID {
-		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
-			return nil, err
-		}
-		report = append(report, "moved to board "+board.Name)
-	}
+	// Upload first, so a failed upload leaves the card untouched.
 	sgids := map[string]string{}
 	for _, img := range d.Images() {
 		path, err := d.ResolveImage(img, inbox)
@@ -112,6 +107,12 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 		if sgids[img], err = fz.Upload(path); err != nil {
 			return nil, err
 		}
+	}
+	if card.Board.ID != board.ID {
+		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
+			return nil, err
+		}
+		report = append(report, "moved to board "+board.Name)
 	}
 	title, desc := d.Title, d.DescriptionHTML(sgids)
 	if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
