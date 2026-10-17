@@ -19,6 +19,11 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
+      - name: Check the tag
+        id: guard
+        run: |
+          git fetch origin main
+          echo "kind=$(sh scripts/release-guard.sh)" >> "$GITHUB_OUTPUT"
       - name: Test
         run: go test -race -count=1 ./...
       - name: Build archives
@@ -30,6 +35,9 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt
-          --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+          KIND: ${{ steps.guard.outputs.kind }}
+        run: |
+          flag=""
+          if [ "$KIND" = prerelease ]; then flag="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/checksums.txt \
+            --title "$GITHUB_REF_NAME" --generate-notes $flag

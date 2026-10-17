@@ -29,7 +29,7 @@ change the guide and the command's help text in the same commit.
 | `internal/review/` | Gathering and formatting `fz review`. |
 | `internal/docscheck/` | Tests that keep the Markdown docs honest. |
 | `internal/repocheck/` | A test that fails if git tracks a private planning or agent file. |
-| `internal/releasecheck/` | Tests for the release build. |
+| `internal/releasecheck/` | Tests for the release build and the tag guard script. |
 | `skill/` | The Claude Code skill. Users link this folder into `~/.claude/skills/`. |
 | `examples/hooks/` | A Python SessionStart hook and its README. |
 | `internal/*/testdata/` | Golden files. See [Tests that pin behavior](#tests-that-pin-behavior). |
@@ -45,7 +45,9 @@ change the guide and the command's help text in the same commit.
 - `make install` copies `./fz` to `~/.local/bin/fz`. `make man` writes the man pages to `~/.local/share/man`.
 - `make vuln` runs `govulncheck ./...`, if you have it installed.
 - `make tidy` runs `go mod tidy`.
-- Releases: push a `v*` tag. `.github/workflows/release.yml` runs the tests, runs `make dist`, attests the archives and publishes the GitHub release.
+- Releases: push a tag named `vMAJOR.MINOR.PATCH`, with an optional `-suffix`, on a commit that is already on `main`.
+  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name or a commit not on `origin/main`.
+  It then runs the tests, runs `make dist`, attests the archives and publishes the GitHub release. A tag with a suffix is published as a prerelease.
 - CI runs the gofmt check, `go vet`, the race tests and a build, plus `govulncheck` as advisory only.
 
 ## Adding a command
@@ -86,7 +88,8 @@ fails the build until the docs catch up.
   `@AGENTS.md`.
 - **Tracked private files.** `internal/repocheck` fails if `git ls-files`
   lists a path from the never-commit list under Git.
-- **Release checks.** `internal/releasecheck` checks the `make dist` output.
+- **Release checks.** `internal/releasecheck` checks the `make dist` output
+  and, in a temporary git repo, the tag guard in `scripts/release-guard.sh`.
 - **Private text in man pages.** `TestManNoPrivateText` fails if a man page
   holds a home directory, an `@` or `github.com`. Set `FZ_PRIVATE_PATTERNS`
   to a comma-separated list to check more strings. Keep that list in your
