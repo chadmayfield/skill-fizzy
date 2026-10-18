@@ -44,7 +44,7 @@ func addHookCommands(root *cobra.Command) {
 	g := &cobra.Command{
 		Use:   "hook",
 		Short: "commands to run from Claude Code hooks",
-		Long:  "Commands meant to run from a Claude Code hook. On any failure they print nothing and exit 0, so they never block a session.",
+		Long:  "Commands meant to run from a Claude Code hook. A failure prints nothing and never blocks a session. Each command exits 0 on any failure at run time; a usage error exits 2.",
 	}
 	root.AddCommand(g)
 
@@ -61,8 +61,9 @@ func addHookCommands(root *cobra.Command) {
 			`Each entry maps a folder name to {"board": "Home"} or {"board": "Home", "card": 87}. ` +
 			"Inside a git worktree the main checkout's folder name is tried first, then each folder " +
 			"in the path from the deepest up. The first name in the map wins.\n\n" +
-			"An unmapped folder prints nothing and reads no config. Any failure, such as a missing map, " +
-			"a config error, a network error or the 3 second time limit, prints nothing and exits 0. " +
+			"An unmapped folder, or an entry with an empty board, prints nothing and reads no config. " +
+			"It exits 0 on any failure at run time; a usage error exits 2. A failure at run time, such as a missing map, " +
+			"a config error, a network error or the 3 second time limit, prints nothing. " +
 			"At the time limit, fz also kills the token command and everything it started.\n\n" +
 			"To run it at the start of every session, add this to ~/.claude/settings.json:\n\n" +
 			`  {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "fz hook session-start"}]}]}}`,
@@ -126,15 +127,11 @@ func sessionStartText(ctx context.Context, c *cmdContext) string {
 		return ""
 	}
 	fz.C.SetTokenContext(ctx)
-	boardID := ""
-	if board != "" {
-		b, err := fz.Board(board)
-		if err != nil {
-			return ""
-		}
-		boardID = b.ID
+	bd, err := fz.Board(board)
+	if err != nil {
+		return ""
 	}
-	cards, err := fz.Cards(boardID, nil)
+	cards, err := fz.Cards(bd.ID, nil)
 	if err != nil || ctx.Err() != nil {
 		return ""
 	}
@@ -261,8 +258,10 @@ func mapEntry(ctx context.Context, cwd string) (board string, focus hookFocus, o
 	if err := dec.Decode(&entry); err != nil || len(entry) == 0 {
 		return "", focus, false
 	}
+	// An empty or blank board names no board, so the folder counts as
+	// unmapped.
 	board, isStr := entry["board"].(string)
-	if !isStr {
+	if !isStr || strings.TrimSpace(board) == "" {
 		return "", focus, false
 	}
 	switch card := entry["card"].(type) {

@@ -1032,8 +1032,10 @@ Inside a git worktree, the main checkout's folder name is tried first. Then
 each folder in the path is tried, from the deepest up. The first name found
 in the map wins.
 
-A folder that is not in the map prints nothing and reads no config. Any
-failure also prints nothing and exits 0, so the hook never blocks a session.
+A folder that is not in the map, or whose entry has an empty board, prints
+nothing and reads no config. Any failure at run time also prints nothing and
+exits 0, so the hook never blocks a session. A usage error, such as an
+unknown flag, exits 2.
 That covers a missing map, a config error, a network error and the 3 second
 time limit, which includes the cleanup, so the hook never runs longer. At the time limit, the hook also kills a token command that is
 still running, along with every process it started. The token command runs
