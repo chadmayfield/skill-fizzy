@@ -194,7 +194,7 @@ Commands are a noun and then a verb, such as `fz card show 87`. Run
 
 | Flag | Effect |
 |---|---|
-| `--dry-run` | Prints each write instead of sending it. Reads still go to the server, so a dry run shows real ids and names. |
+| `--dry-run` | Prints each write instead of sending it. Reads still go to the server, so a dry run shows real ids and names. A body longer than 400 characters is cut, and the line ends with how many characters were left out. |
 | `--json` | Prints JSON instead of text. |
 | `--config FILE` | Loads this config file. |
 
@@ -881,6 +881,9 @@ The hinge pin is worn. The latch is fine.
 - `skill/templates/card.md` in this repo is a blank draft to copy.
 
 ### Markdown
+
+Headings move down one level, because `# Title` is the card title: `#`
+becomes `<h2>` and `##` becomes `<h3>`.
 
 The description supports headings, paragraphs, bullet and numbered lists,
 task items (`- [ ]` and `- [x]`), fenced code blocks, blockquotes, links,
