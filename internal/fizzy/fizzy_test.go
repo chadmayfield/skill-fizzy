@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
@@ -634,5 +635,28 @@ func TestUploadIncompleteReply(t *testing.T) {
 				t.Errorf("calls %+v", s.calls)
 			}
 		})
+	}
+}
+
+// The storage PUT carries the file, so it gets client.UploadTimeout. The
+// direct-upload POST is small and keeps client.RequestTimeout.
+func TestUploadPutGetsTheUploadTimeout(t *testing.T) {
+	oldReq, oldUp := client.RequestTimeout, client.UploadTimeout
+	client.RequestTimeout, client.UploadTimeout = 150*time.Millisecond, 5*time.Second
+	t.Cleanup(func() { client.RequestTimeout, client.UploadTimeout = oldReq, oldUp })
+	var srvURL string
+	f, _, _, srv := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+		if r.URL.Path == "/1/rails/active_storage/direct_uploads" {
+			jsonOK(w, map[string]any{"signed_id": "BLOB", "attachable_sgid": "ATTACH", "direct_upload": map[string]any{"url": srvURL + "/put"}})
+			return
+		}
+		time.Sleep(400 * time.Millisecond)
+		w.WriteHeader(204)
+	})
+	srvURL = srv.URL
+	p := filepath.Join(t.TempDir(), "hinge.png")
+	os.WriteFile(p, []byte("png"), 0o644)
+	if sgid, err := f.Upload(p); err != nil || sgid != "ATTACH" {
+		t.Errorf("sgid=%q err=%v", sgid, err)
 	}
 }

@@ -542,7 +542,7 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	// return a site-relative path, which already carries any account prefix
 	// it needs.
 	_, _, _, err = f.C.Do(http.MethodPut, info.DirectUpload.URL, nil,
-		client.Raw(data), client.Headers(info.DirectUpload.Headers), client.NoAuth(), client.NotAccountScoped())
+		client.Raw(data), client.Headers(info.DirectUpload.Headers), client.NoAuth(), client.NotAccountScoped(), client.Upload())
 	if err != nil {
 		return "", err
 	}

@@ -11,6 +11,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -186,6 +187,7 @@ type reqOpts struct {
 	headers       map[string]string
 	noAuth        bool
 	notAccountScp bool
+	upload        bool
 }
 
 // Option adjusts one request.
@@ -212,6 +214,17 @@ func NoAuth() Option { return func(o *reqOpts) { o.noAuth = true } }
 // NotAccountScoped leaves the account prefix off the path.
 func NotAccountScoped() Option { return func(o *reqOpts) { o.notAccountScp = true } }
 
+// Upload gives the request UploadTimeout instead of RequestTimeout, for
+// sending a file's bytes.
+func Upload() Option { return func(o *reqOpts) { o.upload = true } }
+
+// RequestTimeout caps one request, reply body included. Tests may lower it.
+var RequestTimeout = 60 * time.Second
+
+// UploadTimeout caps a request sent with the Upload option, so a large file
+// on a slow link has time to arrive. Tests may lower it.
+var UploadTimeout = 10 * time.Minute
+
 // Client talks to one Fizzy account.
 type Client struct {
 	cfg    *config.Config
@@ -232,7 +245,7 @@ func New(cfg *config.Config, dryRun bool, out io.Writer) *Client {
 		origin = nil
 	}
 	return &Client{cfg: cfg, dryRun: dryRun, out: out, origin: origin,
-		http: &http.Client{Timeout: 60 * time.Second, CheckRedirect: checkRedirect}}
+		http: &http.Client{CheckRedirect: checkRedirect}}
 }
 
 // MaxBody caps the size of one response body.
@@ -355,7 +368,15 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	if data != nil {
 		rd = bytes.NewReader(data)
 	}
-	req, err := http.NewRequest(method, u, rd)
+	timeout := RequestTimeout
+	if o.upload {
+		timeout = UploadTimeout
+	}
+	// The deadline covers the reply body too, which is read before Do
+	// returns.
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
 		return 0, nil, nil, redactErr(err)
 	}
