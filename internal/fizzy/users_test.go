@@ -3,6 +3,7 @@ package fizzy
 import (
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,81 @@ func TestRenameUserDryRun(t *testing.T) {
 	want := "[dry-run] PUT " + srv.URL + `/1/users/U1 {"user": {"name": "Gate Keeper"}}` + "\n"
 	if out.String() != want {
 		t.Errorf("out = %q, want %q", out.String(), want)
+	}
+}
+
+func TestMatchUserOrder(t *testing.T) {
+	f, _, _, _ := newFizzy(t, false, cardServer("{}"))
+	for _, c := range []struct{ in, id, by string }{
+		{"u2", "u2", "id"},
+		{"Gate Keeper", "u1", "name"},
+		{"gate keeper", "u1", "name"},
+		{"hinge@fizzy.example.com", "u2", "email"},
+		{"HINGE@fizzy.example.com", "u2", "email"},
+		{"twin2@fizzy.example.com", "u4", "email"},
+	} {
+		m, err := f.MatchUser(c.in, false)
+		if err != nil || m.ID != c.id || m.By != c.by {
+			t.Errorf("MatchUser(%q) = %+v, %v; want id %s by %s", c.in, m, err, c.id, c.by)
+		}
+	}
+	m, _ := f.MatchUser("gate keeper", false)
+	if m.Name != "Gate Keeper" {
+		t.Errorf("name = %q", m.Name)
+	}
+}
+
+// An exact name beats a name that differs only in case.
+func TestMatchUserExactNameFirst(t *testing.T) {
+	users := []User{{ID: "u1", Name: "Hinge"}, {ID: "u2", Name: "hinge"}}
+	m, err := matchUser(users, "hinge", false)
+	if err != nil || m.ID != "u2" || m.By != "name" {
+		t.Errorf("exact = %+v, %v", m, err)
+	}
+	if _, err := matchUser(users, "HINGE", false); !IsRefusal(err) || !strings.Contains(err.Error(), "2 users are named 'HINGE'") {
+		t.Errorf("two case-insensitive matches: %v", err)
+	}
+}
+
+func TestMatchUserAmbiguousRefuses(t *testing.T) {
+	f, _, _, _ := newFizzy(t, false, cardServer("{}"))
+	for _, in := range []string{"Twin", "twin"} {
+		_, err := f.MatchUser(in, false)
+		if !IsRefusal(err) || !strings.Contains(err.Error(), "2 users are named '"+in+"'") {
+			t.Errorf("%s: %v", in, err)
+		}
+	}
+}
+
+func TestMatchUserUnknown(t *testing.T) {
+	f, _, _, _ := newFizzy(t, false, cardServer("{}"))
+	_, err := f.MatchUser("Nobody", false)
+	if err == nil || IsRefusal(err) || err.Error() != "no user 'Nobody' (have: Gate Keeper, Hinge Smith, Twin, Twin)" {
+		t.Errorf("unknown: %v", err)
+	}
+	// An id-like value that matches nobody is an error unless passthrough is on.
+	const id = "03abc123def456ghi789jkl0mn"
+	if _, err := f.MatchUser(id, false); err == nil {
+		t.Error("id-like value matched without passthrough")
+	}
+	m, err := f.MatchUser(id, true)
+	if err != nil || m.ID != id || m.By != "id" || m.Name != "" {
+		t.Errorf("passthrough = %+v, %v", m, err)
+	}
+	if _, err := f.MatchUser("Nobody", true); err == nil {
+		t.Error("a name passed through")
+	}
+}
+
+func TestLooksLikeID(t *testing.T) {
+	for s, want := range map[string]bool{
+		"03abc123def456ghi789jkl0mn": true,
+		"abcdefghijklmnopqrstuvwxyz": false,
+		"03abc":                      false,
+		"03ABC123DEF456GHI789JKL0MN": false,
+	} {
+		if got := looksLikeID(s); got != want {
+			t.Errorf("looksLikeID(%q) = %v", s, got)
+		}
 	}
 }

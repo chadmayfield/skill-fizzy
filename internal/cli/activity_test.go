@@ -225,3 +225,16 @@ func TestActivityListLimit(t *testing.T) {
 		t.Errorf("help does not show the default:\n%s", help.stdout)
 	}
 }
+
+// Two users share a name, so --creator by that name refuses with exit 2.
+func TestActivityListAmbiguousCreator(t *testing.T) {
+	twin := strings.Replace(acctUser2, `"Sam"`, `"Alex"`, 1)
+	_, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "," + twin + "]"})
+	r := runGo([]string{"activity", "list", "--creator", "alex"})
+	if r.code != 2 || r.stderr != "fz: 2 users are named 'alex'; use the user id or email\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if got := callList(calls()); got != "GET /1/users" {
+		t.Errorf("calls = %q", got)
+	}
+}

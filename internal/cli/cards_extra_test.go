@@ -338,3 +338,24 @@ func TestCardListUnknownTag(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+// A name that differs only in case still matches when one user has it.
+func TestCardAssignNameIgnoresCase(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"assignees":[],"has_more_assignees":false}`)
+	r := runGo([]string{"card", "assign", "87", "hinge smith"})
+	if r.code != 0 || r.stdout != "card #87: assigned Hinge Smith (u2, matched by name)\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 1 || w[0].body != `{"assignee_id":"u2"}` {
+		t.Errorf("writes %+v", w)
+	}
+}
+
+// --assignee does not pass an unknown id through; only activity --creator does.
+func TestCardListAssigneeUnknownID(t *testing.T) {
+	extraServer(t, `{}`)
+	r := runGo([]string{"card", "list", "--assignee", "03abc123def456ghi789jkl0mn"})
+	if r.code != 1 || !strings.HasPrefix(r.stderr, "fz: no user '03abc123def456ghi789jkl0mn'") {
+		t.Fatalf("got %+v", r)
+	}
+}
