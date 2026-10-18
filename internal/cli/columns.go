@@ -22,25 +22,24 @@ func addColumnCommands(root *cobra.Command) {
 		RunE:    action(columnShow),
 	}
 	create := &cobra.Command{
-		Use:   "create BOARD NAME",
-		Short: "add a column to a board",
-		Long: "Add a custom column at the right of the others. " +
-			"--color takes default or a number from 1 to 8, or a full var(--color-card-N) value.",
-		Example: examples(`fz column create Home "Gate repairs" --color 4`),
+		Use:     "create BOARD NAME",
+		Short:   "add a column to a board",
+		Long:    "Add a custom column at the right of the others. " + columnColorHelp,
+		Example: examples(`fz column create Home "Gate repairs" --color Lime`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(columnCreate),
 	}
-	create.Flags().String("color", "", "column color: default, 1 to 8, or a var() value")
+	create.Flags().String("color", "", "column color: "+columnColorFlagHelp)
 	edit := &cobra.Command{
 		Use:     "edit BOARD COLUMN",
 		Short:   "rename or recolor a column",
-		Long:    "Change a custom column's name or color. --color takes default or a number from 1 to 8, or a full var(--color-card-N) value.",
-		Example: examples(`fz column edit Home Next --name "Hinge repairs"`, "fz column edit Home Next --color 2"),
+		Long:    "Change a custom column's name or color. " + columnColorHelp,
+		Example: examples(`fz column edit Home Next --name "Hinge repairs"`, "fz column edit Home Next --color tan"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(columnEdit),
 	}
 	edit.Flags().String("name", "", "new name")
-	edit.Flags().String("color", "", "new color: default, 1 to 8, or a var() value")
+	edit.Flags().String("color", "", "new color: "+columnColorFlagHelp)
 	del := &cobra.Command{
 		Use:     "delete BOARD COLUMN",
 		Short:   "delete a column (needs --yes)",
@@ -60,6 +59,14 @@ func addColumnCommands(root *cobra.Command) {
 	}
 	g.AddCommand(show, create, edit, del, cards)
 }
+
+// columnColorHelp is the --color paragraph of the column help.
+var columnColorHelp = "--color takes a color name, in any case: " + strings.Join(fizzy.ColumnColorNames(), ", ") +
+	". It also takes the exact value Fizzy stores for one, from var(--color-card-default) for Blue to var(--color-card-8) for Pink. " +
+	"fz refuses any other color and sends nothing."
+
+// columnColorFlagHelp is the --color flag's one-line help.
+var columnColorFlagHelp = strings.ToLower(strings.Join(fizzy.ColumnColorNames(), ", ")) + ", or a var() value"
 
 // findColumn resolves BOARD and COLUMN arguments.
 func findColumn(c *cmdContext, boardArg, colArg string) (*fizzy.Fizzy, fizzy.Board, fizzy.Column, error) {
@@ -96,6 +103,13 @@ func columnShow(c *cmdContext, a []string) error {
 
 func columnCreate(c *cmdContext, a []string) error {
 	color, _ := c.cmd.Flags().GetString("color")
+	if c.cmd.Flags().Changed("color") {
+		v, err := fizzy.ColumnColorValue(color)
+		if err != nil {
+			return err
+		}
+		color = v
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
@@ -123,7 +137,11 @@ func columnEdit(c *cmdContext, a []string) error {
 	}
 	if fl.Changed("color") {
 		color, _ := fl.GetString("color")
-		fields.Color = &color
+		v, err := fizzy.ColumnColorValue(color)
+		if err != nil {
+			return err
+		}
+		fields.Color = &v
 		changed = append(changed, "color")
 	}
 	if len(changed) == 0 {

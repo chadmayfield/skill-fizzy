@@ -122,7 +122,7 @@ func TestColumnOps(t *testing.T) {
 	if err != nil || col.Color.Name != "Lime" || col.Raw() == nil {
 		t.Fatalf("got %+v, %v", col, err)
 	}
-	name, color := "Soon", "4"
+	name, color := "Soon", "Lime"
 	if err := f.UpdateColumn("b1", "c1", ColumnFields{Name: &name, Color: &color}); err != nil {
 		t.Fatal(err)
 	}
@@ -141,9 +141,53 @@ func TestColumnOps(t *testing.T) {
 }
 
 func TestColumnColorValue(t *testing.T) {
-	for in, want := range map[string]string{"": "", "4": "var(--color-card-4)", "var(--color-card-1)": "var(--color-card-1)"} {
-		if got := ColumnColorValue(in); got != want {
-			t.Errorf("%q: got %q want %q", in, got, want)
+	ok := map[string]string{
+		"Blue":                      "var(--color-card-default)",
+		"blue":                      "var(--color-card-default)",
+		"GRAY":                      "var(--color-card-1)",
+		"Tan":                       "var(--color-card-2)",
+		"yellow":                    "var(--color-card-3)",
+		"Lime":                      "var(--color-card-4)",
+		"aqua":                      "var(--color-card-5)",
+		"Violet":                    "var(--color-card-6)",
+		"purple":                    "var(--color-card-7)",
+		"Pink":                      "var(--color-card-8)",
+		"var(--color-card-default)": "var(--color-card-default)",
+		"var(--color-card-1)":       "var(--color-card-1)",
+		"var(--color-card-8)":       "var(--color-card-8)",
+	}
+	for in, want := range ok {
+		got, err := ColumnColorValue(in)
+		if err != nil || got != want {
+			t.Errorf("%q: got %q, %v; want %q", in, got, err, want)
 		}
+	}
+	for _, in := range []string{"", "red", "4", "default", "var(--color-card-blue)", "var(--color-card-9)", "VAR(--color-card-1)", " Blue", "var(--x)"} {
+		got, err := ColumnColorValue(in)
+		if err == nil || !IsRefusal(err) || got != "" {
+			t.Errorf("%q: got %q, %v; want a refusal", in, got, err)
+			continue
+		}
+		for _, name := range []string{"Blue", "Gray", "Tan", "Yellow", "Lime", "Aqua", "Violet", "Purple", "Pink"} {
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("%q: refusal %q does not list %s", in, err, name)
+			}
+		}
+	}
+}
+
+func TestColumnColorRefusedBeforeSending(t *testing.T) {
+	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.WriteHeader(201)
+	})
+	if _, err := f.CreateColumn("b1", "Soon", "red"); !IsRefusal(err) {
+		t.Errorf("create: %v", err)
+	}
+	bad := "var(--color-card-blue)"
+	if err := f.UpdateColumn("b1", "c1", ColumnFields{Color: &bad}); !IsRefusal(err) {
+		t.Errorf("update: %v", err)
+	}
+	if len(s.calls) != 0 {
+		t.Errorf("sent %d requests", len(s.calls))
 	}
 }

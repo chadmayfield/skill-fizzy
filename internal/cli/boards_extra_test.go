@@ -297,7 +297,7 @@ func TestColumnShow(t *testing.T) {
 func TestColumnCreate(t *testing.T) {
 	srv, calls := bxServer(t, false)
 	editEnv(t, srv)
-	r := runGo([]string{"column", "create", "Home", "Soon", "--color", "4"})
+	r := runGo([]string{"column", "create", "Home", "Soon", "--color", "lime"})
 	w := writes(calls())
 	if r.code != 0 || r.stdout != "column 'Soon' created: c2\n" || len(w) != 1 || w[0].body != `{"column":{"name":"Soon","color":"var(--color-card-4)"}}` {
 		t.Fatalf("got %+v writes %+v", r, w)
@@ -316,6 +316,42 @@ func TestColumnEdit(t *testing.T) {
 	r = runGo([]string{"column", "edit", "Home", "Next"})
 	if r.code != 2 || !strings.Contains(r.stderr, "give --name or --color") {
 		t.Errorf("nothing: %+v", r)
+	}
+}
+
+func TestColumnColorNames(t *testing.T) {
+	srv, calls := bxServer(t, false)
+	editEnv(t, srv)
+	r := runGo([]string{"column", "create", "Home", "Soon", "--color", "Blue"})
+	w := writes(calls())
+	if r.code != 0 || len(w) != 1 || w[0].body != `{"column":{"name":"Soon","color":"var(--color-card-default)"}}` {
+		t.Fatalf("create Blue: %+v writes %+v", r, w)
+	}
+	r = runGo([]string{"column", "edit", "Home", "Next", "--color", "PINK"})
+	w = writes(calls())
+	if r.code != 0 || len(w) != 2 || w[1].body != `{"column":{"color":"var(--color-card-8)"}}` {
+		t.Fatalf("edit PINK: %+v writes %+v", r, w)
+	}
+}
+
+func TestColumnColorRefused(t *testing.T) {
+	for _, argv := range [][]string{
+		{"column", "create", "Home", "Soon", "--color", "red"},
+		{"column", "create", "Home", "Soon", "--color", "var(--color-card-blue)"},
+		{"column", "create", "Home", "Soon", "--color", ""},
+		{"column", "edit", "Home", "Next", "--color", "red"},
+		{"column", "edit", "Home", "Next", "--name", "Soon", "--color", "4"},
+		{"--dry-run", "column", "edit", "Home", "Next", "--color", "red"},
+	} {
+		srv, calls := bxServer(t, false)
+		editEnv(t, srv)
+		r := runGo(argv)
+		if r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "Blue, Gray, Tan, Yellow, Lime, Aqua, Violet, Purple, Pink") {
+			t.Errorf("%v: %+v", argv, r)
+		}
+		if len(calls()) != 0 {
+			t.Errorf("%v: sent %+v", argv, calls())
+		}
 	}
 }
 

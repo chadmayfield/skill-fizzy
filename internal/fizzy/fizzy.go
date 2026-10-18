@@ -143,13 +143,21 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	return Column{}, fmt.Errorf("no column %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
 }
 
-// CreateColumn creates a column. A color that does not start with "var(" is
-// wrapped as var(--color-card-<color>); an empty color is left out.
+// CreateColumn creates a column. ColumnColorValue turns the color into the
+// value sent, and refuses an unknown one before anything is sent. An empty
+// color is left out.
 func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
 	body := struct {
 		Name  string `json:"name"`
 		Color string `json:"color,omitempty"`
-	}{Name: name, Color: ColumnColorValue(color)}
+	}{Name: name}
+	if color != "" {
+		v, err := ColumnColorValue(color)
+		if err != nil {
+			return "", err
+		}
+		body.Color = v
+	}
 	return f.C.Create("/boards/"+boardID+"/columns", wrap("column", body))
 }
 

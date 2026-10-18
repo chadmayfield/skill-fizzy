@@ -265,16 +265,20 @@ each open card in the column. A column is named by its name or its id.
 Create, edit and delete custom columns:
 
 ```sh
-fz column create Home "Gate repairs" --color 4
+fz column create Home "Gate repairs" --color Lime
 fz column edit Home Next --name "Hinge repairs"
-fz column edit Home Next --color 2
+fz column edit Home Next --color tan
 fz column delete Home Next --yes
 ```
 
-A new column goes to the right of the others. `--color` takes `default`, a
-number from 1 to 8, or a full `var(--color-card-N)` value. `column delete`
-prints the column and how many open cards it holds, and refuses without
-`--yes`.
+A new column goes to the right of the others. `--color` takes one of the
+nine color names in Fizzy's API docs, in any case: Blue, Gray, Tan, Yellow,
+Lime, Aqua, Violet, Purple and Pink. It also takes the exact value Fizzy
+stores for one, from `var(--color-card-default)` for Blue to
+`var(--color-card-8)` for Pink. Any other color exits 2, lists the names and
+sends nothing, because the server accepts an unknown color without using it
+and still reports success. `column delete` prints the column and how many open
+cards it holds, and refuses without `--yes`.
 
 ### Cards
 

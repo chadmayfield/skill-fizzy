@@ -174,13 +174,41 @@ func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
 	return out, nil
 }
 
-// ColumnColorValue turns a color name such as "4" into the CSS value Fizzy
-// stores. A value that starts with "var(" and an empty color pass through.
-func ColumnColorValue(color string) string {
-	if color == "" || strings.HasPrefix(color, "var(") {
-		return color
+// columnColors are the column colors Fizzy's API docs list, in their order.
+// Each name maps to the only CSS value the server stores for it.
+var columnColors = []struct{ Name, Value string }{
+	{"Blue", "var(--color-card-default)"},
+	{"Gray", "var(--color-card-1)"},
+	{"Tan", "var(--color-card-2)"},
+	{"Yellow", "var(--color-card-3)"},
+	{"Lime", "var(--color-card-4)"},
+	{"Aqua", "var(--color-card-5)"},
+	{"Violet", "var(--color-card-6)"},
+	{"Purple", "var(--color-card-7)"},
+	{"Pink", "var(--color-card-8)"},
+}
+
+// ColumnColorNames lists the color names ColumnColorValue accepts.
+func ColumnColorNames() []string {
+	names := make([]string, len(columnColors))
+	for i, c := range columnColors {
+		names[i] = c.Name
 	}
-	return "var(--color-card-" + color + ")"
+	return names
+}
+
+// ColumnColorValue turns a color name such as "Lime", in any case, into the
+// CSS value Fizzy stores. One of those exact var() values passes through.
+// Anything else is a Refusal, because the server accepts an unknown value
+// without using it and still reports success.
+func ColumnColorValue(color string) (string, error) {
+	for _, c := range columnColors {
+		if strings.EqualFold(color, c.Name) || color == c.Value {
+			return c.Value, nil
+		}
+	}
+	return "", refusef("unknown column color %s; use one of %s, or one of their var(--color-card-...) values",
+		pyRepr(color), strings.Join(ColumnColorNames(), ", "))
 }
 
 // GetColumn fetches one column by id.
@@ -191,7 +219,7 @@ func (f *Fizzy) GetColumn(boardID, columnID string) (Column, error) {
 }
 
 // ColumnFields are the fields UpdateColumn can change. Nil fields are not
-// sent. Color is a name such as "4" or a var() value.
+// sent. Color is a name such as "Lime" or a var() value.
 type ColumnFields struct {
 	Name  *string
 	Color *string
@@ -207,7 +235,10 @@ func (f *Fizzy) UpdateColumn(boardID, columnID string, fields ColumnFields) erro
 		Color *string `json:"color,omitempty"`
 	}{Name: fields.Name}
 	if fields.Color != nil {
-		c := ColumnColorValue(*fields.Color)
+		c, err := ColumnColorValue(*fields.Color)
+		if err != nil {
+			return err
+		}
 		body.Color = &c
 	}
 	_, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID), wrap("column", body))
