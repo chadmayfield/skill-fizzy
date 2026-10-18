@@ -25,8 +25,13 @@ func stringColors(t *testing.T, upstream *httptest.Server) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var srv *httptest.Server
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ModifyResponse = func(r *http.Response) error {
+		// Point next-page links at the proxy, as a real server names itself.
+		if l := r.Header.Get("Link"); l != "" {
+			r.Header.Set("Link", strings.ReplaceAll(l, upstream.URL, srv.URL))
+		}
 		b, err := io.ReadAll(r.Body)
 		if err != nil {
 			return err
@@ -38,7 +43,7 @@ func stringColors(t *testing.T, upstream *httptest.Server) *httptest.Server {
 		r.Header.Set("Content-Length", strconv.Itoa(len(b)))
 		return nil
 	}
-	srv := httptest.NewServer(proxy)
+	srv = httptest.NewServer(proxy)
 	t.Cleanup(srv.Close)
 	return srv
 }

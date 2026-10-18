@@ -340,10 +340,10 @@ func TestRedirectRules(t *testing.T) {
 		t.Errorf("GET 302 not followed: err=%v v=%v", err, v)
 	}
 	methods = nil
-	if _, err := c.Write("POST", "/old", map[string]int{"a": 1}); err != nil {
-		t.Errorf("POST 302 should follow as GET: %v", err)
+	if _, err := c.Write("POST", "/old", map[string]int{"a": 1}); err == nil {
+		t.Error("POST 302 must be an error, not a GET")
 	}
-	if len(methods) != 2 || methods[1] != "GET /1/new" {
+	if len(methods) != 1 || methods[0] != "POST /1/old" {
 		t.Errorf("POST redirect requests = %v", methods)
 	}
 	methods = nil

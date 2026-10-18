@@ -1,23 +1,26 @@
 // Package client is a thin HTTP client for the Fizzy API.
 //
 // Every request is scoped to the one configured account. Lists are followed
-// through every page (Link: <...>; rel="next"). Create calls return the new
-// object's id parsed from the Location header. In dry-run mode GETs are sent
-// and writes are printed instead. Every write is appended to an action log
-// holding the time, method, path and status, never the token.
+// through every page (Link: <...>; rel="next"), up to MaxPages, and only to
+// the configured server. Create calls return the new object's id parsed from
+// the Location header. In dry-run mode GETs are sent and writes are printed
+// instead. Every write that is sent is appended to an action log holding the
+// time, method, path and status, never the token. A write that gets no
+// response is logged with status 0.
 package client
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf16"
 
@@ -32,26 +35,133 @@ type APIError struct {
 	Body   string
 }
 
+// Error gives the method, path and status, plus up to 300 characters of the
+// body with terminal escapes and control characters removed.
 func (e *APIError) Error() string {
 	msg := fmt.Sprintf("%s %s -> HTTP %d", e.Method, e.Path, e.Status)
-	detail := strings.TrimSpace(e.Body)
-	if r := []rune(detail); len(r) > 300 {
-		detail = string(r[:300])
-	}
-	if detail != "" {
+	if detail := config.SafeText(e.Body, 300); detail != "" {
 		msg += ": " + detail
 	}
 	return msg
 }
 
-var linkNext = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
-
-// NextLink returns the rel="next" URL from a Link header, or "".
+// NextLink returns the target of the first link in a Link header whose rel
+// holds "next", or "". Parameters may come in any order, rel values are
+// space-separated and compared without case, and "next-archive" is not
+// "next". Parsing stops at the first malformed entry.
 func NextLink(header string) string {
-	if m := linkNext.FindStringSubmatch(header); m != nil {
-		return m[1]
+	s, i := header, 0
+	skip := func(chars string) {
+		for i < len(s) && strings.IndexByte(chars, s[i]) >= 0 {
+			i++
+		}
+	}
+	for {
+		skip(" \t,")
+		if i >= len(s) || s[i] != '<' {
+			return ""
+		}
+		end := strings.IndexByte(s[i+1:], '>')
+		if end < 0 {
+			return ""
+		}
+		target := s[i+1 : i+1+end]
+		i += end + 2
+		var rel string
+		haveRel := false
+		for {
+			skip(" \t")
+			if i >= len(s) || s[i] != ';' {
+				break
+			}
+			i++
+			skip(" \t")
+			start := i
+			for i < len(s) && strings.IndexByte("=;, \t", s[i]) < 0 {
+				i++
+			}
+			name := s[start:i]
+			skip(" \t")
+			var value string
+			if i < len(s) && s[i] == '=' {
+				i++
+				skip(" \t")
+				if i < len(s) && s[i] == '"' {
+					var b strings.Builder
+					i++
+					for i < len(s) && s[i] != '"' {
+						if s[i] == '\\' && i+1 < len(s) {
+							i++
+						}
+						b.WriteByte(s[i])
+						i++
+					}
+					if i >= len(s) {
+						return ""
+					}
+					i++
+					value = b.String()
+				} else {
+					start := i
+					for i < len(s) && strings.IndexByte(";, \t", s[i]) < 0 {
+						i++
+					}
+					value = s[start:i]
+				}
+			}
+			if strings.EqualFold(name, "rel") && !haveRel {
+				rel, haveRel = value, true
+			}
+		}
+		for _, r := range strings.Fields(rel) {
+			if strings.EqualFold(r, "next") {
+				return target
+			}
+		}
+		skip(" \t")
+		if i < len(s) && s[i] != ',' {
+			return ""
+		}
+	}
+}
+
+// sameOrigin reports whether a and b have the same scheme, host and port.
+// A missing port counts as the scheme's default.
+func sameOrigin(a, b *url.URL) bool {
+	return a.Scheme != "" && strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
+}
+
+func port(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
 	}
 	return ""
+}
+
+// redactURL keeps the scheme, host and path of raw and drops the rest, so a
+// signed query never reaches an error message or a log.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "(unparsable URL)"
+	}
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+}
+
+// redactErr removes the query from the URL in a *url.Error.
+func redactErr(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		ue.URL = redactURL(ue.URL)
+	}
+	return err
 }
 
 // IDFromLocation returns the last path segment of a Location header without a
@@ -108,20 +218,44 @@ type Client struct {
 	dryRun bool
 	out    io.Writer
 	http   *http.Client
+	origin *url.URL // the configured URL; nil when it does not parse
+
+	mu     sync.Mutex // guards token and hasTok
 	token  string
 	hasTok bool
 }
 
 // New returns a client. Dry-run lines go to out.
 func New(cfg *config.Config, dryRun bool, out io.Writer) *Client {
-	return &Client{cfg: cfg, dryRun: dryRun, out: out, http: &http.Client{Timeout: 60 * time.Second, CheckRedirect: checkRedirect}}
+	origin, err := url.Parse(cfg.URL)
+	if err != nil {
+		origin = nil
+	}
+	return &Client{cfg: cfg, dryRun: dryRun, out: out, origin: origin,
+		http: &http.Client{Timeout: 60 * time.Second, CheckRedirect: checkRedirect}}
 }
 
-// checkRedirect follows redirects the way Python's urllib does: GET follows
-// 301, 302, 303 and 307; POST follows 301, 302 and 303 (as a GET). Anything
-// else, including every PUT, PATCH and DELETE and any 308, returns the 3xx
-// response, which Do reports as an *APIError.
+// MaxBody caps the size of one response body.
+const MaxBody = 32 << 20
+
+// errDowngrade is returned for a redirect from https to plain http.
+var errDowngrade = errors.New("the server redirected from https to http, which fz never follows")
+
+// checkRedirect follows a redirect of a GET or HEAD for 301, 302, 303 and
+// 307. Every other redirect, including every redirect of a write and any 308,
+// returns the 3xx response, which Do reports as an *APIError. A redirect from
+// https to http is an error and is never sent. A redirect to another scheme,
+// host or port than the first request's goes without the Authorization
+// header.
 func checkRedirect(req *http.Request, via []*http.Request) error {
+	for _, v := range via {
+		if strings.EqualFold(v.URL.Scheme, "https") && !strings.EqualFold(req.URL.Scheme, "https") {
+			return errDowngrade
+		}
+	}
+	if !sameOrigin(req.URL, via[0].URL) {
+		req.Header.Del("Authorization")
+	}
 	if len(via) >= 10 {
 		return http.ErrUseLastResponse
 	}
@@ -131,15 +265,13 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 		if code == 301 || code == 302 || code == 303 || code == 307 {
 			return nil
 		}
-	case http.MethodPost:
-		if code == 301 || code == 302 || code == 303 {
-			return nil
-		}
 	}
 	return http.ErrUseLastResponse
 }
 
 func (c *Client) auth() (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if !c.hasTok {
 		t, err := c.cfg.ResolveToken()
 		if err != nil {
@@ -207,6 +339,11 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	for k, v := range o.headers {
 		hdrs[k] = v
 	}
+	if !o.noAuth && strings.Contains(path, "://") {
+		if pu, err := url.Parse(u); err != nil || c.origin == nil || !sameOrigin(pu, c.origin) {
+			return 0, nil, nil, fmt.Errorf("refusing to send the token to %s, which is not the configured server", redactURL(u))
+		}
+	}
 	if !o.noAuth {
 		t, err := c.auth()
 		if err != nil {
@@ -220,26 +357,33 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	}
 	req, err := http.NewRequest(method, u, rd)
 	if err != nil {
-		return 0, nil, nil, err
+		return 0, nil, nil, redactErr(err)
 	}
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
 	}
+	reqPath := req.URL.Path
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, nil, nil, err
+		if isWrite {
+			c.logAction(method, reqPath, 0)
+		}
+		return 0, nil, nil, redactErr(err)
 	}
 	defer resp.Body.Close()
-	payload, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return resp.StatusCode, resp.Header, nil, err
-	}
-	reqPath := u
-	if pu, perr := url.Parse(u); perr == nil {
-		reqPath = pu.Path
-	}
 	if isWrite {
 		c.logAction(method, reqPath, resp.StatusCode)
+	}
+	if isWrite && (resp.StatusCode == 301 || resp.StatusCode == 302 || resp.StatusCode == 303) {
+		return resp.StatusCode, resp.Header, nil, &APIError{resp.StatusCode, method, reqPath,
+			"the server redirected a write, and fz does not follow that; the configured URL may need https"}
+	}
+	payload, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody+1))
+	if err != nil {
+		return resp.StatusCode, resp.Header, nil, redactErr(err)
+	}
+	if len(payload) > MaxBody {
+		return resp.StatusCode, resp.Header, nil, fmt.Errorf("%s %s: the response is larger than 32 MiB", method, reqPath)
 	}
 	if resp.StatusCode >= 300 {
 		return resp.StatusCode, resp.Header, payload, &APIError{resp.StatusCode, method, reqPath, string(payload)}
@@ -249,14 +393,16 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 
 func (c *Client) logAction(method, path string, status int) {
 	p := c.cfg.LogFile()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
 	}
-	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+	// A log made by an older fz may be readable by others.
+	_ = f.Chmod(0o600)
 	line, _ := pyDumps(struct {
 		T      string `json:"t"`
 		Method string `json:"method"`
@@ -279,30 +425,84 @@ func (c *Client) Get(path string, v any) error {
 	return json.Unmarshal(payload, v)
 }
 
-// GetAll GETs a list endpoint and follows every page.
+// GetAll GETs a list endpoint and follows every page. On any error it
+// returns nil, never a partial list.
 func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
 	var items []json.RawMessage
+	err := c.EachPage(path, func(payload []byte) (bool, error) {
+		var page []json.RawMessage
+		if err := json.Unmarshal(payload, &page); err != nil {
+			return false, err
+		}
+		items = append(items, page...)
+		return false, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// MaxPages caps how many pages one list may follow.
+const MaxPages = 1000
+
+// EachPage GETs the account-scoped path and then each rel="next" page,
+// passing every non-empty payload to fn. An empty body is an empty page and
+// is skipped. fn returns true to stop early.
+//
+// A next link is followed only when it has the configured URL's scheme, host
+// and port. A link that starts with one "/" resolves against the configured
+// origin as it stands, with no account prefix added. Any other link, a link
+// seen before, and a page past MaxPages are errors, and nothing is sent for
+// them.
+func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err error)) error {
 	next := c.URL(path, true)
 	seen := map[string]bool{}
-	for next != "" {
+	for pages := 0; next != ""; pages++ {
+		if pages == MaxPages {
+			return fmt.Errorf("pagination: more than %d pages; fz stopped", MaxPages)
+		}
 		if seen[next] {
-			return nil, fmt.Errorf("pagination loop: %s linked again", next)
+			return fmt.Errorf("pagination loop: %s linked again", redactURL(next))
 		}
 		seen[next] = true
 		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if len(payload) > 0 {
-			var page []json.RawMessage
-			if err := json.Unmarshal(payload, &page); err != nil {
-				return nil, err
+		if len(bytes.TrimSpace(payload)) > 0 {
+			stop, err := fn(payload)
+			if err != nil || stop {
+				return err
 			}
-			items = append(items, page...)
 		}
-		next = NextLink(hdr.Get("Link"))
+		link := NextLink(strings.Join(hdr.Values("Link"), ", "))
+		if link == "" {
+			return nil
+		}
+		if next, err = c.resolveNext(link); err != nil {
+			return err
+		}
 	}
-	return items, nil
+	return nil
+}
+
+// resolveNext turns a next link into the absolute URL to fetch, or refuses it.
+func (c *Client) resolveNext(link string) (string, error) {
+	if c.origin == nil {
+		return "", errors.New("pagination: the configured URL does not parse")
+	}
+	if strings.HasPrefix(link, "/") && !strings.HasPrefix(link, "//") {
+		return c.origin.Scheme + "://" + c.origin.Host + link, nil
+	}
+	u, err := url.Parse(link)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", errors.New("pagination: the server sent a next link fz cannot follow")
+	}
+	if !sameOrigin(u, c.origin) {
+		return "", fmt.Errorf("pagination: the next link points to %s://%s, not the configured server; fz did not follow it", u.Scheme, u.Host)
+	}
+	return link, nil
 }
 
 // Create POSTs body and returns the new object's id from the Location header.
