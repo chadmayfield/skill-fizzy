@@ -52,7 +52,7 @@ func addBoardExtraCommands(root *cobra.Command) {
 	del := &cobra.Command{
 		Use:     "delete BOARD",
 		Short:   "delete a board (needs --yes)",
-		Long:    "Delete a board and its cards for good. Prints the board name, its card count and its columns first, and refuses without --yes.",
+		Long:    "Delete a board and its cards for good. Prints the board name, its card counts under Fizzy's all, closed and not_now filters, and its columns first, and refuses without --yes.",
 		Example: examples("fz board delete Home --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardDelete),
@@ -239,7 +239,9 @@ func boardDelete(c *cmdContext, a []string) error {
 	if len(names) > 0 {
 		listed = strings.Join(names, ", ")
 	}
-	fmt.Fprintf(c.errw(), "about to delete board %s (%s): %d open, %d closed, %d not now cards; custom columns: %s\n", b.Name, b.ID, counts[0], counts[1], counts[2], listed)
+	// Fizzy's API docs list "all" as the default filter but do not say
+	// which cards it holds, so the count carries the filter's name.
+	fmt.Fprintf(c.errw(), "about to delete board %s (%s): cards by Fizzy's filters: all %d, closed %d, not now %d; custom columns: %s\n", b.Name, b.ID, counts[0], counts[1], counts[2], listed)
 	if !yes {
 		return refuse(c)
 	}

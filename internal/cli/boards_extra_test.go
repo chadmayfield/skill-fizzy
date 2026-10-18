@@ -163,7 +163,10 @@ func TestBoardDeleteRefusesWithoutYes(t *testing.T) {
 	srv, calls := bxServer(t, false)
 	editEnv(t, srv)
 	r := runGo([]string{"board", "delete", "Home"})
-	if r.code != 2 || !strings.Contains(r.stderr, "Home") || !strings.Contains(r.stderr, "2 open, 1 closed, 3 not now cards") ||
+	// The API docs do not define the "all" filter, so its count is not
+	// called open.
+	want := "about to delete board Home (b1): cards by Fizzy's filters: all 2, closed 1, not now 3; custom columns: Next\n"
+	if r.code != 2 || !strings.HasPrefix(r.stderr, want) || strings.Contains(r.stderr, "open") ||
 		!strings.Contains(r.stderr, "Next") || !strings.Contains(r.stderr, "refusing without --yes") {
 		t.Fatalf("got %+v", r)
 	}

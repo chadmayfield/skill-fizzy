@@ -277,7 +277,9 @@ fz board delete Home --yes
 ```
 
 This deletes the board and its cards for good. `fz` first prints how many
-open, closed and Not now cards the board holds, and its custom columns.
+cards the board holds under Fizzy's `all`, `closed` and `not_now` card
+filters, and its custom columns. Fizzy's API docs do not say which cards
+`all` holds, so the counts may overlap.
 Without `--yes` it deletes nothing and exits with status 2.
 
 ### Columns
