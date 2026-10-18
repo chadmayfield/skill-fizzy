@@ -63,6 +63,26 @@ while [ -n "$remaining" ]; do
 done
 [ "$parts" -eq 3 ] || fail "tag '$tag' is not vMAJOR.MINOR.PATCH"
 
+# Each dot-separated pre-release identifier must be non-empty, and a
+# numeric one must not have a leading zero, as SemVer 2.0.0 requires.
+if [ -n "$pre" ]; then
+	remaining=$pre.
+	while [ -n "$remaining" ]; do
+		p=${remaining%%.*}
+		remaining=${remaining#*.}
+		case "$p" in
+		"") fail "tag '$tag' has an empty pre-release identifier" ;;
+		0) ;;
+		0*)
+			case "$p" in
+			*[!0-9]*) ;;
+			*) fail "tag '$tag' has a zero-padded pre-release number" ;;
+			esac
+			;;
+		esac
+	done
+fi
+
 git merge-base --is-ancestor "$sha" origin/main || fail "tag '$tag' ($sha) is not on origin/main"
 
 echo "$kind"
