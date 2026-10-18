@@ -842,7 +842,8 @@ fz draft apply ~/.fizzy-inbox/drafts/
   draft, so the same draft never makes a second card.
 - A draft that already has `card:` is skipped, unless you pass `--update`.
 - Each command takes files, folders or both. A folder means the `.md` files
-  directly inside it.
+  directly inside it. A draft named twice, by another path or through a
+  symlink, is read once.
 
 ### Updating a card from its draft
 

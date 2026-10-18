@@ -88,12 +88,22 @@ func pyPath(p string) string {
 }
 
 // draftPaths expands targets: a folder becomes its *.md files in name order.
+// A draft named more than once, by any path or through a symlink, is kept
+// once, where it first appears.
 func draftPaths(targets []string) ([]string, error) {
 	var paths []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		key := draftKey(p)
+		if !seen[key] {
+			seen[key] = true
+			paths = append(paths, p)
+		}
+	}
 	for _, t := range targets {
 		p := pyPath(config.ExpandTilde(t))
 		if st, err := os.Stat(p); err != nil || !st.IsDir() {
-			paths = append(paths, p)
+			add(p)
 			continue
 		}
 		entries, err := os.ReadDir(p)
@@ -102,11 +112,23 @@ func draftPaths(targets []string) ([]string, error) {
 		}
 		for _, e := range entries {
 			if ok, _ := filepath.Match("*.md", e.Name()); ok {
-				paths = append(paths, pyPath(p+"/"+e.Name()))
+				add(pyPath(p + "/" + e.Name()))
 			}
 		}
 	}
 	return paths, nil
+}
+
+// draftKey is the cleaned absolute path of p with symlinks resolved, or as
+// much of that as the file system allows for a path that does not exist.
+func draftKey(p string) string {
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		p = real
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
 }
 
 // linkStatus is an HTTP status, or the name of the error that stopped the

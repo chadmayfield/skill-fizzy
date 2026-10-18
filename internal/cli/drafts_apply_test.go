@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -64,5 +65,34 @@ func TestApplyRefusesBadGoldenValue(t *testing.T) {
 	}
 	if w := srv.writes(); len(w) != 0 {
 		t.Errorf("writes reached the server: %q", w)
+	}
+}
+
+// creates counts the card creates the server saw.
+func (s *syncServer) creates() int {
+	n := 0
+	for _, w := range s.writes() {
+		if strings.HasPrefix(w, "POST /1/boards/") && strings.HasSuffix(w, "/cards") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestApplyNamesOneDraftOnce(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hinge.md")
+	writeFile(t, path, "---\nboard: Home\n---\n# Oil the hinge\n")
+	link := filepath.Join(t.TempDir(), "alias.md")
+	if err := os.Symlink(path, link); err != nil {
+		t.Fatal(err)
+	}
+	got := syncRun(t, srv, "draft", "apply", dir+"/", path, dir+"/./hinge.md", link)
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	if n := srv.creates(); n != 1 {
+		t.Errorf("%d creates for one draft: %q", n, srv.writes())
 	}
 }
