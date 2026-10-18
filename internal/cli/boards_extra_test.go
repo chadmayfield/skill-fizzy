@@ -32,6 +32,9 @@ func bxServer(t *testing.T, allAccess bool) (*httptest.Server, func() []seenCall
 			io.WriteString(w, `[{"id":"b1","name":"Home","auto_postpone_period_in_days":30}]`)
 		case "GET /1/boards/b1":
 			io.WriteString(w, `{"id":"b1","name":"Home","all_access":`+access+`,"auto_postpone_period_in_days":30,"creator":{"name":"Pat"},"user_ids":["u1","u2"]}`)
+		case "GET /1/users":
+			io.WriteString(w, `[{"id":"u1","name":"Pat","email_address":"pat@example.com"},{"id":"u2","name":"Sam","email_address":"sam@example.com"},`+
+				`{"id":"u3","name":"Kim","email_address":"kim@example.com"},{"id":"u4","name":"pat","email_address":"pat2@example.com"}]`)
 		case "GET /1/boards/b1/accesses":
 			io.WriteString(w, `{"board_id":"b1","all_access":`+access+`,"users":[{"id":"u1","name":"Pat","role":"owner","has_access":true,"involvement":"watching"},{"id":"u2","name":"Sam","role":"member","has_access":false,"involvement":null}]}`)
 		case "GET /1/cards":
@@ -234,7 +237,7 @@ func TestBoardAccessChangeRefusesWithoutYes(t *testing.T) {
 		}
 	}
 	r := runGo([]string{"board", "access", "Home", "--users", "u1,u3"})
-	if !strings.Contains(r.stderr, "replaces the whole list") || !strings.Contains(r.stderr, "u1, u3") {
+	if !strings.Contains(r.stderr, "replaces the whole list") || !strings.Contains(r.stderr, "Pat (u1), Kim (u3)") {
 		t.Errorf("refusal text: %s", r.stderr)
 	}
 }
@@ -251,6 +254,57 @@ func TestBoardAccessChangeWithYes(t *testing.T) {
 	w = writes(calls())
 	if r.code != 0 || len(w) != 2 || w[1].body != `{"board":{"all_access":true}}` {
 		t.Fatalf("all: %+v writes %+v", r, w)
+	}
+}
+
+// Each --users entry resolves like any USER argument: an id, a name, a name
+// in any case when only one user has it, or an email. The preview names the
+// users, and the PUT sends their ids.
+func TestBoardAccessUsersResolve(t *testing.T) {
+	srv, calls := bxServer(t, false)
+	editEnv(t, srv)
+	r := runGo([]string{"board", "access", "Home", "--users", "Pat, kim@example.com, sam", "--yes"})
+	w := writes(calls())
+	if r.code != 0 || len(w) != 1 || w[0].body != `{"board":{"all_access":false,"user_ids":["u1","u3","u2"]}}` {
+		t.Fatalf("got %+v writes %+v", r, w)
+	}
+	if !strings.Contains(r.stderr, "new: only these users: Pat (u1), Kim (u3), Sam (u2)") {
+		t.Errorf("preview: %s", r.stderr)
+	}
+}
+
+// An entry that matches nobody, or more than one user, refuses before any
+// PUT, so a typo cannot take access away from everyone else.
+func TestBoardAccessUsersRefuseUnknownOrAmbiguous(t *testing.T) {
+	srv, calls := bxServer(t, false)
+	editEnv(t, srv)
+	for _, spec := range []string{"u1,nosuchuser", "PAT", "."} {
+		r := runGo([]string{"board", "access", "Home", "--users", spec, "--yes"})
+		if r.code != 2 || r.stdout != "" {
+			t.Errorf("%s: %+v", spec, r)
+		}
+		if w := writes(calls()); len(w) != 0 {
+			t.Fatalf("%s: sent %+v", spec, w)
+		}
+	}
+}
+
+// --all on a board that every user can already reach changes nothing, so
+// fz says so, exits 0 and sends no PUT, with or without --yes.
+func TestBoardAccessAllNoChange(t *testing.T) {
+	srv, calls := bxServer(t, true)
+	editEnv(t, srv)
+	for _, args := range [][]string{
+		{"board", "access", "Home", "--all"},
+		{"board", "access", "Home", "--all", "--yes"},
+	} {
+		r := runGo(args)
+		if r.code != 0 || r.stdout != "board Home already gives all users access; no change needed\n" {
+			t.Errorf("%v: %+v", args, r)
+		}
+	}
+	if w := writes(calls()); len(w) != 0 {
+		t.Fatalf("sent %+v", w)
 	}
 }
 

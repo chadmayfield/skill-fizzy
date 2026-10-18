@@ -232,12 +232,18 @@ Access:
 fz board access Home
 fz board access Home --all --yes
 fz board access Home --users 03abc123def456ghi789jkl0mn --yes
+fz board access Home --users Alex,Sam --yes
 ```
 
 With no flag, `board access` lists who can reach the board. `--all` opens it
-to every user in the account. `--users` takes comma-separated user ids and
-replaces the whole list, so anyone not named loses access. Both changes print
-the old and new access first and refuse without `--yes`.
+to every user in the account. `--users` takes a comma-separated list and
+replaces the whole list, so anyone not named loses access. Each entry is a
+user id, a name or an email, matched the way `card assign` matches a user.
+If an entry matches nobody or more than one user, `fz` exits 2 and changes
+nothing. Both changes print the old and new access first, with each user's
+name and id, and refuse without `--yes`. `--all` on a board that every user
+can already reach prints that no change is needed, exits 0 and sends
+nothing.
 
 Delete:
 

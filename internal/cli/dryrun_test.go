@@ -9,7 +9,7 @@ import (
 // write.
 var dryRunRoutes = map[string]string{
 	"GET /1/boards":                     `[{"id":"b1","name":"Home"}]`,
-	"GET /1/boards/b1":                  `{"id":"b1","name":"Home","all_access":true}`,
+	"GET /1/boards/b1":                  `{"id":"b1","name":"Home","all_access":false}`,
 	"GET /1/boards/b1/columns":          `[{"id":"c1","name":"Next","color":{"name":"Lime","value":"var(--color-card-4)"}}]`,
 	"GET /1/boards/b1/columns/c1/cards": `[]`,
 	"GET /1/cards":                      `[]`,

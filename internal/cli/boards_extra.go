@@ -77,14 +77,17 @@ func addBoardExtraCommands(root *cobra.Command) {
 		Short: "list or change who can access a board",
 		Long: "Without a flag, list who can access a board. " +
 			"--all opens the board to every user in the account. " +
-			"--users ID,ID limits it to those users, and the list replaces the whole set, so anyone not named loses access. " +
-			"Either change prints what it would do and refuses without --yes.",
-		Example: examples("fz board access Home", "fz board access Home --all --yes", "fz board access Home --users 03abc123def456ghi789jkl0mn --yes"),
+			"--users USER,USER limits it to those users, and the list replaces the whole set, so anyone not named loses access. " +
+			"Each USER is a user id, a name or an email, matched as card assign matches one. " +
+			"fz refuses a USER that matches nobody or more than one user, and sends nothing. " +
+			"Either change prints what it would do, naming each user with their id, and refuses without --yes. " +
+			"--all on a board that every user can already reach says no change is needed and sends nothing.",
+		Example: examples("fz board access Home", "fz board access Home --all --yes", "fz board access Home --users 03abc123def456ghi789jkl0mn --yes", "fz board access Home --users Alex,Sam --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardAccess),
 	}
 	access.Flags().Bool("all", false, "open the board to every user in the account")
-	access.Flags().String("users", "", "comma-separated user ids; replaces the whole list")
+	access.Flags().String("users", "", "comma-separated user ids, names or emails; replaces the whole list")
 	access.Flags().Bool("yes", false, "really change access")
 	g.AddCommand(show, edit, del, publish, unpublish, access)
 }
@@ -277,15 +280,15 @@ func boardAccess(c *cmdContext, a []string) error {
 	case yes && !changing:
 		return usagef("--yes only goes with --all or --users")
 	}
-	var ids []string
+	var specs []string
 	if fl.Changed("users") {
-		for _, id := range strings.Split(usersSpec, ",") {
-			if id = strings.TrimSpace(id); id != "" {
-				ids = append(ids, id)
+		for _, spec := range strings.Split(usersSpec, ",") {
+			if spec = strings.TrimSpace(spec); spec != "" {
+				specs = append(specs, spec)
 			}
 		}
-		if len(ids) == 0 {
-			return usagef("--users needs at least one user id; use --all to open the board to everyone")
+		if len(specs) == 0 {
+			return usagef("--users needs at least one user; use --all to open the board to everyone")
 		}
 	}
 	fz, err := c.api()
@@ -299,16 +302,31 @@ func boardAccess(c *cmdContext, a []string) error {
 	if !changing {
 		return boardAccessList(c, fz, b)
 	}
+	var ids, named []string
+	if !all {
+		users, err := fz.MatchUsers(specs)
+		if err != nil {
+			return err
+		}
+		for _, u := range users {
+			ids = append(ids, u.ID)
+			named = append(named, fmt.Sprintf("%s (%s)", u.Name, u.ID))
+		}
+	}
 	d, err := fz.BoardDetail(b.ID)
 	if err != nil {
 		return err
+	}
+	if all && d.AllAccess {
+		return emit(c.cmd, obj{{"id", b.ID}, {"all_access", true}, {"changed", false}},
+			fmt.Sprintf("board %s already gives all users access; no change needed", b.Name))
 	}
 	w := c.errw()
 	fmt.Fprintf(w, "about to change access to board %s (%s)\n  now: %s\n", b.Name, b.ID, accessSummary(d))
 	if all {
 		fmt.Fprintln(w, "  new: all users")
 	} else {
-		fmt.Fprintf(w, "  new: only these users: %s\n  --users replaces the whole list; anyone not named loses access\n", strings.Join(ids, ", "))
+		fmt.Fprintf(w, "  new: only these users: %s\n  --users replaces the whole list; anyone not named loses access\n", strings.Join(named, ", "))
 	}
 	if !yes {
 		return refuse(c)
