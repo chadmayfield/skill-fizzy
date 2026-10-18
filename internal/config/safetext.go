@@ -19,9 +19,11 @@ func SafeText(s string, max int) string {
 
 // TerminalText makes server text safe to print on a terminal. It removes
 // escape sequences (CSI, OSC and two-byte ESC forms, in their 7-bit and
-// 8-bit spellings), every control character but newline and tab, and the
-// line and paragraph separators U+2028 and U+2029. A carriage return is
-// removed, so a line cannot be overwritten.
+// 8-bit spellings), every control character but newline and tab, the
+// line and paragraph separators U+2028 and U+2029, and the Unicode format
+// characters (category Cf), such as bidi overrides and isolates, zero-width
+// characters and the BOM. A carriage return is removed, so a line cannot be
+// overwritten.
 func TerminalText(s string) string { return clean(s, keepBreaks) }
 
 // TerminalLine cleans s as TerminalText does and removes newlines and tabs
@@ -80,7 +82,7 @@ func clean(s string, mode breaks) string {
 			case mode == keepBreaks && r != '\r':
 				b.WriteRune(r)
 			}
-		case unicode.IsControl(r), r == '\u2028', r == '\u2029':
+		case unicode.IsControl(r), unicode.Is(unicode.Cf, r), r == '\u2028', r == '\u2029':
 		default:
 			b.WriteRune(r)
 		}

@@ -59,3 +59,26 @@ func TestTerminalText(t *testing.T) {
 		}
 	}
 }
+
+// Unicode format characters (category Cf) are dropped: bidi overrides and
+// isolates could make a name read differently from the one fz acts on, and
+// zero-width characters hide text.
+func TestCleanDropsFormatCharacters(t *testing.T) {
+	for _, r := range []rune{
+		0x202a, 0x202b, 0x202c, 0x202d, 0x202e, // bidi embeddings and overrides
+		0x2066, 0x2067, 0x2068, 0x2069, // bidi isolates
+		0x200b, 0x200c, 0x200d, 0x200e, 0x200f, // zero width characters and marks
+		0x2060, 0xfeff, 0x00ad, // word joiner, BOM, soft hyphen
+	} {
+		in := "gate" + string(r) + "hinge"
+		for name, f := range map[string]func(string) string{
+			"TerminalText": TerminalText,
+			"TerminalLine": TerminalLine,
+			"SafeText":     func(s string) string { return SafeText(s, 300) },
+		} {
+			if got := f(in); got != "gatehinge" {
+				t.Errorf("%s(%q) = %q, want %q", name, in, got, "gatehinge")
+			}
+		}
+	}
+}
