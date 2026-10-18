@@ -354,10 +354,10 @@ func TestUpdateCard(t *testing.T) {
 
 func TestCreateColumnDryRun(t *testing.T) {
 	fd, _, out, srv := newFizzy(t, true, nil)
-	if _, err := fd.CreateColumn("B1", "N", "3"); err != nil {
+	if _, err := fd.CreateColumn("B1", "N", "Yellow"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fd.CreateColumn("B1", "N", "var(--x)"); err != nil {
+	if _, err := fd.CreateColumn("B1", "N", "var(--color-card-6)"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := fd.CreateColumn("B1", "N", ""); err != nil {
@@ -365,7 +365,7 @@ func TestCreateColumnDryRun(t *testing.T) {
 	}
 	p := "[dry-run] POST " + srv.URL + "/1/boards/B1/columns "
 	want := p + `{"column": {"name": "N", "color": "var(--color-card-3)"}}` + "\n" +
-		p + `{"column": {"name": "N", "color": "var(--x)"}}` + "\n" +
+		p + `{"column": {"name": "N", "color": "var(--color-card-6)"}}` + "\n" +
 		p + `{"column": {"name": "N"}}` + "\n"
 	if out.String() != want {
 		t.Errorf("got\n%swant\n%s", out.String(), want)

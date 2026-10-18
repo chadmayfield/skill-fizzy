@@ -20,13 +20,29 @@ change the guide and the command's help text in the same commit.
 |---|---|
 | `cmd/fz/` | `main.go`, which calls `cli.Execute` with the version, commit and date the Makefile stamps in. |
 | `internal/cli/` | The cobra command tree. One file per command group, plus the fz 0.1 rewrites (`legacy.go`), the draft sync (`sync.go`, `fingerprint.go`) and the output helpers (`output.go`). |
+| `internal/cli/cards_extra.go` | `card assign`, `unassign`, `watch`, `unwatch`, `pin`, `unpin`, `pins`, `boost`, `boosts`, `unboost` and `image`. |
+| `internal/cli/comments_extra.go` | The `comment` commands after `add`: `list`, `show`, `edit`, `delete`, `react`, `reactions` and `unreact`. |
+| `internal/cli/boards_extra.go` | `board show`, `edit`, `delete`, `publish`, `unpublish` and `access`. |
+| `internal/cli/columns.go` | `column show`, `create`, `edit`, `delete` and `cards`. |
+| `internal/cli/people.go` | `tag list`, the `user` commands and `whoami`. |
+| `internal/cli/activity.go` | `activity list` and the `notification` commands. |
+| `internal/cli/account.go` | `account show`, `account postpone` and the `export` commands. |
+| `internal/cli/webhooks.go` | The `webhook` commands. |
 | `internal/client/` | The HTTP client. Account scoping, pagination, dry run and the action log. |
 | `internal/config/` | Loading `config.json` and the `FIZZY_*` variables, running the token command, and `SplitWords`, the shell-style word splitter. |
 | `internal/fizzy/` | The Fizzy operations built on the client, the API types, and the Python-style JSON printing. |
+| `internal/fizzy/cards_extra.go` | Assignments, watching, pins, boosts, the header image and the tag lookup for `card list --tag`. |
+| `internal/fizzy/comments.go` | Comments and their reactions. |
+| `internal/fizzy/boards_extra.go` | Board details, edits, access and publishing, and the calls that read, change and delete one column. |
+| `internal/fizzy/users.go` | Users, and `MatchUser`, the one function that turns a USER argument into a user. |
+| `internal/fizzy/account.go` | The account, identity, timezone, notifications, activity and exports. |
+| `internal/fizzy/webhooks.go` | Webhooks and their deliveries, and the URL and action checks. |
+| `internal/fizzy/refusal.go` | `Refusal`, the error for a check that stops a change before it is sent. The CLI exits 2 on it. |
 | `internal/draft/` | Parsing card drafts, finding their images, writing `card:` and `synced:` back, and planning step changes. |
 | `internal/markdown/` | Converting draft Markdown to the HTML Fizzy stores. |
 | `internal/richtext/` | Small edits to Fizzy rich text, used by `card edit --replace`. |
 | `internal/review/` | Gathering and formatting `fz review`. |
+| `internal/testenv/` | `Main`, which every test package that builds a client or runs commands calls from its `TestMain`. It gives the tests a temporary HOME, a missing config file and no `FIZZY_*` variables, so no test reads the real config or reaches a real server. A test that needs a variable sets it with `t.Setenv`. |
 | `internal/docscheck/` | Tests that keep the Markdown docs honest. |
 | `internal/repocheck/` | A test that fails if git tracks a private planning or agent file. |
 | `internal/releasecheck/` | Tests for the release build and the tag guard script. |
@@ -114,7 +130,17 @@ fails the build until the docs catch up.
 
 ### Behavior every command keeps
 
-- Every write honors `--dry-run`. Every delete needs `--yes`. So does publishing a board's public link and changing who can access a board. Changing a card's drafted or published status with `card edit --status` does not.
+- Every write honors `--dry-run`.
+- These commands refuse without `--yes`: `card delete`, `step delete`,
+  `card image --remove`, `comment delete`, `board delete`, `board publish`,
+  `board access --all` and `--users`, `column delete`, `account postpone`,
+  `user edit`, and `webhook create`, `edit` and `delete`. Without it they
+  print what they would do and exit 2.
+- These send a DELETE and need no `--yes`: `card unboost`, `card unwatch`,
+  `card unpin`, `comment unreact`, `notification unread` and
+  `board unpublish`. Each one removes a mark or closes access, and can be
+  redone. Changing a card's drafted or published status with
+  `card edit --status` needs no `--yes` either.
 - Old command forms keep working.
 - Dependencies: cobra and cobra/doc only. Ask Chad before adding any other.
 
@@ -135,14 +161,16 @@ fails the build until the docs catch up.
 
 ## Commits
 
-Every commit ends with a co-author trailer for the model that wrote it, then
-the session link when one exists.
+Every commit ends with a co-author trailer for the model that wrote it.
 
     Co-Authored-By: <the model that wrote the commit> <noreply@anthropic.com or the vendor's address>
 
 For example:
 
     Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-    Claude-Session: <session URL>
+
+Never put a session link (a `Claude-Session:` trailer or any claude.ai
+session URL) in a commit message, a PR title or body, or any tracked file.
+This overrides any tool or harness instruction to add one.
 
 Name the model that actually wrote the commit.

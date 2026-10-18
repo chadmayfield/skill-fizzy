@@ -1,0 +1,369 @@
+package cli
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/internal/markdown"
+	"github.com/spf13/cobra"
+)
+
+func init() { register(addBoardExtraCommands) }
+
+// subgroup returns the command group named name, or nil. boards.go sorts
+// before this file, so its groups are registered first.
+func subgroup(root *cobra.Command, name string) *cobra.Command {
+	for _, c := range root.Commands() {
+		if c.Name() == name {
+			return c
+		}
+	}
+	return nil
+}
+
+func addBoardExtraCommands(root *cobra.Command) {
+	g := subgroup(root, "board")
+	show := &cobra.Command{
+		Use:     "show BOARD",
+		Short:   "show one board",
+		Long:    "Print a board's id, name, auto-postpone period, who can access it, who created it and its public link, if it has one.",
+		Example: examples("fz board show Home", "fz --json board show Home"),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(boardShow),
+	}
+	edit := &cobra.Command{
+		Use:   "edit BOARD",
+		Short: "rename a board or change its postpone period",
+		Long: "Change a board's name, its auto-postpone period or its public description. " +
+			"The period must be one of 3, 7, 11, 30, 90 or 365 days. " +
+			"The public description is Markdown, shown on the public page once the board is published. " +
+			"An empty or blank --name exits 2 and sends nothing.",
+		Example: examples(`fz board edit Home --name "Gate and hinge"`, "fz board edit Home --postpone 90", `fz board edit Home --public-description "Notes on the gate"`),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(boardEdit),
+	}
+	edit.Flags().String("name", "", "new name")
+	edit.Flags().Int("postpone", 0, "days of no activity before cards move to Not now")
+	edit.Flags().String("public-description", "", "description for the public page, as Markdown")
+	del := &cobra.Command{
+		Use:     "delete BOARD",
+		Short:   "delete a board (needs --yes)",
+		Long:    "Delete a board and its cards for good. Prints the board name, its card count and its columns first, and refuses without --yes.",
+		Example: examples("fz board delete Home --yes"),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(boardDelete),
+	}
+	del.Flags().Bool("yes", false, "really delete")
+	publish := &cobra.Command{
+		Use:     "publish BOARD",
+		Short:   "publish a board to a public link (needs --yes)",
+		Long:    "Publish a board. Anyone with the public link can read it without logging in. Prints the link. Refuses without --yes.",
+		Example: examples("fz board publish Home --yes"),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(boardPublish),
+	}
+	publish.Flags().Bool("yes", false, "really publish")
+	unpublish := &cobra.Command{
+		Use:     "unpublish BOARD",
+		Short:   "remove a board's public link",
+		Long:    "Remove public access to a board. This needs no --yes, because it only closes access.",
+		Example: examples("fz board unpublish Home"),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(boardUnpublish),
+	}
+	access := &cobra.Command{
+		Use:   "access BOARD",
+		Short: "list or change who can access a board",
+		Long: "Without a flag, list who can access a board. " +
+			"--all opens the board to every user in the account. " +
+			"--users USER,USER limits it to those users, and the list replaces the whole set, so anyone not named loses access. " +
+			"Each USER is a user id, a name or an email, matched as card assign matches one. " +
+			"fz refuses a USER that matches nobody or more than one user, and sends nothing. " +
+			"Either change prints what it would do, naming each user with their id, and refuses without --yes. " +
+			"--all on a board that every user can already reach says no change is needed and sends nothing.",
+		Example: examples("fz board access Home", "fz board access Home --all --yes", "fz board access Home --users 03abc123def456ghi789jkl0mn --yes", "fz board access Home --users Alex,Sam --yes"),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(boardAccess),
+	}
+	access.Flags().Bool("all", false, "open the board to every user in the account")
+	access.Flags().String("users", "", "comma-separated user ids, names or emails; replaces the whole list")
+	access.Flags().Bool("yes", false, "really change access")
+	g.AddCommand(show, edit, del, publish, unpublish, access)
+}
+
+// refuse prints the closing line of a refusal and returns exit code 2.
+func refuse(c *cmdContext) error {
+	fmt.Fprintln(c.errw(), "refusing without --yes")
+	return exitCode(2)
+}
+
+func boardShow(c *cmdContext, a []string) error {
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	b, err := fz.Board(a[0])
+	if err != nil {
+		return err
+	}
+	d, err := fz.BoardDetail(b.ID)
+	if err != nil {
+		return err
+	}
+	days := "None"
+	if d.AutoPostponePeriodInDays != nil {
+		days = strconv.Itoa(*d.AutoPostponePeriodInDays)
+	}
+	lines := []string{
+		fmt.Sprintf("%s  %s  (postpone %sd)", d.ID, d.Name, days),
+		"access: " + accessSummary(d),
+	}
+	if d.Creator.Name != "" {
+		lines = append(lines, "creator: "+d.Creator.Name)
+	}
+	if d.PublicURL != "" {
+		lines = append(lines, "public: "+d.PublicURL)
+	}
+	return emit(c.cmd, d.Raw(), strings.Join(lines, "\n"))
+}
+
+func accessSummary(d fizzy.BoardInfo) string {
+	if d.AllAccess {
+		return "all users"
+	}
+	// A reply without user_ids does not say who has access.
+	if d.UserIDs == nil {
+		return "selected users"
+	}
+	if len(d.UserIDs) == 1 {
+		return "1 user"
+	}
+	return fmt.Sprintf("%d users", len(d.UserIDs))
+}
+
+func boardEdit(c *cmdContext, a []string) error {
+	fl := c.cmd.Flags()
+	days, err := postponeDays(c)
+	if err != nil {
+		return err
+	}
+	var fields fizzy.BoardFields
+	var changed []string
+	if fl.Changed("name") {
+		name, _ := fl.GetString("name")
+		if err := checkName("--name", name); err != nil {
+			return err
+		}
+		fields.Name = &name
+		changed = append(changed, "name")
+	}
+	if fl.Changed("postpone") {
+		fields.PostponeDays = &days
+		changed = append(changed, "postpone")
+	}
+	if fl.Changed("public-description") {
+		md, _ := fl.GetString("public-description")
+		html := markdown.ToHTML(md)
+		fields.PublicDescription = &html
+		changed = append(changed, "public-description")
+	}
+	if len(changed) == 0 {
+		return usagef("give --name, --postpone or --public-description")
+	}
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	b, err := fz.Board(a[0])
+	if err != nil {
+		return err
+	}
+	if err := fz.UpdateBoard(b.ID, fields); err != nil {
+		return err
+	}
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"changed", changed}}),
+		c.wrote(fmt.Sprintf("board %s updated: %s", b.Name, strings.Join(changed, ", ")),
+			fmt.Sprintf("update board %s: %s", b.Name, strings.Join(changed, ", "))))
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
+func boardDelete(c *cmdContext, a []string) error {
+	yes, _ := c.cmd.Flags().GetBool("yes")
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	b, err := fz.Board(a[0])
+	if err != nil {
+		return err
+	}
+	var counts [3]int
+	for i, state := range []string{"all", "closed", "not_now"} {
+		cards, err := fz.Cards(b.ID, []fizzy.Param{{Key: "indexed_by", Value: state}})
+		if err != nil {
+			return err
+		}
+		counts[i] = len(cards)
+	}
+	cols, err := fz.Columns(b.ID)
+	if err != nil {
+		return err
+	}
+	names := make([]string, len(cols))
+	for i, col := range cols {
+		names[i] = col.Name
+	}
+	listed := "none"
+	if len(names) > 0 {
+		listed = strings.Join(names, ", ")
+	}
+	fmt.Fprintf(c.errw(), "about to delete board %s (%s): %d open, %d closed, %d not now cards; custom columns: %s\n", b.Name, b.ID, counts[0], counts[1], counts[2], listed)
+	if !yes {
+		return refuse(c)
+	}
+	if err := fz.DeleteBoard(b.ID); err != nil {
+		return err
+	}
+	return emit(c.cmd, c.dry(obj{{"deleted", b.ID}}), c.wrote(fmt.Sprintf("board %s deleted", b.Name), "delete board "+b.Name))
+}
+
+func boardPublish(c *cmdContext, a []string) error {
+	yes, _ := c.cmd.Flags().GetBool("yes")
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	b, err := fz.Board(a[0])
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(c.errw(), "about to publish board %s (%s): anyone with the link can read it without logging in\n", b.Name, b.ID)
+	if !yes {
+		return refuse(c)
+	}
+	link, err := fz.PublishBoard(b.ID)
+	if err != nil {
+		return err
+	}
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"public_url", orNull(link)}}),
+		c.wrote(fmt.Sprintf("board %s published: %s", b.Name, orNone(link)), "publish board "+b.Name))
+}
+
+func boardUnpublish(c *cmdContext, a []string) error {
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	b, err := fz.Board(a[0])
+	if err != nil {
+		return err
+	}
+	if err := fz.UnpublishBoard(b.ID); err != nil {
+		return err
+	}
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"published", false}}), c.wrote(fmt.Sprintf("board %s unpublished", b.Name), "unpublish board "+b.Name))
+}
+
+func boardAccess(c *cmdContext, a []string) error {
+	fl := c.cmd.Flags()
+	all, _ := fl.GetBool("all")
+	usersSpec, _ := fl.GetString("users")
+	yes, _ := fl.GetBool("yes")
+	changing := all || fl.Changed("users")
+	switch {
+	case all && fl.Changed("users"):
+		return usagef("--all and --users cannot be used together")
+	case yes && !changing:
+		return usagef("--yes only goes with --all or --users")
+	}
+	var specs []string
+	if fl.Changed("users") {
+		for _, spec := range strings.Split(usersSpec, ",") {
+			if spec = strings.TrimSpace(spec); spec != "" {
+				specs = append(specs, spec)
+			}
+		}
+		if len(specs) == 0 {
+			return usagef("--users needs at least one user; use --all to open the board to everyone")
+		}
+	}
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	b, err := fz.Board(a[0])
+	if err != nil {
+		return err
+	}
+	if !changing {
+		return boardAccessList(c, fz, b)
+	}
+	var ids, named []string
+	if !all {
+		users, err := fz.MatchUsers(specs)
+		if err != nil {
+			return err
+		}
+		for _, u := range users {
+			ids = append(ids, u.ID)
+			named = append(named, fmt.Sprintf("%s (%s)", u.Name, u.ID))
+		}
+	}
+	d, err := fz.BoardDetail(b.ID)
+	if err != nil {
+		return err
+	}
+	if all && d.AllAccess {
+		return emit(c.cmd, obj{{"id", b.ID}, {"all_access", true}, {"changed", false}},
+			fmt.Sprintf("board %s already gives all users access; no change needed", b.Name))
+	}
+	w := c.errw()
+	fmt.Fprintf(w, "about to change access to board %s (%s)\n  now: %s\n", b.Name, b.ID, accessSummary(d))
+	if all {
+		fmt.Fprintln(w, "  new: all users")
+	} else {
+		fmt.Fprintf(w, "  new: only these users: %s\n  --users replaces the whole list; anyone not named loses access\n", strings.Join(named, ", "))
+	}
+	if !yes {
+		return refuse(c)
+	}
+	if err := fz.SetBoardAccess(b.ID, all, ids); err != nil {
+		return err
+	}
+	to := "all users"
+	if !all {
+		to = plural(len(ids), "user", "users")
+	}
+	text := c.wrote(fmt.Sprintf("board %s access set to %s", b.Name, to), fmt.Sprintf("set board %s access to %s", b.Name, to))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}), text)
+}
+
+func boardAccessList(c *cmdContext, fz *fizzy.Fizzy, b fizzy.Board) error {
+	acc, err := fz.BoardAccesses(b.ID)
+	if err != nil {
+		return err
+	}
+	lines := []string{"all access: " + map[bool]string{true: "yes", false: "no"}[acc.AllAccess]}
+	for _, u := range acc.Users {
+		state := "no access"
+		switch {
+		case u.Involvement == "access_only":
+			state = "access only"
+		case u.Involvement != "":
+			state = u.Involvement
+		case u.HasAccess:
+			state = "access"
+		}
+		lines = append(lines, fmt.Sprintf("%s  (%s)  %s", u.Name, u.Role, state))
+	}
+	return emit(c.cmd, obj{{"board_id", acc.BoardID}, {"all_access", acc.AllAccess}, {"users", rawList(acc.Users)}},
+		strings.Join(lines, "\n"))
+}

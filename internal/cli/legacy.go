@@ -59,6 +59,35 @@ func oldStep(rest []string) []string {
 	return append([]string{"step", "add"}, rest...)
 }
 
+// valueFlags are the flags that can sit after "tag" and take the next word
+// as their value: the root's persistent --config. card tag's own flags take
+// no value.
+var valueFlags = map[string]bool{"--config": true}
+
+// oldTag rewrites the arguments after "tag" in "tag N TAG" to "card tag N
+// TAG". Flags before the card number, such as "tag --remove N TAG", move to
+// the end with their values. Everything from the number on keeps its order.
+// It reports false unless the first word that is not a flag or a flag value
+// is a card number, so "tag list" stays as it is. Later words are tags, even
+// "list".
+func oldTag(rest []string) ([]string, bool) {
+	var lead []string
+	i := 0
+	for i < len(rest) && strings.HasPrefix(rest[i], "-") {
+		lead = append(lead, rest[i])
+		if valueFlags[rest[i]] && i+1 < len(rest) {
+			lead = append(lead, rest[i+1])
+			i++
+		}
+		i++
+	}
+	if i >= len(rest) || !isNumber(rest[i]) {
+		return nil, false
+	}
+	out := append([]string{"card", "tag"}, rest[i:]...)
+	return append(out, lead...), true
+}
+
 // Rewrite turns fz 0.1 command lines into the noun form before cobra parses them.
 func Rewrite(args []string) []string {
 	i := commandIndex(args)
@@ -70,10 +99,14 @@ func Rewrite(args []string) []string {
 	if to, ok := simple[cmd]; ok {
 		return append(append(head, to...), rest...)
 	}
+	if cmd == "tag" {
+		if to, ok := oldTag(rest); ok {
+			return append(head, to...)
+		}
+		return args
+	}
 	numbered := len(rest) > 0 && isNumber(rest[0])
 	switch {
-	case cmd == "tag" && numbered:
-		return append(append(head, "card", "tag"), rest...)
 	case cmd == "step" && numbered:
 		return append(head, oldStep(rest)...)
 	case cmd == "comment" && numbered:

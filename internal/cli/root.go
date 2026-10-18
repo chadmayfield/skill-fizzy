@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,8 @@ func NewRoot() *cobra.Command {
 }
 
 // run rewrites old command forms, executes root with args and returns the
-// process exit code: 0 on success, 1 for errors, 2 for usage errors.
+// process exit code: 0 on success, 1 for errors, 2 for usage errors and
+// refusals.
 func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 	args = Rewrite(args)
 	root.SetArgs(args)
@@ -72,7 +74,7 @@ func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 		return int(code)
 	}
 	fmt.Fprintf(errw, "fz: %s\n", errorText(err))
-	if _, ok := err.(usageError); ok || strings.HasPrefix(err.Error(), "unknown command") {
+	if _, ok := err.(usageError); ok || fizzy.IsRefusal(err) || strings.HasPrefix(err.Error(), "unknown command") {
 		return 2
 	}
 	return 1

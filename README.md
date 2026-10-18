@@ -34,6 +34,7 @@ Then check that `fz` can reach the server with `fz board list`.
 ```sh
 fz card list --board Home
 fz card create Home "Fix the gate" --column Next --tag buy
+fz card assign 87 "Gate Keeper"
 fz step add 87 "Order the hinge"
 fz card move 87 --to done
 fz draft apply --update gate.md
@@ -50,4 +51,5 @@ them. `fz help` lists the commands.
   problem.
 - [AGENTS.md](AGENTS.md): how to build, test and change this repo, for people
   and coding agents.
+- [Contributing](CONTRIBUTING.md): build, test and pull requests, for human contributors.
 - [License](LICENSE): MIT.

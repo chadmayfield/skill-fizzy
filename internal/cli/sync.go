@@ -77,6 +77,32 @@ func guardDrafts(fz *fizzy.Fizzy, drafts []*draft.Draft) ([]error, error) {
 	return refused, nil
 }
 
+// dryRunWords pairs each syncDraft report line that records a write with
+// the words for the same change not yet made. Longer prefixes come first.
+var dryRunWords = []struct{ done, would string }{
+	{"moved to board ", "move to board "},
+	{"moved to ", "move to "},
+	{"title and description sent", "send the title and description"},
+	{"step added: ", "add step: "},
+	{"step ticked: ", "tick step: "},
+	{"step deleted: ", "delete step: "},
+	{"tag added: ", "add tag: "},
+	{"tag removed: ", "remove tag: "},
+	{"golden on", "turn golden on"},
+	{"golden off", "turn golden off"},
+}
+
+// dryRunLine rewords a syncDraft report line for --dry-run, where nothing
+// was sent. A line that records no write comes back as it is.
+func dryRunLine(line string) string {
+	for _, w := range dryRunWords {
+		if rest, ok := strings.CutPrefix(line, w.done); ok {
+			return "dry-run: nothing sent; would " + w.would + rest
+		}
+	}
+	return line
+}
+
 // syncDraft pushes a draft onto its existing card d.Card and returns one
 // report line per change. Unless force is set, it refuses a draft with no
 // usable synced: line, or one whose card changed in Fizzy since synced:,
