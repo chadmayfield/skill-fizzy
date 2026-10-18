@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// runHookIn runs the Go hook for the gatehouse folder with the given map.
+// runHookWithMap writes repos as the map and runs the Go hook in dir.
 func runHookWithMap(t *testing.T, f hookFixture, repos, dir string) result {
 	t.Helper()
 	writeFile(t, f.mapPath, repos)
