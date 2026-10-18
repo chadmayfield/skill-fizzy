@@ -35,8 +35,10 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 	if err != nil {
 		return UserMatch{}, false, err
 	}
+	// Assignees is a pointer so a reply without the key is told apart from
+	// an empty list.
 	var card struct {
-		Assignees []struct {
+		Assignees *[]struct {
 			ID string `json:"id"`
 		} `json:"assignees"`
 		HasMore bool `json:"has_more_assignees"`
@@ -44,8 +46,11 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 	if err := f.C.Get("/cards/"+strconv.Itoa(n), &card); err != nil {
 		return u, false, err
 	}
+	if card.Assignees == nil {
+		return u, false, refusef("card #%d has no assignees list in Fizzy's reply, so fz cannot tell whether %s is assigned", n, u.Name)
+	}
 	present := false
-	for _, a := range card.Assignees {
+	for _, a := range *card.Assignees {
 		present = present || a.ID == u.ID
 	}
 	if !present && card.HasMore {

@@ -371,3 +371,14 @@ func TestCardAssignRefusesWhenListIsCut(t *testing.T) {
 		t.Errorf("writes %+v", w)
 	}
 }
+
+func TestCardAssignRefusesWithoutAssignees(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87}`)
+	r := runGo([]string{"card", "unassign", "87", "u1"})
+	if r.code != 2 || r.stderr != "fz: card #87 has no assignees list in Fizzy's reply, so fz cannot tell whether Gate Keeper is assigned\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 0 {
+		t.Errorf("writes %+v", w)
+	}
+}

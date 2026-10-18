@@ -219,3 +219,20 @@ func TestFindTag(t *testing.T) {
 		t.Errorf("missing: %v", err)
 	}
 }
+
+// A card reply without an assignees key says nothing about who is
+// assigned, so fz refuses rather than send a toggle blind.
+func TestAssignRefusesWithoutAssignees(t *testing.T) {
+	f, s, _, _ := newFizzy(t, false, cardServer(`{"number":87}`))
+	for _, op := range []func(int, string) (UserMatch, bool, error){f.Assign, f.Unassign} {
+		_, changed, err := op(87, "u2")
+		if !IsRefusal(err) || changed || err.Error() != "card #87 has no assignees list in Fizzy's reply, so fz cannot tell whether Hinge Smith is assigned" {
+			t.Errorf("err = %v, changed %v", err, changed)
+		}
+	}
+	for _, c := range s.calls {
+		if c.Method != http.MethodGet {
+			t.Errorf("sent %s %s", c.Method, c.Path)
+		}
+	}
+}
