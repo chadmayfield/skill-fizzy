@@ -99,11 +99,11 @@ func newHookFixture(t *testing.T) hookFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(string(src), "TIMEOUT = 5"); n != 1 {
-		t.Fatalf("expected one TIMEOUT = 5 in the hook script, found %d", n)
+	if n := strings.Count(string(src), "TIMEOUT = 3"); n != 1 {
+		t.Fatalf("expected one TIMEOUT = 3 in the hook script, found %d", n)
 	}
 	f.script = filepath.Join(t.TempDir(), "fizzy-session-hook.py")
-	writeFile(t, f.script, strings.Replace(string(src), "TIMEOUT = 5", "TIMEOUT = 60", 1))
+	writeFile(t, f.script, strings.Replace(string(src), "TIMEOUT = 3", "TIMEOUT = 60", 1))
 	f.home = parityEnv(t, srv)
 	for _, d := range []string{"gatehouse", "shed/latch", "hinge", "porch", "attic", "stoop", "gable", "eave", "sill", "deck"} {
 		if err := os.MkdirAll(filepath.Join(f.root, d), 0o755); err != nil {
@@ -345,7 +345,8 @@ func TestHookTimeout(t *testing.T) {
 	if r != (result{"", "", 0}) {
 		t.Errorf("got %+v", r)
 	}
-	if d := time.Since(start); d > 3*time.Second {
-		t.Errorf("took %v, want about %v", d, hookTimeout)
+	// A slow server must not stretch the hook past its limit.
+	if d := time.Since(start); d > hookTimeout+100*time.Millisecond {
+		t.Errorf("took %v, want at most %v", d, hookTimeout)
 	}
 }

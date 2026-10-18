@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -52,9 +53,14 @@ func TestHookKillsHungTokenCommand(t *testing.T) {
 	hookTimeout = time.Second
 	t.Cleanup(func() { hookTimeout = old })
 
+	start := time.Now()
 	r := runHook(`{"cwd":"` + filepath.Join(f.root, "gatehouse") + `"}`)
 	if r != (result{"", "", 0}) {
 		t.Errorf("got %+v", r)
+	}
+	// The cleanup fits inside the limit; the hook never runs past it.
+	if d := time.Since(start); d > hookTimeout+100*time.Millisecond {
+		t.Errorf("took %v, want at most %v", d, hookTimeout)
 	}
 	time.Sleep(time.Second)
 	checkAllDead(t, pidFile)
@@ -75,15 +81,20 @@ func TestPythonHookKillsHungFz(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, f.script, strings.Replace(string(src), "TIMEOUT = 60", "TIMEOUT = 1", 1))
+	script := regexp.MustCompile(`(?m)^TIMEOUT = [0-9.]+`).ReplaceAllString(string(src), "TIMEOUT = 1")
+	if script == string(src) {
+		t.Fatal("no TIMEOUT line to shorten in the script")
+	}
+	writeFile(t, f.script, script)
 
 	start := time.Now()
 	r := runPythonHook(t, f, f.root, `{"cwd":"`+filepath.Join(f.root, "gatehouse")+`"}`)
 	if r != (result{"", "", 0}) {
 		t.Errorf("got %+v", r)
 	}
-	if d := time.Since(start); d > 10*time.Second {
-		t.Errorf("took %v", d)
+	// TIMEOUT bounds the whole script, not each fz call.
+	if d := time.Since(start); d > 1500*time.Millisecond {
+		t.Errorf("took %v, want about 1 s", d)
 	}
 	time.Sleep(time.Second)
 	checkAllDead(t, pidFile)
