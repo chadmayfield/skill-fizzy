@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
@@ -531,5 +532,38 @@ func TestStorageErrorHasNoBody(t *testing.T) {
 	}
 	if len(payload) != 0 {
 		t.Errorf("payload %q", payload)
+	}
+}
+
+// One list read, all its pages together, has a time limit. A server that
+// answers each page slowly cannot hold fz for hours: past the limit the
+// read stops with an error, even in the middle of a page.
+func TestListTimeLimit(t *testing.T) {
+	if ListTimeout != 10*time.Minute {
+		t.Errorf("ListTimeout = %v, want 10 minutes", ListTimeout)
+	}
+	old := ListTimeout
+	ListTimeout = 400 * time.Millisecond
+	t.Cleanup(func() { ListTimeout = old })
+	var hits atomic.Int32
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := hits.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		w.Header().Set("Link", fmt.Sprintf(`<%s/1/tags?page=%d>; rel="next"`, srv.URL, n+1))
+		fmt.Fprint(w, `["hinge"]`)
+	}))
+	defer srv.Close()
+	c, _, _ := newTestClient(t, srv, false)
+	start := time.Now()
+	items, err := c.GetAll("/tags")
+	if err == nil || !strings.Contains(err.Error(), "took more than") || items != nil {
+		t.Errorf("items=%d err=%v", len(items), err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("took %v", d)
+	}
+	if got := hits.Load(); got > 4 {
+		t.Errorf("%d requests, want at most 4", got)
 	}
 }

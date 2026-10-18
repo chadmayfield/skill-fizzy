@@ -1187,7 +1187,9 @@ command yourself in a terminal to see its error.
 
 A request that takes longer than 60 seconds fails. Sending a file's bytes,
 for `fz upload` or a draft image, gets 10 minutes instead, so a large file
-on a slow link can finish. If every command times
+on a slow link can finish. A list that Fizzy sends in pages, such as
+`fz card list`, gets 10 minutes for all its pages together, then stops with
+an error. If every command times
 out but the server works in a browser, something on your machine is
 blocking `fz`. On macOS, check Local Network permission in System Settings,
 under Privacy & Security, Local Network. Check any outbound firewall, such
