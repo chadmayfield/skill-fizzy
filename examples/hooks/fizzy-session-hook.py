@@ -135,6 +135,9 @@ def main():
 
     def line(c):
         col = (c.get("column") or {}).get("name") or "Maybe?"
+        # Fizzy reports a card in Not now with no column and postponed true.
+        if c.get("postponed") is True and c.get("column") is None:
+            col = "Not now"
         star = " ★" if c.get("golden") else ""
         # The column name and the title are JSON string literals, so a
         # quote or backslash in them cannot end them early.

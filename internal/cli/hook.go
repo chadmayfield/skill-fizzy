@@ -179,6 +179,10 @@ func hookLine(c fizzy.Card) string {
 	if c.Column != nil && c.Column.Name != "" {
 		col = c.Column.Name
 	}
+	// Fizzy reports a card in Not now with no column and postponed true.
+	if c.Postponed && c.Column == nil {
+		col = "Not now"
+	}
 	star := ""
 	if c.Golden {
 		star = " ★"

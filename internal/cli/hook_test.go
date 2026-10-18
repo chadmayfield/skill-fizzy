@@ -33,7 +33,8 @@ var hookCards = map[string]string{
  {"number":91,"title":"Measure the gap","column":{"id":"c3","name":"Waiting"},"golden":false},
  {"number":94,"title":"Oil\u0007 the\u001b[2J\nlatch\u2028\u202e\u200b","column":{"id":"c2","name":"Now"},"golden":false},
  {"number":95,"title":"Fit the\u2066 bolt\r","column":{"id":"c5","name":"Wait\u0000ing\u0085\u202e\ufeff"},"golden":false},
- {"number":96,"title":"Say \"stop\" \\ at the caf\u00e9 gate","column":{"id":"c1","name":"Next"},"golden":false}
+ {"number":96,"title":"Say \"stop\" \\ at the caf\u00e9 gate","column":{"id":"c1","name":"Next"},"golden":false},
+ {"number":97,"title":"Store the gate","column":null,"postponed":true,"golden":false}
 ]`,
 	"Garden": `[
  {"number":92,"title":"Hang the garden gate","column":null,"golden":false},
@@ -58,7 +59,8 @@ const hookMap = `{
  "truss": {"board": "Home", "card": {"n": 88}},
  "purlin": {"board": "Home", "card": 99999999999999999999},
  "ridge": {"board": "Home", "card": false},
- "lath": {"board": "Home", "card": 0.0}
+ "lath": {"board": "Home", "card": 0.0},
+ "soffit": {"board": "Home", "card": 97}
 }`
 
 // hookServer answers the two calls the hook makes and counts every request.
@@ -112,7 +114,7 @@ func newHookFixture(t *testing.T) hookFixture {
 	f.script = filepath.Join(t.TempDir(), "fizzy-session-hook.py")
 	writeFile(t, f.script, strings.Replace(string(src), "TIMEOUT = 3", "TIMEOUT = 60", 1))
 	f.home = parityEnv(t, srv)
-	for _, d := range []string{"gatehouse", "shed/latch", "hinge", "porch", "attic", "stoop", "gable", "eave", "sill", "deck", "rafter", "joist", "beam", "truss", "purlin", "ridge", "lath"} {
+	for _, d := range []string{"gatehouse", "shed/latch", "hinge", "porch", "attic", "stoop", "gable", "eave", "sill", "deck", "rafter", "joist", "beam", "truss", "purlin", "ridge", "lath", "soffit"} {
 		if err := os.MkdirAll(filepath.Join(f.root, d), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -224,6 +226,7 @@ func TestHookParity(t *testing.T) {
 		{name: "board with Now and Next", stdin: stdin("gatehouse"), want: nowNext},
 		{name: "nothing in Now or Next", stdin: stdin("shed"), want: nothing},
 		{name: "golden card entry", stdin: stdin("hinge"), want: card(`  #88 ["Now"] "Oil the hinge" ★`)},
+		{name: "card in Not now", stdin: stdin("soffit"), want: card(`  #97 ["Not now"] "Store the gate"`)},
 		{name: "card in Maybe? and the deepest name wins", stdin: stdin("shed/latch"), want: card(`  #89 ["Maybe?"] "Buy hinge pins"`)},
 		{name: "card not open", stdin: stdin("porch"), want: "Fizzy: this repo's card is on the Home board:\n  #120 (not open)\n"},
 		{name: "card as a string matches", stdin: stdin("stoop"), want: card(`  #88 ["Now"] "Oil the hinge" ★`)},

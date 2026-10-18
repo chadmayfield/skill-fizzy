@@ -198,6 +198,10 @@ func cardLine(c fizzy.Card) string {
 	if c.Column != nil && c.Column.Name != "" {
 		state = line(c.Column.Name)
 	}
+	// Fizzy reports a card in Not now with no column and postponed true.
+	if c.Postponed && c.Column == nil {
+		state = "not now"
+	}
 	if c.Closed {
 		state = "done"
 	}
