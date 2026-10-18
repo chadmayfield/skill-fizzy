@@ -27,7 +27,9 @@ var hookCards = map[string]string{
  {"number":88,"title":"Oil the hinge","column":{"id":"c2","name":"Now"},"golden":true},
  {"number":89,"title":"Buy hinge pins","column":null,"golden":false},
  {"number":90,"title":"Paint the gate","column":{"id":"c2","name":"Now"},"golden":false},
- {"number":91,"title":"Measure the gap","column":{"id":"c3","name":"Waiting"},"golden":false}
+ {"number":91,"title":"Measure the gap","column":{"id":"c3","name":"Waiting"},"golden":false},
+ {"number":94,"title":"Oil\u0007 the\u001b[2J\nlatch\u2028","column":{"id":"c2","name":"Now"},"golden":false},
+ {"number":95,"title":"Fit the bolt\r","column":{"id":"c5","name":"Wait\u0000ing\u0085"},"golden":false}
 ]`,
 	"Garden": `[
  {"number":92,"title":"Hang the garden gate","column":null,"golden":false},
@@ -42,6 +44,9 @@ const hookMap = `{
  "hinge": {"board": "Home", "card": 88},
  "porch": {"board": "Home", "card": 120},
  "stoop": {"board": "Home", "card": "88"},
+ "gable": {"board": "Home", "card": " 95 "},
+ "eave": {"board": "Home", "card": "x7"},
+ "sill": {"board": "Home", "card": "0"},
  "deck": {"board": "Home", "card": 0}
 }`
 
@@ -96,7 +101,7 @@ func newHookFixture(t *testing.T) hookFixture {
 	f.script = filepath.Join(t.TempDir(), "fizzy-session-hook.py")
 	writeFile(t, f.script, strings.Replace(string(src), "TIMEOUT = 5", "TIMEOUT = 60", 1))
 	f.home = parityEnv(t, srv)
-	for _, d := range []string{"gatehouse", "shed/latch", "hinge", "porch", "attic", "stoop", "deck"} {
+	for _, d := range []string{"gatehouse", "shed/latch", "hinge", "porch", "attic", "stoop", "gable", "eave", "sill", "deck"} {
 		if err := os.MkdirAll(filepath.Join(f.root, d), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -195,7 +200,7 @@ func TestHookParity(t *testing.T) {
 	}
 	stdin := func(dir string) string { return `{"session_id":"s1","cwd":"` + filepath.Join(f.root, dir) + `"}` }
 	nowNext := "Fizzy: this repo maps to the Home board.\nOpen cards in Now and Next:\n" +
-		"  #88 [Now] Oil the hinge ★\n  #90 [Now] Paint the gate\n  #87 [Next] Fix the gate\n"
+		"  #88 [Now] Oil the hinge ★\n  #90 [Now] Paint the gate\n  #94 [Now] Oil the[2Jlatch\n  #87 [Next] Fix the gate\n"
 	nothing := "Fizzy: this repo maps to the Garden board.\nNothing in Now or Next.\n"
 	cases := []struct {
 		name, stdin, dir, want string
@@ -206,7 +211,10 @@ func TestHookParity(t *testing.T) {
 		{name: "golden card entry", stdin: stdin("hinge"), want: "Fizzy: this repo's card is on the Home board:\n  #88 [Now] Oil the hinge ★\n"},
 		{name: "card in Maybe? and the deepest name wins", stdin: stdin("shed/latch"), want: "Fizzy: this repo's card is on the Home board:\n  #89 [Maybe?] Buy hinge pins\n"},
 		{name: "card not open", stdin: stdin("porch"), want: "Fizzy: this repo's card is on the Home board:\n  #120 (not open)\n"},
-		{name: "card as a string never matches", stdin: stdin("stoop"), want: "Fizzy: this repo's card is on the Home board:\n  #88 (not open)\n"},
+		{name: "card as a string matches", stdin: stdin("stoop"), want: "Fizzy: this repo's card is on the Home board:\n  #88 [Now] Oil the hinge ★\n"},
+		{name: "card string with spaces, control characters stripped", stdin: stdin("gable"), want: "Fizzy: this repo's card is on the Home board:\n  #95 [Waiting] Fit the bolt\n"},
+		{name: "card string that is not a number", stdin: stdin("eave"), want: "Fizzy: this repo's card is on the Home board:\n  #x7 (not open)\n"},
+		{name: "card string 0 means the whole board", stdin: stdin("sill"), want: nowNext},
 		{name: "card 0 means the whole board", stdin: stdin("deck"), want: nowNext},
 		{name: "unmapped folder", stdin: stdin("attic"), want: ""},
 		{name: "git worktree resolves to its repo", stdin: stdin("shed/feature-x"), want: nowNext},
