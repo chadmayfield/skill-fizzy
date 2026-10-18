@@ -9,8 +9,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -161,7 +163,20 @@ func hookLine(c fizzy.Card) string {
 	if c.Golden {
 		star = " ★"
 	}
-	return fmt.Sprintf("  #%d [%s] %s%s", c.Number, col, c.Title, star)
+	return fmt.Sprintf("  #%d [%s] %s%s", c.Number, stripControl(col), stripControl(c.Title), star)
+}
+
+// stripControl removes control characters (Unicode Cc) and the line and
+// paragraph separators from server text. The hook's output goes into the
+// session context, so a card title must not be able to start a new line or
+// send a terminal escape.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // sessionCwd returns the cwd field of the session JSON, or the current
@@ -241,9 +256,17 @@ func mapEntry(ctx context.Context, cwd string) (board string, focus hookFocus, o
 			return "", focus, false
 		}
 	case string:
-		// Python never matches a string to a card number, so it prints
-		// "(not open)" for it.
-		focus = hookFocus{text: card}
+		// A number written as a string, such as "87", means card 87, and
+		// "0" means the whole board, like 0. Any other string matches no
+		// card, so it prints "(not open)".
+		t := strings.TrimSpace(card)
+		if n, err := strconv.ParseInt(t, 10, 64); err == nil && t != "" && strings.Trim(t, "0123456789") == "" {
+			if n != 0 {
+				focus = hookFocus{text: strconv.FormatInt(n, 10), num: n, isNum: true}
+			}
+		} else if card != "" {
+			focus = hookFocus{text: stripControl(card)}
+		}
 	default:
 		if pyTruthy(card) {
 			return "", focus, false

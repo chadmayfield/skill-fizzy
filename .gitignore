@@ -1,9 +1,16 @@
-# local config and drafts never belong in the repo
-config.json
+# local config, repos maps and drafts never belong in the repo
+/config.json
+repos.json
 drafts/
 
+# build and test output
 /fz
 /dist
+cmd/fz/fz
+*.test
+coverage.out
+
+.DS_Store
 
 # private agent and planning files, never published
 .superpowers/

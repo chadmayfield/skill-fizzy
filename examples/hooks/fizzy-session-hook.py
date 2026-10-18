@@ -9,8 +9,10 @@ this hook must never get in the way of starting a session.
 """
 import json
 import os
+import re
 import subprocess
 import sys
+import unicodedata
 
 MAP = os.path.expanduser(os.environ.get("FIZZY_REPOS_MAP", "~/.config/fizzy-skill/repos.json"))
 FZ = os.path.expanduser(os.environ.get("FIZZY_FZ", "~/.local/bin/fz"))
@@ -21,6 +23,22 @@ def run(*args):
     out = subprocess.run(args, capture_output=True, text=True, timeout=TIMEOUT)
     out.check_returncode()
     return out.stdout.strip()
+
+
+def clean(text):
+    """Drop control characters and line separators from server text.
+
+    The output goes into the session context, so a card title must not be
+    able to start a new line or send a terminal escape.
+    """
+    return "".join(ch for ch in str(text) if unicodedata.category(ch) not in ("Cc", "Zl", "Zp"))
+
+
+def card_number(value):
+    """Read the map's card entry. A number written as a string counts."""
+    if isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
+        return int(value.strip())
+    return value
 
 
 def repo_names(cwd):
@@ -53,19 +71,19 @@ def main():
 
     board = entry["board"]
     cards = json.loads(run(FZ, "--json", "cards", "--board", board))
-    focus = entry.get("card")
+    focus = card_number(entry.get("card"))
 
     def line(c):
         col = (c.get("column") or {}).get("name") or "Maybe?"
         star = " ★" if c.get("golden") else ""
-        return f"  #{c['number']} [{col}] {c['title']}{star}"
+        return f"  #{c['number']} [{clean(col)}] {clean(c.get('title') or '')}{star}"
 
     # A repo mapped to one card shows only that card; the rest of the
     # board has nothing to do with the repo.
     if focus:
         picked = [c for c in cards if c["number"] == focus]
         print(f"Fizzy: this repo's card is on the {board} board:")
-        print("\n".join(line(c) for c in picked) or f"  #{focus} (not open)")
+        print("\n".join(line(c) for c in picked) or f"  #{clean(focus)} (not open)")
         print("Follow the fizzy-cards skill's rules for moving cards and ticking steps.")
         return
 

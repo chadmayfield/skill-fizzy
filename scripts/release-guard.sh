@@ -5,7 +5,8 @@
 # the file named by GITHUB_OUTPUT when that variable is set, and exits 0.
 # On any rejection it prints the reason on stderr, writes nothing to
 # GITHUB_OUTPUT and exits 1.
-# Run it inside the checkout, after "git fetch origin main".
+# Run it inside a checkout that has origin/main, such as actions/checkout
+# with fetch-depth 0.
 set -eu
 
 fail() {
@@ -61,6 +62,26 @@ while [ -n "$remaining" ]; do
 	esac
 done
 [ "$parts" -eq 3 ] || fail "tag '$tag' is not vMAJOR.MINOR.PATCH"
+
+# Each dot-separated pre-release identifier must be non-empty, and a
+# numeric one must not have a leading zero, as SemVer 2.0.0 requires.
+if [ -n "$pre" ]; then
+	remaining=$pre.
+	while [ -n "$remaining" ]; do
+		p=${remaining%%.*}
+		remaining=${remaining#*.}
+		case "$p" in
+		"") fail "tag '$tag' has an empty pre-release identifier" ;;
+		0) ;;
+		0*)
+			case "$p" in
+			*[!0-9]*) ;;
+			*) fail "tag '$tag' has a zero-padded pre-release number" ;;
+			esac
+			;;
+		esac
+	done
+fi
 
 git merge-base --is-ancestor "$sha" origin/main || fail "tag '$tag' ($sha) is not on origin/main"
 

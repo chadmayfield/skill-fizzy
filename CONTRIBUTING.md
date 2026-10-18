@@ -57,7 +57,17 @@ commit that is already on `main`. The release workflow checks the tag with
 `scripts/release-guard.sh`, runs the tests, builds the archives and
 publishes the release. A tag with a suffix becomes a prerelease.
 
+The workflow attests the archives only while the repository is public. It
+is not confirmed that attestations work on a private repository, so the
+step is skipped there, and a test tag on the private repository still
+releases, without attestations.
+
+`make dist` is reproducible. The build date is the commit time, or
+`SOURCE_DATE_EPOCH` when it is set, so two builds of one commit with the
+same Go, tar and gzip give the same checksums.
+
 ## Security
 
-Report a security problem through GitHub's private vulnerability reporting,
-not a public issue. See [SECURITY.md](SECURITY.md).
+Report a security problem privately, not in a public issue.
+[SECURITY.md](SECURITY.md) says how, both while the repository is private
+and once it is public.

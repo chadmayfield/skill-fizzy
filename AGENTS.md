@@ -62,9 +62,13 @@ change the guide and the command's help text in the same commit.
 - `make vuln` runs `govulncheck ./...`, if you have it installed.
 - `make tidy` runs `go mod tidy`.
 - Releases: push a tag named `vMAJOR.MINOR.PATCH`, with an optional `-suffix`, on a commit that is already on `main`.
-  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name (no leading zeros, no line breaks) or a commit not on `origin/main`, and records the kind in `GITHUB_OUTPUT`.
-  It then runs the tests, runs `make dist`, attests the archives and publishes the GitHub release. A tag with a suffix is published as a prerelease.
-- CI runs the gofmt check, `go vet`, the race tests and a build, plus `govulncheck` as advisory only.
+  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name or a commit not on `origin/main`, and records the kind in `GITHUB_OUTPUT`.
+  The guard rejects leading zeros, line breaks, and a suffix with an empty or zero-padded numeric part, such as `-rc.01` or `-a..b`.
+  It then runs the tests, runs `make dist` and publishes the GitHub release. A tag with a suffix is published as a prerelease.
+  The archives are attested only while the repository is public. On the private repository that step is skipped.
+- `make dist` is reproducible. The build date is `SOURCE_DATE_EPOCH` if set, else the commit time, never the clock. The archives carry that time, owner 0 and sorted names.
+- CI runs the gofmt check, `go vet`, the race tests, the release build test with `FZ_TEST_DIST=1`, a build and `govulncheck` v1.9.0. A govulncheck finding fails the build.
+- The actions are pinned to commit SHAs, with the version in a comment. Dependabot proposes minor and patch updates to them, and to the Go modules, weekly.
 
 ## Adding a command
 
@@ -83,9 +87,11 @@ and print results with `emit()` so `--json` works.
 - No help text, flag help or usage line contains an em dash.
 - `wantCommands` lists the commands that must exist. Add a new command to it.
 
-`internal/docscheck` also parses every `fz` line in the code blocks of
-`README.md`, `docs/USERGUIDE.md` and `AGENTS.md`, so a renamed command or flag
-fails the build until the docs catch up.
+`internal/docscheck` also parses every `fz` line in the code blocks, and
+every inline code span that starts with `fz`, of `README.md`, `docs/USERGUIDE.md`,
+`AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `skill/SKILL.md` and
+`examples/hooks/README.md`. A renamed command or flag fails the build until
+the docs catch up. `fz help <noun>` must name a real command.
 
 ## Tests that pin behavior
 
@@ -99,15 +105,20 @@ fails the build until the docs catch up.
 - **Live shapes.** `internal/fizzy/shapes_test.go` decodes JSON with the key
   names and value types a real Fizzy server sends, filled with invented
   gate and hinge values.
-- **Docs checks.** `internal/docscheck` checks the skill's template paths, the
-  em dash rule, the `fz` lines in the docs, and that `CLAUDE.md` is exactly
-  `@AGENTS.md`.
+- **Docs checks.** `internal/docscheck` checks the skill's template paths,
+  the `fz` commands in the docs, and that `CLAUDE.md` is exactly
+  `@AGENTS.md`. It also checks that no file git tracks holds an em dash.
 - **Tracked private files.** `internal/repocheck` fails if `git ls-files`
   lists a path from the never-commit list under Git.
-- **Release checks.** `internal/releasecheck` checks the `make dist` output
-  and, in a temporary git repo, the tag guard in `scripts/release-guard.sh`.
+- **Release checks.** `internal/releasecheck` checks the `make dist` output,
+  including that two builds of one commit give the same checksums, and, in
+  a temporary git repo, the tag guard in `scripts/release-guard.sh`. The
+  `make dist` test is slow and runs only with `FZ_TEST_DIST=1`, which CI
+  sets.
 - **Private text in man pages.** `TestManNoPrivateText` fails if a man page
-  holds a home directory, an `@` or `github.com`. Set `FZ_PRIVATE_PATTERNS`
+  holds `/Users/`, the home directory the test runs with, an `@` or
+  `github.com`. The tests run with a temporary HOME, so your own home
+  directory is not checked unless you add it to `FZ_PRIVATE_PATTERNS`. Set `FZ_PRIVATE_PATTERNS`
   to a comma-separated list to check more strings. Keep that list in your
   environment, never in the repo.
 
@@ -137,10 +148,15 @@ fails the build until the docs catch up.
   `user edit`, and `webhook create`, `edit` and `delete`. Without it they
   print what they would do and exit 2.
 - These send a DELETE and need no `--yes`: `card unboost`, `card unwatch`,
-  `card unpin`, `comment unreact`, `notification unread` and
-  `board unpublish`. Each one removes a mark or closes access, and can be
-  redone. Changing a card's drafted or published status with
-  `card edit --status` needs no `--yes` either.
+  `card unpin`, `card reopen`, `card golden --off`, `card move --to maybe`
+  (or `--to "Maybe?"`), `comment unreact`, `notification unread` and
+  `board unpublish`, plus the fz 0.1 forms `reopen`, `golden --off` and
+  `move --to maybe`. Each one removes a mark, reopens a card, returns it to
+  Maybe? or closes access, and can be redone. Changing a card's drafted or
+  published status with `card edit --status` needs no `--yes` either.
+- `draft apply --update` needs no `--yes`. It can send the same DELETEs, for
+  golden off and a move to Maybe?. With `--prune` it also deletes unticked
+  steps and removes tags that the draft no longer has.
 - Old command forms keep working.
 - Dependencies: cobra and cobra/doc only. Ask Chad before adding any other.
 
