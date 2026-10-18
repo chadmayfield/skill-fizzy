@@ -153,10 +153,7 @@ func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
 	body := struct {
 		Name  string `json:"name"`
 		Color string `json:"color,omitempty"`
-	}{Name: name, Color: color}
-	if color != "" && !strings.HasPrefix(color, "var(") {
-		body.Color = "var(--color-card-" + color + ")"
-	}
+	}{Name: name, Color: ColumnColorValue(color)}
 	return f.C.Create("/boards/"+boardID+"/columns", wrap("column", body))
 }
 
