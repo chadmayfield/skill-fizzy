@@ -8,14 +8,15 @@ when you say so.
 
 ## Install
 
-Download an archive from the [latest release](https://github.com/chadmayfield/skill-fizzy/releases/latest), or use Go:
+There is no release yet, so build `fz` from source. Building needs Go
+1.27.2 or later. From a checkout of this repo:
 
 ```sh
-go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
+make install
 ```
 
-From a checkout, `make install` builds `fz` and copies it to `~/.local/bin`.
-Building needs Go 1.27 or later.
+That builds `fz` and copies it to `~/.local/bin`, creating the folder if it
+is missing. Put `~/.local/bin` on your PATH if it is not there already.
 
 ## Configure
 

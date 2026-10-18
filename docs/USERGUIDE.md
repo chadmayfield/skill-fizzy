@@ -27,7 +27,7 @@ a terminal or from Claude Code.
 
 You need these:
 
-- Go 1.27 or later, to build `fz`.
+- Go 1.27.2 or later, to build `fz`.
 - A Fizzy server. A self-hosted server works. The hosted Fizzy service has not
   been tested with `fz`.
 - A Fizzy personal access token that can read and write.
@@ -41,41 +41,53 @@ can also block a newly built binary, so allow `fz` there too.
 
 ### Install
 
-Download the archive for your system (macOS or Linux, arm64 or amd64) and
-`checksums.txt` from the latest GitHub release. In the folder that holds them,
-check the archive against the checksums:
+There is no release yet, so build `fz` from source. From a checkout of this
+repo:
+
+```sh
+make install
+```
+
+That builds `fz` and copies it to `~/.local/bin`, creating the folder if it
+is missing. Check the install with `fz --version`.
+
+### Install from a release
+
+Once a release is published, it holds one archive per system (macOS or
+Linux, arm64 or amd64) and `checksums.txt`. Each archive is named after the
+release tag, `v` included, such as `fz_v1.2.0_linux_amd64.tar.gz`. Download
+yours and `checksums.txt`. In the folder that holds them, check the archive
+against the checksums. On Linux:
+
+```sh
+sha256sum -c checksums.txt --ignore-missing
+```
+
+On macOS, or wherever `sha256sum` is missing:
 
 ```sh
 shasum -a 256 -c checksums.txt --ignore-missing
 ```
 
-Each archive also carries a Sigstore build-provenance attestation. To check
-that GitHub Actions built it from this repo:
+A release made while the repo is public also carries a Sigstore
+build-provenance attestation for each archive. To check that GitHub Actions
+built it from this repo:
 
 ```sh
-gh attestation verify fz_<version>_<os>_<arch>.tar.gz -R chadmayfield/skill-fizzy
+gh attestation verify fz_v<version>_<os>_<arch>.tar.gz -R chadmayfield/skill-fizzy
 ```
 
 Unpack the archive and put the `fz` binary on your PATH, for example:
 
 ```sh
-tar -xzf fz_<version>_<os>_<arch>.tar.gz
-install fz_<version>_<os>_<arch>/fz ~/.local/bin/fz
+tar -xzf fz_v<version>_<os>_<arch>.tar.gz
+mkdir -p ~/.local/bin
+install fz_v<version>_<os>_<arch>/fz ~/.local/bin/fz
 ```
 
 macOS may block a downloaded binary the first time you run it. Remove the
 quarantine flag with `xattr -d com.apple.quarantine ~/.local/bin/fz`, or allow
 it in System Settings, Privacy & Security.
-
-Two other ways to install:
-
-```sh
-go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
-```
-
-That puts `fz` in `$(go env GOPATH)/bin`. From a checkout, `make install`
-builds `fz` and copies it to `~/.local/bin`. Check the install with
-`fz --version`.
 
 ### Store the token
 
@@ -474,7 +486,8 @@ fz step delete 87 03abc123def456ghi789jkl0mn --yes
 ```
 
 `step add` puts the step at the end of the list. `--done` adds it already
-ticked. `step delete` needs `--yes`, like a card delete.
+ticked. `step delete` needs `--yes`, like a card delete. Without it, `fz`
+prints the step it would delete, deletes nothing and exits with status 2.
 
 ### Comments
 
@@ -842,6 +855,7 @@ The fizzy-cards skill lets Claude Code build cards with you. It needs only
 Link the repo's `skill/` folder into your Claude Code skills folder:
 
 ```sh
+mkdir -p ~/.claude/skills
 ln -s "$PWD/skill" ~/.claude/skills/fizzy-cards
 ```
 
