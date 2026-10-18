@@ -173,7 +173,7 @@ func TestExportAccountAndMine(t *testing.T) {
 func TestExportDryRun(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"GET /my/identity": acctIdentity})
 	r := runGo([]string{"--dry-run", "export", "mine"})
-	if r.code != 0 || r.stdout != "dry-run: export not started\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
+	if r.code != 0 || r.stdout != "dry-run: nothing sent; would start your export\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
 		t.Fatalf("got %+v", r)
 	}
 	if got := callList(calls()); got != "GET /my/identity" {

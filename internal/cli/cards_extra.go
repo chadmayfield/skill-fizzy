@@ -114,7 +114,7 @@ func simpleCardCommand(name, short, long string, send func(*fizzy.Fizzy, int) er
 			if err := send(fz, n); err != nil {
 				return err
 			}
-			return emit(c.cmd, obj{{"number", n}, {key, value}}, fmt.Sprintf("card #%d %s", n, done))
+			return emit(c.cmd, obj{{"number", n}, {key, value}}, c.wrote(fmt.Sprintf("card #%d %s", n, done), fmt.Sprintf("%s card #%d", name, n)))
 		}),
 	}
 }
@@ -128,9 +128,9 @@ func cardAssign(c *cmdContext, a []string, assign bool) error {
 	if err != nil {
 		return err
 	}
-	op, verb, already := fz.Unassign, "unassigned", "not assigned"
+	op, verb, already, would := fz.Unassign, "unassigned", "not assigned", "unassign %s from card #%d"
 	if assign {
-		op, verb, already = fz.Assign, "assigned", "already assigned"
+		op, verb, already, would = fz.Assign, "assigned", "already assigned", "assign %s to card #%d"
 	}
 	u, changed, err := op(n, a[1])
 	if err != nil {
@@ -139,7 +139,7 @@ func cardAssign(c *cmdContext, a []string, assign bool) error {
 	who := fmt.Sprintf("%s (%s, matched by %s)", u.Name, u.ID, u.By)
 	text := fmt.Sprintf("card #%d: %s %s", n, who, already)
 	if changed {
-		text = fmt.Sprintf("card #%d: %s %s", n, verb, who)
+		text = c.wrote(fmt.Sprintf("card #%d: %s %s", n, verb, who), fmt.Sprintf(would, who, n))
 	}
 	return emit(c.cmd, obj{{"number", n}, {"user_id", u.ID}, {"name", u.Name}, {"matched_by", u.By}, {"changed", changed}}, text)
 }
@@ -181,7 +181,7 @@ func cardBoost(c *cmdContext, a []string) error {
 		return err
 	}
 	if c.dryRun {
-		return emit(c.cmd, obj{{"number", n}, {"id", nil}}, fmt.Sprintf("dry-run: boost not added to card #%d", n))
+		return emit(c.cmd, obj{{"number", n}, {"id", nil}}, c.wrote("", fmt.Sprintf("add a boost to card #%d", n)))
 	}
 	if raw == nil {
 		return emit(c.cmd, obj{{"number", n}, {"id", nil}}, fmt.Sprintf("boost added to card #%d", n))
@@ -225,7 +225,7 @@ func cardUnboost(c *cmdContext, a []string) error {
 	if err := fz.RemoveBoost(n, a[1]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"number", n}, {"removed", a[1]}}, fmt.Sprintf("boost %s removed from card #%d", a[1], n))
+	return emit(c.cmd, obj{{"number", n}, {"removed", a[1]}}, c.wrote(fmt.Sprintf("boost %s removed from card #%d", a[1], n), fmt.Sprintf("remove boost %s from card #%d", a[1], n)))
 }
 
 func cardImage(c *cmdContext, a []string) error {
@@ -257,5 +257,5 @@ func cardImage(c *cmdContext, a []string) error {
 	if err := fz.RemoveImage(n); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"number", n}, {"removed", true}}, fmt.Sprintf("card #%d image removed", n))
+	return emit(c.cmd, obj{{"number", n}, {"removed", true}}, c.wrote(fmt.Sprintf("card #%d image removed", n), fmt.Sprintf("remove the image from card #%d", n)))
 }

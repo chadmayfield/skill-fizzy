@@ -231,7 +231,7 @@ func TestCardBoostTooLong(t *testing.T) {
 func TestCardBoostDryRun(t *testing.T) {
 	_, calls := extraServer(t, `{}`)
 	r := runGo([]string{"--dry-run", "card", "boost", "87", "ok"})
-	if r.code != 0 || r.stdout != "dry-run: boost not added to card #87\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
+	if r.code != 0 || r.stdout != "dry-run: nothing sent; would add a boost to card #87\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
 		t.Fatalf("got %+v", r)
 	}
 	if len(calls()) != 0 {

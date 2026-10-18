@@ -500,6 +500,14 @@ func TestApplyUpdateDryRunWritesNothing(t *testing.T) {
 	if syncReadDraft(t, path) != text {
 		t.Errorf("dry-run changed the draft")
 	}
+	for _, line := range strings.Split(strings.TrimSpace(got.stdout), "\n") {
+		if !strings.HasPrefix(line, "#87 dry-run: nothing sent; would ") && !strings.Contains(line, " kept, not in draft: ") && !strings.Contains(line, "column left alone") {
+			t.Errorf("dry-run line claims a change: %q", line)
+		}
+	}
+	if !strings.Contains(got.stdout, "#87 dry-run: nothing sent; would send the title and description\n") {
+		t.Errorf("stdout = %q", got.stdout)
+	}
 }
 
 func TestApplyWithoutUpdateSkips(t *testing.T) {

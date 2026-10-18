@@ -193,12 +193,12 @@ func notificationRead(c *cmdContext, a []string) error {
 		if err := fz.ReadAllNotifications(); err != nil {
 			return err
 		}
-		return emit(c.cmd, obj{{"read", "all"}}, "all notifications marked read")
+		return emit(c.cmd, obj{{"read", "all"}}, c.wrote("all notifications marked read", "mark all notifications read"))
 	}
 	if err := fz.ReadNotification(a[0]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"read", a[0]}}, "notification "+a[0]+" marked read")
+	return emit(c.cmd, obj{{"read", a[0]}}, c.wrote("notification "+a[0]+" marked read", "mark notification "+a[0]+" read"))
 }
 
 func notificationUnread(c *cmdContext, a []string) error {
@@ -209,7 +209,7 @@ func notificationUnread(c *cmdContext, a []string) error {
 	if err := fz.UnreadNotification(a[0]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"unread", a[0]}}, "notification "+a[0]+" marked unread")
+	return emit(c.cmd, obj{{"unread", a[0]}}, c.wrote("notification "+a[0]+" marked unread", "mark notification "+a[0]+" unread"))
 }
 
 func notificationSettings(c *cmdContext, _ []string) error {
@@ -226,7 +226,7 @@ func notificationSettings(c *cmdContext, _ []string) error {
 		if err := fz.SetEmailFrequency(freq); err != nil {
 			return err
 		}
-		return emit(c.cmd, obj{{"bundle_email_frequency", freq}}, "email set to "+freq)
+		return emit(c.cmd, obj{{"bundle_email_frequency", freq}}, c.wrote("email set to "+freq, "set email to "+freq))
 	}
 	fz, err := c.api()
 	if err != nil {

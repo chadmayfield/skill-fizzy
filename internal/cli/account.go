@@ -123,7 +123,7 @@ func accountPostpone(c *cmdContext, a []string) error {
 	if updated.Raw() != nil {
 		data = updated.Raw()
 	}
-	return emit(c.cmd, data, fmt.Sprintf("account auto-postpone set to %d days", days))
+	return emit(c.cmd, data, c.wrote(fmt.Sprintf("account auto-postpone set to %d days", days), fmt.Sprintf("set account auto-postpone to %d days", days)))
 }
 
 func exportLine(e fizzy.Export) string {
@@ -131,9 +131,10 @@ func exportLine(e fizzy.Export) string {
 }
 
 // emitStarted prints a new export, or a dry-run note when none was made.
-func emitStarted(c *cmdContext, e fizzy.Export) error {
+// what names the export for that note.
+func emitStarted(c *cmdContext, e fizzy.Export, what string) error {
 	if e.Raw() == nil {
-		return emit(c.cmd, obj{{"id", nil}}, "dry-run: export not started")
+		return emit(c.cmd, obj{{"id", nil}}, c.wrote("export started", "start "+what))
 	}
 	return emit(c.cmd, e.Raw(), exportLine(e))
 }
@@ -147,7 +148,7 @@ func exportAccount(c *cmdContext, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return emitStarted(c, e)
+	return emitStarted(c, e, "an account export")
 }
 
 func exportMine(c *cmdContext, _ []string) error {
@@ -159,7 +160,7 @@ func exportMine(c *cmdContext, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return emitStarted(c, e)
+	return emitStarted(c, e, "your export")
 }
 
 func exportStatus(c *cmdContext, a []string) error {

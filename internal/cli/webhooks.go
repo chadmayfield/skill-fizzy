@@ -266,7 +266,7 @@ func webhookCreate(c *cmdContext, a []string) error {
 		return adminOnly(err)
 	}
 	if c.dryRun {
-		return emit(c.cmd, obj{{"id", nil}}, "dry-run: nothing sent; would create webhook "+pyRepr(name))
+		return emit(c.cmd, obj{{"id", nil}}, c.wrote("", "create webhook "+pyRepr(name)))
 	}
 	text := "webhook created: " + orNone(h.ID)
 	if h.SigningSecret != "" {
@@ -331,7 +331,8 @@ func webhookEdit(c *cmdContext, a []string) error {
 	if actions != nil {
 		fields = append(fields, "actions")
 	}
-	text := fmt.Sprintf("webhook %s updated: %s", a[1], strings.Join(fields, ", "))
+	text := c.wrote(fmt.Sprintf("webhook %s updated: %s", a[1], strings.Join(fields, ", ")),
+		fmt.Sprintf("update webhook %s: %s", a[1], strings.Join(fields, ", ")))
 	if upd.Raw() != nil {
 		return emit(c.cmd, stripSecret(upd.Raw()), text)
 	}
@@ -357,7 +358,7 @@ func webhookDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteWebhook(board, a[1]); err != nil {
 		return adminOnly(err)
 	}
-	return emit(c.cmd, obj{{"deleted", a[1]}}, "webhook "+a[1]+" deleted")
+	return emit(c.cmd, obj{{"deleted", a[1]}}, c.wrote("webhook "+a[1]+" deleted", "delete webhook "+a[1]))
 }
 
 func webhookActivate(c *cmdContext, a []string) error {
@@ -378,7 +379,7 @@ func webhookActivate(c *cmdContext, a []string) error {
 	case !changed:
 		text = "webhook " + a[1] + " already active"
 	case c.dryRun:
-		text = "dry-run: nothing sent; would activate webhook " + a[1]
+		text = c.wrote("", "activate webhook "+a[1])
 	}
 	return emit(c.cmd, obj{{"id", a[1]}, {"changed", changed}}, text)
 }

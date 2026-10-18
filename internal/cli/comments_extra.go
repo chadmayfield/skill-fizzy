@@ -148,7 +148,7 @@ func commentEdit(c *cmdContext, a []string) error {
 	if err := fz.EditComment(n, a[1], markdown.ToHTML(a[2])); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"updated", a[1]}}, "comment "+a[1]+" updated")
+	return emit(c.cmd, obj{{"updated", a[1]}}, c.wrote("comment "+a[1]+" updated", "update comment "+a[1]))
 }
 
 func commentDelete(c *cmdContext, a []string) error {
@@ -173,7 +173,7 @@ func commentDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteComment(n, a[1]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"deleted", a[1]}}, "comment "+a[1]+" deleted")
+	return emit(c.cmd, obj{{"deleted", a[1]}}, c.wrote("comment "+a[1]+" deleted", "delete comment "+a[1]))
 }
 
 func commentReact(c *cmdContext, a []string) error {
@@ -189,7 +189,7 @@ func commentReact(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", orNull(id)}}, "reaction added: "+orNone(id))
+	return emit(c.cmd, obj{{"id", orNull(id)}}, c.wrote("reaction added: "+orNone(id), "add a reaction to comment "+a[1]))
 }
 
 func commentReactions(c *cmdContext, a []string) error {
@@ -224,5 +224,5 @@ func commentUnreact(c *cmdContext, a []string) error {
 	if err := fz.DeleteCommentReaction(n, a[1], a[2]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"removed", a[2]}}, "reaction "+a[2]+" removed")
+	return emit(c.cmd, obj{{"removed", a[2]}}, c.wrote("reaction "+a[2]+" removed", "remove reaction "+a[2]))
 }
