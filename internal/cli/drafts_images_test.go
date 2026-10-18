@@ -112,6 +112,8 @@ func TestApplyPrintsImagePaths(t *testing.T) {
 	if got.code != 0 || !strings.HasPrefix(got.stdout, "image: "+inboxImg+"\nimage: "+draftImg+"\n#90 ") {
 		t.Errorf("create: %+v", got)
 	}
+	// Changed bytes, so the update sends both images again.
+	writeFile(t, inboxImg, "jpg2")
 	got = runGo([]string{"draft", "apply", "--update", "--force", p})
 	if got.code != 0 || !strings.Contains(got.stdout, "#90 image: "+inboxImg+"\n#90 image: "+draftImg+"\n") {
 		t.Errorf("update: %+v", got)

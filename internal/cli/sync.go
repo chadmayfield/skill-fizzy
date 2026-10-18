@@ -156,9 +156,20 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 			return report, err
 		}
 	}
+	// When neither the draft's title, body and images nor the card's title
+	// and description changed since the last sync, there is nothing to
+	// upload or send for them.
+	dh, err := draftHash(d, inbox)
+	if err != nil {
+		return report, err
+	}
+	sameText := d.Meta[syncedDraftKey] == dh && textSynced(d.Meta["synced-fields"], card)
 	// Upload first, so a failed upload leaves the card untouched.
 	sgids := map[string]string{}
 	for _, img := range d.Images() {
+		if sameText {
+			break
+		}
 		path, err := d.ResolveImage(img, inbox)
 		if err != nil {
 			return report, err
@@ -177,11 +188,15 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		}
 		add("moved to board " + line(board.Name))
 	}
-	title, desc := d.Title, d.DescriptionHTML(sgids)
-	if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
-		return report, err
+	if sameText {
+		add("title and description unchanged")
+	} else {
+		title, desc := d.Title, d.DescriptionHTML(sgids)
+		if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
+			return report, err
+		}
+		add("title and description sent")
 	}
-	add("title and description sent")
 
 	plan := draft.PlanSteps(d.Steps, card.Steps)
 	for _, s := range plan.Add {

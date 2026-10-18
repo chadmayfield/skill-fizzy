@@ -63,9 +63,11 @@ func addDraftCommands(root *cobra.Command) {
 			"Matching steps are left alone, a draft tick ticks a card step, and nothing is ever unticked. " +
 			"New draft steps are added. Card steps and tags the draft does not have are kept and reported; " +
 			"--prune deletes the unticked steps and removes the tags. A closed card is never reopened. " +
-			"Images are uploaded again on every update.\n\n" +
+			"The images, title and description are sent only when the draft's title, body or image files changed since the last sync, " +
+			"or the card's title or description changed in Fizzy; otherwise fz prints title and description unchanged.\n\n" +
 			"After every apply, fz writes a fingerprint of the card's title, description, steps, tags, golden mark, " +
-			"column, board, closed state and Not now state into the draft's synced: line, and a short hash of each into synced-fields:. " +
+			"column, board, closed state and Not now state into the draft's synced: line, a short hash of each into synced-fields:, " +
+			"and a hash of the draft's title, body and image files into synced-draft:. " +
 			"If the card changed in Fizzy since then, or the draft has no synced: fingerprint, --update refuses that draft unless --force is given. " +
 			"The refusal names the fields that changed when synced-fields: is there.",
 		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
@@ -684,6 +686,16 @@ func draftApply(c *cmdContext, a []string) error {
 	w := c.out()
 	for i, d := range drafts {
 		name := filepath.Base(d.Path)
+		// The draft's hash is taken before anything is sent, so an edit
+		// made while fz runs is sent by the next --update.
+		dh := ""
+		if !c.dryRun && (d.Card == 0 || update) {
+			h, err := draftHash(d, cfg.InboxPath())
+			if err != nil {
+				return failApply(c, refuseImage(err), summary)
+			}
+			dh = h
+		}
 		if d.Card != 0 {
 			if !update {
 				summary[i] = fmt.Sprintf("%s: card #%d, skipped", name, d.Card)
@@ -707,7 +719,7 @@ func draftApply(c *cmdContext, a []string) error {
 				finish := "fz draft apply --update " + shellArg(d.Path)
 				msg := fmt.Errorf("card #%d: the update stopped partway: %w\nfz: synced: is recorded from the card as it is now. Finish it with: %s",
 					d.Card, err, finish)
-				if rerr := recordSynced(fz, d.Path, d.Card); rerr != nil {
+				if rerr := recordSynced(fz, d.Path, d.Card, ""); rerr != nil {
 					msg = fmt.Errorf("card #%d: the update stopped partway: %w\nfz: reading the card back failed (%s), so synced: is unchanged; check the card, then finish it with: %s --force",
 						d.Card, err, errorText(rerr), finish)
 				}
@@ -718,7 +730,7 @@ func draftApply(c *cmdContext, a []string) error {
 				return failApply(c, err, summary)
 			}
 			if !c.dryRun {
-				if err := recordSynced(fz, d.Path, d.Card); err != nil {
+				if err := recordSynced(fz, d.Path, d.Card, dh); err != nil {
 					summary[i] = fmt.Sprintf("%s: card #%d, updated, synced: not recorded", name, d.Card)
 					return failApply(c, err, summary)
 				}
@@ -739,7 +751,7 @@ func draftApply(c *cmdContext, a []string) error {
 			// --update needs no --force.
 			finish := "fz draft apply --update " + shellArg(d.Path)
 			msg := fmt.Errorf("%w\nfz: card: %d is written into %s. Finish it with: %s", err, n, name, finish)
-			if rerr := recordSynced(fz, d.Path, n); rerr != nil {
+			if rerr := recordSynced(fz, d.Path, n, ""); rerr != nil {
 				msg = fmt.Errorf("%w\nfz: card: %d is written into %s, but reading the card back failed (%s). Finish it with: fz draft apply --update --force %s",
 					err, n, name, errorText(rerr), shellArg(d.Path))
 			}
@@ -757,7 +769,7 @@ func draftApply(c *cmdContext, a []string) error {
 			continue
 		}
 		summary[i] = fmt.Sprintf("%s: card #%d", name, n)
-		if err := recordSynced(fz, d.Path, n); err != nil {
+		if err := recordSynced(fz, d.Path, n, dh); err != nil {
 			summary[i] = fmt.Sprintf("%s: card #%d, synced: not recorded", name, n)
 			return failApply(c, fmt.Errorf("card #%d was created and card: %d written into %s, but reading it back for synced: failed (%s); the next --update needs --force",
 				n, n, name, errorText(err)), summary)
@@ -811,14 +823,24 @@ func lockDrafts(paths []string) (func(), error) {
 // and its per-field hashes as synced-fields:, read after every write so the
 // next --update can tell whether someone changed the card in Fizzy since,
 // and which fields.
-func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
+//
+// dh is the draft's draftHash, taken before anything was sent, and is
+// written as synced-draft: when it is not "". A sync that stopped partway
+// passes "", so the line keeps its old value and the next --update sends
+// the title and description unless the draft is as it was then.
+func recordSynced(fz *fizzy.Fizzy, path string, n int, dh string) error {
 	// Known limit: an edit made in Fizzy between fz's writes and this read is
 	// folded into the new fingerprint, so the next --update cannot see it.
 	card, err := fz.Card(n)
 	if err != nil {
 		return err
 	}
-	return draft.RecordFields(path,
-		draft.KV{Key: "synced", Value: cardFingerprint(card)},
-		draft.KV{Key: "synced-fields", Value: syncedFields(card)})
+	kvs := []draft.KV{
+		{Key: "synced", Value: cardFingerprint(card)},
+		{Key: "synced-fields", Value: syncedFields(card)},
+	}
+	if dh != "" {
+		kvs = append(kvs, draft.KV{Key: syncedDraftKey, Value: dh})
+	}
+	return draft.RecordFields(path, kvs...)
 }

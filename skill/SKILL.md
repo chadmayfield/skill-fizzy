@@ -84,7 +84,8 @@ Go binary and must be on the PATH.
 8. **Changing the card later:** edit the draft, then run
    `fz draft apply --update <file>`. It pushes the draft to the card and
    refuses a card that changed in Fizzy since the last sync unless you add
-   `--force`. It never unticks a step. `--prune` also deletes unticked steps and tags
+   `--force`. It sends the images and description only when the draft's
+   title, body or image files changed since the last sync. It never unticks a step. `--prune` also deletes unticked steps and tags
    the draft no longer has, so use it only with approval. Run
    `fz --dry-run draft apply --update <file>` first.
 

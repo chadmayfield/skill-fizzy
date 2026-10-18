@@ -987,19 +987,30 @@ How steps are matched:
 - Card steps and tags the draft does not have are kept and reported.
 
 `--prune` deletes those extra card steps if they are unticked, and removes the
-extra tags. Ticked steps always stay. A closed card is never reopened, and
-images are uploaded again on every update.
+extra tags. Ticked steps always stay. A closed card is never reopened.
+
+The title, description and images are sent only when something in them
+changed. If the draft's title, body and image files are as they were at the
+last sync, and the card's title and description are as `fz` last saw them,
+`--update` uploads no images, sends no description and prints
+`title and description unchanged`. Changing one byte of an image file, or
+any of the body, sends them again. Steps, tags, column, golden mark and board
+are compared and sent as before. A dry run prints the same line.
 
 ### The synced fingerprint
 
-After every apply, `fz` writes two more lines into the draft's front matter.
+After every apply, `fz` writes three more lines into the draft's front matter.
 
 - `synced:` is a fingerprint of the card as Fizzy then holds it. It covers
   the title, description, steps, tags, golden mark, column, board, closed
   state and Not now state.
 - `synced-fields:` holds a short hash of each of those fields.
+- `synced-draft:` is a hash of the draft's title, body and image files, as
+  they were when the apply began. An apply that stops partway leaves it as it
+  was. A draft from an older `fz` has no such line; its next `--update`
+  sends everything and then writes it.
 
-Leave both lines alone. On the next `--update`, `fz` reads the card and
+Leave these lines alone. On the next `--update`, `fz` reads the card and
 compares. If someone changed the card in Fizzy since the last sync, `fz`
 refuses the draft and names what changed:
 

@@ -4,13 +4,61 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
+
+// syncedDraftKey is the front matter key for draftHash.
+const syncedDraftKey = "synced-draft"
+
+// draftHash returns "sha256:" and the first 16 hex characters of the
+// SHA-256 of what the draft sends as the title and description: the title,
+// the body Markdown and the SHA-256 of each image file's bytes, in image
+// order. fz stores it as synced-draft: after a sync, so the next --update
+// can skip the uploads and the description when none of them changed.
+func draftHash(d *draft.Draft, inbox string) (string, error) {
+	images := []string{}
+	for _, img := range d.Images() {
+		path, err := d.ResolveImage(img, inbox)
+		if err != nil {
+			return "", err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		sum := sha256.Sum256(b)
+		images = append(images, hex.EncodeToString(sum[:]))
+	}
+	b, _ := json.Marshal(struct {
+		Title  string   `json:"title"`
+		Body   string   `json:"body"`
+		Images []string `json:"images"`
+	}{d.Title, d.BodyMD, images})
+	sum := sha256.Sum256(b)
+	return fingerprintPrefix + hex.EncodeToString(sum[:])[:16], nil
+}
+
+// textSynced reports whether the card's title and description hash to the
+// values in stored, a synced-fields: value. A missing or malformed value is
+// false, so fz sends them.
+func textSynced(stored string, card fizzy.Card) bool {
+	have := map[string]string{}
+	for _, p := range strings.Fields(stored) {
+		if name, hash, ok := strings.Cut(p, "="); ok && fieldHashRE.MatchString(hash) {
+			have[name] = hash
+		}
+	}
+	st := newFingerprintState(card)
+	return have["title"] != "" && have["title"] == fieldHash(st.Title) &&
+		have["description"] != "" && have["description"] == fieldHash(st.DescriptionHTML)
+}
 
 const fingerprintPrefix = "sha256:"
 

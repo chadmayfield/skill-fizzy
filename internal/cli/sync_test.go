@@ -589,8 +589,16 @@ func TestApplyNewCardRecordsCardAndSynced(t *testing.T) {
 	if err := json.Unmarshal([]byte(card90), &c90); err != nil {
 		t.Fatal(err)
 	}
+	d, err := draft.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dh, err := draftHash(d, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "---\nboard: Home\ncard: 90\nsynced: " + fingerprintOf(t, card90) + "\nsynced-fields: " + syncedFields(c90) +
-		"\n---\n# Oil the hinge\n\nOnce a year.\n"
+		"\nsynced-draft: " + dh + "\n---\n# Oil the hinge\n\nOnce a year.\n"
 	if text := syncReadDraft(t, path); text != want {
 		t.Errorf("draft after apply:\n%q\nwant\n%q", text, want)
 	}
