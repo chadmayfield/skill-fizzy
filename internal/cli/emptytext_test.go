@@ -102,3 +102,22 @@ func TestNamesAreTrimmed(t *testing.T) {
 		}
 	}
 }
+
+// An empty tag is refused before the card is created or read.
+func TestEmptyTagRefuses(t *testing.T) {
+	_, calls := acctServer(t, emptyTextRoutes())
+	for argv, want := range map[string]string{
+		"card create Home Gate --tag #": "fz: --tag cannot be empty\n",
+		"card tag 87 #":                 "fz: the tag cannot be empty\n",
+	} {
+		r := runGo(strings.Fields(argv))
+		if r.code != 2 || r.stdout != "" || r.stderr != want {
+			t.Errorf("%s: got %+v", argv, r)
+		}
+	}
+	for _, c := range calls() {
+		if c.method != "GET" || c.path == "/1/cards/87" {
+			t.Errorf("sent %s %s %s", c.method, c.path, c.body)
+		}
+	}
+}

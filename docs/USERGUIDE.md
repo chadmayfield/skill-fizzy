@@ -369,8 +369,9 @@ fz card move 87 --board Garden --to Next
 fz card reopen 87
 ```
 
-`--to` takes a column name, or `maybe`, `not-now` or `done`. `--board` moves
-the card to another board. `card reopen` moves a closed card out of Done.
+`--to` takes a column name, or `maybe`, `not-now` or `done`. An exact column
+name wins. A name that two columns share in any case, with no exact match,
+exits 2. `--board` moves the card to another board. `card reopen` moves a closed card out of Done.
 
 Golden:
 
@@ -390,6 +391,8 @@ fz card tag 87 waiting --remove
 
 Fizzy's tag call toggles a tag on or off. `fz` reads the card first and only
 sends a change when one is needed, so tagging twice never removes the tag.
+If the card in Fizzy's reply has no tags list, `fz` cannot tell, so it exits
+2 and sends nothing. An empty tag exits 2 as well.
 
 #### Assign
 

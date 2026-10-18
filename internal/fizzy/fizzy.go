@@ -130,20 +130,53 @@ func (f *Fizzy) Columns(boardID string) ([]Column, error) {
 	return list[Column](f.C, "/boards/"+url.PathEscape(boardID)+"/columns")
 }
 
-// Column finds a column by id, or by name ignoring case.
+// Column finds a column by id, then by exact name, then by name ignoring
+// case. A name that two columns share ignoring case, with no exact match,
+// is a Refusal.
 func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	cols, err := f.Columns(boardID)
 	if err != nil {
 		return Column{}, err
 	}
-	names := make([]string, len(cols))
-	for i, c := range cols {
-		if c.ID == nameOrID || strings.EqualFold(c.Name, nameOrID) {
+	for _, c := range cols {
+		if c.ID == nameOrID {
 			return c, nil
 		}
+	}
+	c, n := pickByName(cols, nameOrID, func(c Column) string { return c.Name })
+	switch {
+	case n == 1:
+		return c, nil
+	case n > 1:
+		return Column{}, refusef("%d columns are named %s; use the column id", n, pyRepr(nameOrID))
+	}
+	names := make([]string, len(cols))
+	for i, c := range cols {
 		names[i] = c.Name
 	}
 	return Column{}, fmt.Errorf("no column %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
+}
+
+// pickByName returns the one item whose name is want, or failing that the
+// one whose name matches ignoring case, and how many matched. An exact match
+// wins over any number of case-insensitive ones.
+func pickByName[T any](items []T, want string, name func(T) string) (T, int) {
+	var zero T
+	for _, it := range items {
+		if name(it) == want {
+			return it, 1
+		}
+	}
+	var found []T
+	for _, it := range items {
+		if strings.EqualFold(name(it), want) {
+			found = append(found, it)
+		}
+	}
+	if len(found) == 1 {
+		return found[0], 1
+	}
+	return zero, len(found)
 }
 
 // CreateColumn creates a column. ColumnColorValue turns the color into the
@@ -297,11 +330,26 @@ func (f *Fizzy) DeleteCard(n int) error {
 
 // -- tags (idempotent over Fizzy's toggle) ---------------------------------
 
+// TagTitle is the title fz sends for a TAG argument: the spaces around it
+// and a leading # removed, in lower case.
+func TagTitle(tag string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(tag), "#")))
+}
+
 func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
-	tag = strings.ToLower(strings.TrimSpace(strings.TrimLeft(tag, "#")))
+	tag = TagTitle(tag)
+	if tag == "" {
+		return false, refusef("the tag cannot be empty")
+	}
 	c, err := f.Card(n)
 	if err != nil {
 		return false, err
+	}
+	// A reply without the tags key says nothing about the card's tags, and
+	// the toggle could remove one it has. card assign refuses the same way.
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(c.Raw(), &keys) != nil || keys["tags"] == nil {
+		return false, refusef("card #%d has no tags list in Fizzy's reply, so fz cannot tell whether it has the tag %s", n, pyRepr(tag))
 	}
 	present := false
 	for _, t := range c.Tags {

@@ -184,19 +184,24 @@ func (f *Fizzy) RemoveBoost(n int, id string) error {
 
 // -- lookups for card list filters ---------------------------------------------
 
-// FindTag finds an account tag by title. A leading # and case are ignored,
-// as in AddTag.
+// FindTag finds an account tag by title. A leading # is ignored. An exact
+// title wins; otherwise case is ignored, and a title two tags share
+// ignoring case is a Refusal.
 func (f *Fizzy) FindTag(name string) (Tag, error) {
-	want := strings.ToLower(strings.TrimSpace(strings.TrimLeft(name, "#")))
+	want := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "#"))
 	tags, err := f.Tags()
 	if err != nil {
 		return Tag{}, err
 	}
+	t, n := pickByName(tags, want, func(t Tag) string { return t.Title })
+	switch {
+	case n == 1:
+		return t, nil
+	case n > 1:
+		return Tag{}, refusef("%d tags are named %s; use the exact title", n, pyRepr(name))
+	}
 	titles := make([]string, len(tags))
 	for i, t := range tags {
-		if strings.ToLower(t.Title) == want {
-			return t, nil
-		}
 		titles[i] = t.Title
 	}
 	return Tag{}, fmt.Errorf("no tag %s (have: %s)", pyRepr(name), strings.Join(titles, ", "))
