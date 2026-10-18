@@ -18,6 +18,7 @@ func TestRewrite(t *testing.T) {
 		{[]string{"reopen", "5"}, []string{"card", "reopen", "5"}},
 		{[]string{"golden", "5", "--off"}, []string{"card", "golden", "5", "--off"}},
 		{[]string{"tag", "5", "buy"}, []string{"card", "tag", "5", "buy"}},
+		{[]string{"tag", "87", "list"}, []string{"card", "tag", "87", "list"}},
 		{[]string{"tag", "--remove", "87", "buy"}, []string{"card", "tag", "87", "buy", "--remove"}},
 		{[]string{"tag", "87", "--remove", "buy"}, []string{"card", "tag", "87", "buy", "--remove"}},
 		{[]string{"tag", "87", "buy", "--remove"}, []string{"card", "tag", "87", "buy", "--remove"}},
@@ -131,6 +132,19 @@ func TestGlobalFlagsParse(t *testing.T) {
 func TestOldTagRemoveFlagFirst(t *testing.T) {
 	_, calls := extraServer(t, `{"number":87,"tags":["buy"]}`)
 	r := runGo([]string{"tag", "--remove", "87", "buy"})
+	if r.code != 0 {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 1 || w[0].path != "/1/cards/87/taggings" {
+		t.Errorf("writes %+v", w)
+	}
+}
+
+// A tag named "list" still works in the old form, because the word after
+// tag is a card number.
+func TestOldTagNamedList(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"tags":[]}`)
+	r := runGo([]string{"tag", "87", "list"})
 	if r.code != 0 {
 		t.Fatalf("got %+v", r)
 	}
