@@ -51,4 +51,5 @@ them. `fz help` lists the commands.
   problem.
 - [AGENTS.md](AGENTS.md): how to build, test and change this repo, for people
   and coding agents.
+- [Contributing](CONTRIBUTING.md): build, test and pull requests, for human contributors.
 - [License](LICENSE): MIT.

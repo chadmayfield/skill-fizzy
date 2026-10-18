@@ -46,7 +46,7 @@ func TestSkillDoesNotNeedTheRepo(t *testing.T) {
 }
 
 func TestNoEmDashes(t *testing.T) {
-	for _, rel := range []string{"README.md", "skill/SKILL.md", "SECURITY.md", "CLAUDE.md", "AGENTS.md", "docs/USERGUIDE.md"} {
+	for _, rel := range []string{"README.md", "skill/SKILL.md", "SECURITY.md", "CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md", "docs/USERGUIDE.md"} {
 		if strings.ContainsRune(read(t, rel), '—') {
 			t.Errorf("%s contains an em dash (U+2014)", rel)
 		}
