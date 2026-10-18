@@ -62,8 +62,8 @@ func TestNoEmphasisInsideURL(t *testing.T) {
 // never lands inside an href.
 func TestURLEndsAtCodeSpan(t *testing.T) {
 	for in, want := range map[string]string{
-		"See https://example.com/a`b`": `<p>See <a href="https://example.com/a">https://example.com/a</a><code>b</code></p>`,
-		"[x](https://example.com/`b`)": `<p>[x](<a href="https://example.com/">https://example.com/</a><code>b</code>)</p>`,
+		"See https://example.com/a`b`":  `<p>See <a href="https://example.com/a">https://example.com/a</a><code>b</code></p>`,
+		"[x](https://example.com/`b`)":  `<p>[x](<a href="https://example.com/">https://example.com/</a><code>b</code>)</p>`,
 		"[x](https://example.com/a)`b`": `<p><a href="https://example.com/a">x</a><code>b</code></p>`,
 	} {
 		got := ToHTML(in)
