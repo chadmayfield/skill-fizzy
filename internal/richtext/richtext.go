@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -36,21 +37,38 @@ func escapeText(s string) string { return escaper.Replace(s) }
 // > inside a comment or a quoted attribute does not end it early.
 var tag = regexp.MustCompile(`<!--[\s\S]*?-->|<(?:[^>"']|"[^"]*"|'[^']*')*>`)
 
-// entity matches a character reference such as &gt; or &#39;.
-var entity = regexp.MustCompile(`&[#a-zA-Z0-9]+;`)
+// entities returns the start and end of each character reference in s,
+// such as &gt; or &#39;: an &, one or more of # and ASCII letters and
+// digits, and a ;. It is the regexp &[#a-zA-Z0-9]+; written as a loop,
+// which is many times faster on a description made of entities.
+func entities(s string) [][2]int {
+	var out [][2]int
+	for i := 0; i < len(s); i++ {
+		if s[i] != '&' {
+			continue
+		}
+		j := i + 1
+		for j < len(s) && (s[j] == '#' || s[j] >= 'a' && s[j] <= 'z' || s[j] >= 'A' && s[j] <= 'Z' || s[j] >= '0' && s[j] <= '9') {
+			j++
+		}
+		if j > i+1 && j < len(s) && s[j] == ';' {
+			out = append(out, [2]int{i, j + 1})
+			i = j
+		}
+	}
+	return out
+}
 
 // findMatches returns the start of each non-overlapping occurrence of o in
 // s, left to right, skipping any occurrence that starts or ends inside an
 // entity. A phrase that covers a whole entity, such as &amp;, still matches.
 func findMatches(s, o string) []int {
-	ents := entity.FindAllStringIndex(s, -1)
+	// The entities are sorted and do not overlap, so the only one that can
+	// hold pos is the first that ends after it. A binary search finds it.
+	ents := entities(s)
 	inside := func(pos int) bool {
-		for _, e := range ents {
-			if pos > e[0] && pos < e[1] {
-				return true
-			}
-		}
-		return false
+		k := sort.Search(len(ents), func(k int) bool { return ents[k][1] > pos })
+		return k < len(ents) && pos > ents[k][0]
 	}
 	var out []int
 	for from := 0; from <= len(s)-len(o); {
@@ -90,8 +108,10 @@ func ReplaceText(html, old, new string, all bool) (string, error) {
 	}
 	texts = append(texts, html[at:])
 	count := 0
-	for _, s := range texts {
-		count += len(findMatches(s, o))
+	matches := make([][]int, len(texts))
+	for i, s := range texts {
+		matches[i] = findMatches(s, o)
+		count += len(matches[i])
 	}
 	if count == 0 {
 		return "", fmt.Errorf("%q not found in the description (text that spans formatting cannot be matched)", old)
@@ -102,7 +122,7 @@ func ReplaceText(html, old, new string, all bool) (string, error) {
 	var b strings.Builder
 	for i, s := range texts {
 		at := 0
-		for _, m := range findMatches(s, o) {
+		for _, m := range matches[i] {
 			b.WriteString(s[at:m])
 			b.WriteString(n)
 			at = m + len(o)

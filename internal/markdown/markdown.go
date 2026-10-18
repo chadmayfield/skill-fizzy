@@ -342,10 +342,24 @@ func restoreCode(text string, codes []string) string {
 // \[([^\]]+)\]\((https?://[^)\s]+|mailto:[^)\s]+)\)
 func links(text string) string {
 	r := []rune(text)
+	// next[k] is the index of the first ] at or after k, and stop[k] the
+	// first ) or space, or len(r). linkAt reads them instead of scanning
+	// ahead from every [, which made a line of brackets quadratic.
+	next, stop := make([]int, len(r)+1), make([]int, len(r)+1)
+	next[len(r)], stop[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		next[k], stop[k] = next[k+1], stop[k+1]
+		if r[k] == ']' {
+			next[k] = k
+		}
+		if r[k] == ')' || isSpace(r[k]) {
+			stop[k] = k
+		}
+	}
 	var b strings.Builder
 	for i := 0; i < len(r); {
 		if r[i] == '[' {
-			if end, label, url, ok := linkAt(r, i); ok {
+			if end, label, url, ok := linkAt(r, i, next, stop); ok {
 				b.WriteString(`<a href="` + hrefFrom(url, true) + `">` + label + "</a>")
 				i = end
 				continue
@@ -357,11 +371,8 @@ func links(text string) string {
 	return b.String()
 }
 
-func linkAt(r []rune, i int) (end int, label, url string, ok bool) {
-	j := i + 1
-	for j < len(r) && r[j] != ']' {
-		j++
-	}
+func linkAt(r []rune, i int, next, stop []int) (end int, label, url string, ok bool) {
+	j := next[i+1]
 	if j == i+1 || j+1 >= len(r) || r[j+1] != '(' {
 		return 0, "", "", false
 	}
@@ -370,10 +381,7 @@ func linkAt(r []rune, i int) (end int, label, url string, ok bool) {
 	if p < 0 {
 		return 0, "", "", false
 	}
-	q := p
-	for q < len(r) && r[q] != ')' && !isSpace(r[q]) {
-		q++
-	}
+	q := stop[p]
 	if q == p || q >= len(r) || r[q] != ')' {
 		return 0, "", "", false
 	}
