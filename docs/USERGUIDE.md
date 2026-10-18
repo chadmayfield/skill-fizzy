@@ -361,6 +361,13 @@ A new card lands in Maybe? unless `--column` names another lane. A
 description is Markdown, given with `--description` or read from a file with
 `--description-file`.
 
+`fz` checks `--column` before it creates the card. A column that does not
+exist, a name two columns share, or a reserved name sends nothing. A tag
+given twice is sent once. If a call after the create fails, such as the
+tagging, the error names the new card's number, in the message or in the
+request path. Finish that card by hand rather than creating it again. If Fizzy's reply to the create has no `Location`
+header, `fz` cannot tell the card's number, so it says so and exits 1.
+
 Edit:
 
 ```sh

@@ -264,7 +264,23 @@ func (f *Fizzy) Card(n int) (Card, error) {
 	return c, err
 }
 
-// CreateCard creates a card and returns its number, 0 in dry-run mode.
+// created POSTs body and returns the new object's id from the Location
+// header, or "" in dry-run mode. A reply with no Location is an error: the
+// object exists, but fz cannot name it. what names the object.
+func (f *Fizzy) created(path string, body any, what string) (string, error) {
+	status, hdr, _, err := f.C.Do(http.MethodPost, path, body)
+	if err != nil || status == 0 {
+		return "", err
+	}
+	id := client.IDFromLocation(hdr.Get("Location"))
+	if id == "" {
+		return "", fmt.Errorf("Fizzy created the %s but sent no Location header, so fz cannot tell its id", what)
+	}
+	return id, nil
+}
+
+// CreateCard creates a card and returns its number, 0 in dry-run mode. A
+// reply with no Location is an error.
 func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error) {
 	if err := CheckIDs(boardID); err != nil {
 		return 0, err
@@ -274,7 +290,7 @@ func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error)
 		Description string `json:"description,omitempty"`
 		Status      string `json:"status,omitempty"`
 	}{title, descHTML, status}
-	id, err := f.C.Create("/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body))
+	id, err := f.created("/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body), "card")
 	if err != nil || id == "" {
 		return 0, err
 	}
@@ -493,12 +509,13 @@ func (f *Fizzy) Tags() ([]Tag, error) { return list[Tag](f.C, "/tags") }
 
 // -- steps and comments ----------------------------------------------------
 
-// AddStep adds a step and returns its id, empty in dry-run mode.
+// AddStep adds a step and returns its id, empty in dry-run mode. A reply
+// with no Location is an error.
 func (f *Fizzy) AddStep(n int, content string, done bool) (string, error) {
-	return f.C.Create("/cards/"+strconv.Itoa(n)+"/steps", wrap("step", struct {
+	return f.created("/cards/"+strconv.Itoa(n)+"/steps", wrap("step", struct {
 		Content   string `json:"content"`
 		Completed bool   `json:"completed"`
-	}{content, done}))
+	}{content, done}), "step")
 }
 
 // UpdateStep changes a step. It sends only the fields that are non-nil.
@@ -525,11 +542,12 @@ func (f *Fizzy) DeleteStep(n int, id string) error {
 	return err
 }
 
-// AddComment adds a comment and returns its id, empty in dry-run mode.
+// AddComment adds a comment and returns its id, empty in dry-run mode. A
+// reply with no Location is an error.
 func (f *Fizzy) AddComment(n int, bodyHTML string) (string, error) {
-	return f.C.Create("/cards/"+strconv.Itoa(n)+"/comments", wrap("comment", struct {
+	return f.created("/cards/"+strconv.Itoa(n)+"/comments", wrap("comment", struct {
 		Body string `json:"body"`
-	}{bodyHTML}))
+	}{bodyHTML}), "comment")
 }
 
 // -- uploads (ActiveStorage direct upload) ---------------------------------

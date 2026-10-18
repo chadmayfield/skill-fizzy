@@ -19,6 +19,7 @@ type moveCreateServer struct {
 	location           string
 	tagStatus          int
 	stepLocation       bool
+	card90             string // GET /1/cards/90
 
 	mu    sync.Mutex
 	calls []seenCall
@@ -32,6 +33,7 @@ func newMoveCreateServer(t *testing.T) *moveCreateServer {
 		location:     "/1/cards/90.json",
 		tagStatus:    http.StatusNoContent,
 		stepLocation: true,
+		card90:       `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"Home"},"tags":[]}`,
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -63,8 +65,7 @@ func newMoveCreateServer(t *testing.T) *moveCreateServer {
 		case r.URL.Path == "/1/cards/87":
 			io.WriteString(w, `{"number":87,"title":"Fix the gate","board":{"id":"b1","name":"Home"},"tags":[]}`)
 		case r.URL.Path == "/1/cards/90":
-			// A new card's reply, here with no tags key.
-			io.WriteString(w, `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"Home"}}`)
+			io.WriteString(w, s.card90)
 		default:
 			http.NotFound(w, r)
 		}
@@ -134,6 +135,82 @@ func TestMoveNeedsToOrBoard(t *testing.T) {
 		}
 		if len(s.calls) != 0 {
 			t.Errorf("fz %q made calls %+v", argv, s.calls)
+		}
+	}
+}
+
+// card create checks --column before the create, and a bad one sends
+// nothing.
+func TestCreateChecksColumnFirst(t *testing.T) {
+	for _, tc := range []struct {
+		name, cols, column string
+		code               int
+	}{
+		{"missing", "", "Nope", 1},
+		{"ambiguous", `[{"id":"c1","name":"Next"},{"id":"c2","name":"NEXT"}]`, "next", 2},
+		{"reserved Maybe", `[{"id":"c1","name":"Maybe"}]`, "Maybe", 2},
+		{"reserved Maybe?", `[{"id":"c1","name":"Maybe"}]`, "maybe?", 2},
+		{"reserved Done", `[{"id":"c1","name":"Done"}]`, "done", 2},
+	} {
+		s := newMoveCreateServer(t)
+		if tc.cols != "" {
+			s.homeCols = tc.cols
+		}
+		for _, dry := range []bool{false, true} {
+			argv := []string{"card", "create", "Home", "Oil the hinge", "--column", tc.column}
+			if dry {
+				argv = append([]string{"--dry-run"}, argv...)
+			}
+			r := runGo(argv)
+			if r.code != tc.code || r.stdout != "" {
+				t.Errorf("%s, dry run %v: %+v, want exit %d", tc.name, dry, r, tc.code)
+			}
+		}
+		if w := s.writes(); len(w) != 0 {
+			t.Errorf("%s: sent %q", tc.name, w)
+		}
+	}
+}
+
+// card create tags the new card once per tag, though a tag is given twice,
+// because Fizzy's tag call toggles.
+func TestCreateTagsOnce(t *testing.T) {
+	s := newMoveCreateServer(t)
+	r := runGo([]string{"card", "create", "Home", "Oil the hinge", "--column", "Next", "--tag", "buy", "--tag", "#Buy", "--tag", "hinge"})
+	want := []string{"POST /1/boards/b1/cards", "POST /1/cards/90/triage", "POST /1/cards/90/taggings", "POST /1/cards/90/taggings"}
+	if r.code != 0 || r.stdout != "card #90 created on Home\n" || strings.Join(s.writes(), ",") != strings.Join(want, ",") {
+		t.Errorf("got %+v, writes %q", r, s.writes())
+	}
+}
+
+// A refusal after the create, here a reply with no tags list, names the
+// new card and what did not finish, and exits 1, because the card exists.
+func TestCreateLaterRefusalNamesCard(t *testing.T) {
+	s := newMoveCreateServer(t)
+	s.card90 = `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"Home"}}`
+	r := runGo([]string{"card", "create", "Home", "Oil the hinge", "--tag", "buy", "--tag", "hinge"})
+	if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "card #90 was created on Home, but the tag buy, the tag hinge did not finish") {
+		t.Errorf("got %+v", r)
+	}
+}
+
+// A create reply with no Location is an error, not dry-run text, and the
+// later calls are not sent.
+func TestCreateWithoutLocation(t *testing.T) {
+	s := newMoveCreateServer(t)
+	s.location = ""
+	r := runGo([]string{"card", "create", "Home", "Oil the hinge", "--column", "Next", "--tag", "buy"})
+	if r.code != 1 || r.stdout != "" || strings.Contains(r.stderr, "dry-run") || !strings.Contains(r.stderr, "Location") {
+		t.Errorf("got %+v", r)
+	}
+	if w := s.writes(); len(w) != 1 {
+		t.Errorf("writes %q, want only the create", w)
+	}
+	s.stepLocation = false
+	for _, argv := range [][]string{{"step", "add", "87", "Order the hinge"}, {"comment", "add", "87", "Measured the gap"}} {
+		r := runGo(argv)
+		if r.code != 1 || r.stdout != "" || strings.Contains(r.stderr, "None") || !strings.Contains(r.stderr, "Location") {
+			t.Errorf("fz %q: %+v", argv, r)
 		}
 	}
 }

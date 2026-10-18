@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -61,9 +62,11 @@ func addCardCommands(root *cobra.Command) {
 	}
 
 	create := &cobra.Command{
-		Use:     "create BOARD TITLE",
-		Short:   "create a card",
-		Long:    "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing.",
+		Use:   "create BOARD TITLE",
+		Short: "create a card",
+		Long: "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing. " +
+			"fz checks --column before the create, so a missing, shared or reserved column name sends nothing. A tag given twice is sent once. " +
+			"If a call after the create fails, the error names the new card number.",
 		Example: examples(`fz card create Home "Fix the gate"`, `fz card create Home "Fix the gate" --column Next --tag buy`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardCreate),
@@ -325,10 +328,25 @@ func cardCreate(c *cmdContext, a []string) error {
 	if desc != "" {
 		html = markdown.ToHTML(desc)
 	}
+	// Check --column before the create, so a bad one sends nothing. Maybe?
+	// is where a new card lands, so it needs no move, but it is still
+	// refused when a custom column has that name.
 	col, _ := fl.GetString("column")
-	if col != "" && !isMaybe(col) {
-		if err := fz.CheckMoveTarget(b.ID, col); err != nil {
+	var target *fizzy.MoveTarget
+	if col != "" {
+		t, err := fz.ResolveMoveTarget(b.ID, col)
+		if err != nil {
 			return err
+		}
+		if !t.IsMaybe() {
+			target = &t
+		}
+	}
+	// Fizzy's tag call toggles, so a tag given twice is sent once.
+	var titles []string
+	for _, t := range tags {
+		if title := fizzy.TagTitle(t); !slices.Contains(titles, title) {
+			titles = append(titles, title)
 		}
 	}
 	n, err := fz.CreateCard(b.ID, a[1], html, "")
@@ -336,15 +354,34 @@ func cardCreate(c *cmdContext, a []string) error {
 		return err
 	}
 	if n != 0 {
-		if col != "" && !isMaybe(col) {
-			if err := fz.MoveCard(n, col, b.ID); err != nil {
-				return err
-			}
+		var left []string
+		if target != nil {
+			left = append(left, "the move to "+col)
 		}
-		for _, t := range tags {
-			if _, err := fz.AddTag(n, t); err != nil {
+		for _, t := range titles {
+			left = append(left, "the tag "+t)
+		}
+		// unfinished turns a refusal after the create into an error that
+		// names the new card and what is left, and exits 1, because the
+		// card exists. An API error is returned as it is, as the Python fz
+		// printed it.
+		unfinished := func(err error) error {
+			if !fizzy.IsRefusal(err) {
 				return err
 			}
+			return fmt.Errorf("card #%d was created on %s, but %s did not finish: %v", n, b.Name, strings.Join(left, ", "), err)
+		}
+		if target != nil {
+			if err := fz.MoveCardTo(n, *target); err != nil {
+				return unfinished(err)
+			}
+			left = left[1:]
+		}
+		for _, t := range titles {
+			if _, err := fz.AddTag(n, t); err != nil {
+				return unfinished(err)
+			}
+			left = left[1:]
 		}
 	}
 	text := "dry-run: card not created"
