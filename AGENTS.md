@@ -179,6 +179,9 @@ the docs catch up. `fz help <noun>` must name a real command.
 ### Git
 
 - Feature work happens on a branch and merges to `main` by pull request. Never commit to `main` directly.
+  This rule, and the trailer rule under [Commits](#commits), apply from the Go port onward.
+  The first four commits on `main` and the GitHub merge of the Go port predate them.
+  Since then, one merge went to `main` without a pull request: `cc90bdb`, the plan-2 merge.
 - Never commit these paths: `.superpowers/`, any `superpowers/` folder,
   `docs/plans/`, `docs/specs/`, `CLAUDE.local.md`,
   `.claude/settings.local.json` and `.claude/worktrees/`. They hold private
@@ -187,7 +190,8 @@ the docs catch up. `fz help <noun>` must name a real command.
 
 ## Commits
 
-Every commit ends with a co-author trailer for the model that wrote it.
+From the Go port onward, every commit ends with a co-author trailer for
+the model that wrote it.
 
     Co-Authored-By: <the model that wrote the commit> <noreply@anthropic.com or the vendor's address>
 
