@@ -20,7 +20,7 @@ func addAccountCommands(root *cobra.Command) {
 	postpone := &cobra.Command{
 		Use:     "postpone DAYS",
 		Short:   "set the account's auto-postpone default (needs --yes)",
-		Long:    "Set how many days without activity move a card to Not now, for boards that do not set their own period. Prints the current and new period, and refuses without --yes. Needs the admin role.",
+		Long:    "Set how many days without activity move a card to Not now, for boards that do not set their own period. DAYS is one of 3, 7, 11, 30, 90 or 365. Prints the current and new period, and refuses without --yes. Needs the admin role.",
 		Example: examples("fz account postpone 30 --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(accountPostpone),
@@ -91,8 +91,11 @@ func accountShow(c *cmdContext, _ []string) error {
 
 func accountPostpone(c *cmdContext, a []string) error {
 	days, err := strconv.Atoi(a[0])
-	if err != nil || days <= 0 {
-		return usagef("argument DAYS: must be a positive whole number, not %s", pyRepr(a[0]))
+	if err != nil {
+		return usagef("argument DAYS: invalid int value: %s", pyRepr(a[0]))
+	}
+	if err := fizzy.ValidPostponeDays(days); err != nil {
+		return usageError{err}
 	}
 	yes, _ := c.cmd.Flags().GetBool("yes")
 	fz, err := c.api()

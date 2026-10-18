@@ -2,8 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
+	// The embedded zone database lets user timezone check names on a system
+	// without zoneinfo files.
+	_ "time/tzdata"
 
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
@@ -60,7 +65,7 @@ func addPeopleCommands(root *cobra.Command) {
 	}, edit, &cobra.Command{
 		Use:     "timezone NAME",
 		Short:   "set your timezone",
-		Long:    "Set your timezone, which Fizzy uses for times in notification emails. NAME is an IANA name such as America/Denver, checked before it is sent.",
+		Long:    "Set your timezone, which Fizzy uses for times in notification emails. NAME is an IANA name such as America/Denver, spelled with its exact case. fz checks it before sending.",
 		Example: examples("fz user timezone America/Denver"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userTimezone),
@@ -168,12 +173,7 @@ func userEdit(c *cmdContext, a []string) error {
 
 func userTimezone(c *cmdContext, a []string) error {
 	name := a[0]
-	// LoadLocation takes "" as UTC and "Local" as the machine's zone, which
-	// are not IANA names the server would know.
-	if name == "" || name == "Local" {
-		return usagef("unknown timezone %s", pyRepr(name))
-	}
-	if _, err := time.LoadLocation(name); err != nil {
+	if !validTimezone(name) {
 		return usagef("unknown timezone %s", pyRepr(name))
 	}
 	fz, err := c.api()
@@ -184,6 +184,64 @@ func userTimezone(c *cmdContext, a []string) error {
 		return err
 	}
 	return emit(c.cmd, obj{{"timezone_name", name}}, "timezone set to "+name)
+}
+
+// zoneDirs are the system zoneinfo directories time.LoadLocation reads, in
+// order, before its embedded copy (platformZoneSources in Go's time package).
+var zoneDirs = []string{"/usr/share/zoneinfo", "/usr/share/lib/zoneinfo", "/usr/lib/locale/TZ", "/etc/zoneinfo"}
+
+// validTimezone reports whether name is an IANA zone name spelled exactly.
+// LoadLocation accepts "" (UTC), "Local" and the posixrules and Factory
+// files, which the server would not know. On a case-insensitive disk it
+// also loads "america/denver", so the case of each part of the path is
+// checked in the first zone directory that holds it. A name found in no
+// directory came from the embedded copy, which matches case exactly.
+func validTimezone(name string) bool {
+	switch name {
+	case "", "Local", "posixrules", "Factory":
+		return false
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil || loc.String() != name {
+		return false
+	}
+	for _, dir := range zoneDirs {
+		if exact, found := zoneFileCase(dir, name); found {
+			return exact
+		}
+	}
+	return true
+}
+
+// zoneFileCase looks for name under dir one path part at a time. found
+// reports whether it exists in any case; exact whether every part matches
+// case too.
+func zoneFileCase(dir, name string) (exact, found bool) {
+	cur := dir
+	for _, part := range strings.Split(name, "/") {
+		entries, err := os.ReadDir(cur)
+		if err != nil {
+			return false, false
+		}
+		match := ""
+		for _, e := range entries {
+			if e.Name() == part {
+				match = part
+				break
+			}
+			if match == "" && strings.EqualFold(e.Name(), part) {
+				match = e.Name()
+			}
+		}
+		if match == "" {
+			return false, false
+		}
+		if match != part {
+			return false, true
+		}
+		cur = filepath.Join(cur, part)
+	}
+	return true, true
 }
 
 func whoami(c *cmdContext, _ []string) error {

@@ -19,14 +19,15 @@ func addActivityCommands(root *cobra.Command) {
 	}
 	list := &cobra.Command{
 		Use:     "list",
-		Short:   "list activity, newest first (every page)",
-		Long:    "List activity, newest first, with the time, action, what it happened to and a short summary of the details. --creator takes a user id, an exact name or an email.",
-		Example: examples("fz activity list", "fz activity list --board Home", "fz activity list --board Home --creator 03abc123def456ghi789jkl0mn"),
+		Short:   "list recent activity, newest first",
+		Long:    "List activity, newest first, with the time, action, what it happened to and a short summary of the details. fz stops reading pages once it has --limit entries. --creator takes a user id, an exact name or an email. An id that matches no active user is sent as it is, so a deactivated user's activity can still be listed.",
+		Example: examples("fz activity list", "fz activity list --limit 0", "fz activity list --board Home", "fz activity list --board Home --creator 03abc123def456ghi789jkl0mn"),
 		Args:    args(cobra.NoArgs),
 		RunE:    action(activityList),
 	}
 	list.Flags().String("board", "", "board name or id")
 	list.Flags().String("creator", "", "user id, name or email")
+	list.Flags().Int("limit", 50, "stop after this many entries; 0 reads every page")
 	act.AddCommand(list)
 
 	notes := &cobra.Command{
@@ -124,7 +125,9 @@ func activityLine(a fizzy.Activity) string {
 }
 
 // activityCreator resolves --creator to a user id: an id, then an exact name
-// ignoring case, then an email ignoring case.
+// ignoring case, then an email ignoring case. GET /users lists only active
+// users, so a value that matches none of them but looks like an id is
+// returned as it is.
 func activityCreator(fz *fizzy.Fizzy, ref string) (string, error) {
 	users, err := fz.Users()
 	if err != nil {
@@ -153,6 +156,9 @@ func activityCreator(fz *fizzy.Fizzy, ref string) (string, error) {
 			return u.ID, nil
 		}
 	}
+	if looksLikeID(ref) {
+		return ref, nil
+	}
 	names := make([]string, len(users))
 	for i, u := range users {
 		names[i] = u.Name
@@ -160,8 +166,30 @@ func activityCreator(fz *fizzy.Fizzy, ref string) (string, error) {
 	return "", fmt.Errorf("no user %s (have: %s)", pyRepr(ref), strings.Join(names, ", "))
 }
 
+// looksLikeID reports whether s has the form of a Fizzy id: 20 to 32
+// lowercase letters and digits, at least one of them a digit.
+func looksLikeID(s string) bool {
+	if len(s) < 20 || len(s) > 32 {
+		return false
+	}
+	digit := false
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digit = true
+		case r < 'a' || r > 'z':
+			return false
+		}
+	}
+	return digit
+}
+
 func activityList(c *cmdContext, _ []string) error {
 	fl := c.cmd.Flags()
+	limit, _ := fl.GetInt("limit")
+	if limit < 0 {
+		return usagef("argument --limit: must be 0 or more, not %d", limit)
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
@@ -179,7 +207,7 @@ func activityList(c *cmdContext, _ []string) error {
 			return err
 		}
 	}
-	acts, err := fz.Activities(boardID, creatorID)
+	acts, err := fz.Activities(boardID, creatorID, limit)
 	if err != nil {
 		return err
 	}

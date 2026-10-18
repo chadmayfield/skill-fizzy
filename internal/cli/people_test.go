@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -154,7 +156,7 @@ func TestUserTimezone(t *testing.T) {
 
 func TestUserTimezoneRejectsBadNames(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
-	for _, name := range []string{"Mars/Base", "", "Local", "../etc"} {
+	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "america/denver", "AMERICA/DENVER", "posixrules", "Factory"} {
 		r := runGo([]string{"user", "timezone", name})
 		if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: ") {
 			t.Errorf("%q: got %+v", name, r)
@@ -162,5 +164,43 @@ func TestUserTimezoneRejectsBadNames(t *testing.T) {
 	}
 	if len(calls()) != 0 {
 		t.Errorf("calls = %q", callList(calls()))
+	}
+}
+
+func TestUserTimezoneAcceptsExactNames(t *testing.T) {
+	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
+	for _, name := range []string{"America/Denver", "Europe/London", "America/Argentina/Buenos_Aires", "UTC"} {
+		if r := runGo([]string{"user", "timezone", name}); r.code != 0 {
+			t.Errorf("%q: got %+v", name, r)
+		}
+	}
+	if len(calls()) != 4 {
+		t.Errorf("calls = %q", callList(calls()))
+	}
+}
+
+func TestZoneFileCase(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "America"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "America", "Denver"), "TZif")
+	cases := []struct {
+		name         string
+		exact, found bool
+	}{
+		{"America/Denver", true, true},
+		{"Europe/London", false, false},
+		{"America/Boise", false, false},
+	}
+	// The lower-case form is found only where the disk ignores case; on a
+	// case-sensitive disk it is simply missing. Either way it is not exact.
+	if exact, _ := zoneFileCase(dir, "america/denver"); exact {
+		t.Error("america/denver matched exactly")
+	}
+	for _, c := range cases {
+		if exact, found := zoneFileCase(dir, c.name); exact != c.exact || found != c.found {
+			t.Errorf("%s: exact=%v found=%v, want %v %v", c.name, exact, found, c.exact, c.found)
+		}
 	}
 }

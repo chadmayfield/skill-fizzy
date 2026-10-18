@@ -209,13 +209,24 @@ func (f *Fizzy) AccountSettings() (Account, error) {
 	return a, err
 }
 
+// ValidPostponeDays checks days against AutoPostponeDays. Fizzy's Entropy
+// model uses the same list for accounts and boards.
+func ValidPostponeDays(days int) error {
+	for _, d := range AutoPostponeDays {
+		if d == days {
+			return nil
+		}
+	}
+	return errors.New("auto-postpone must be one of " + pyIntTuple(AutoPostponeDays))
+}
+
 // PostponeAccount sets the account's default auto-postpone period and
-// returns the account, which is empty in dry-run mode. The server checks
-// which periods it accepts.
+// returns the account, which is empty in dry-run mode. days must be one of
+// AutoPostponeDays.
 func (f *Fizzy) PostponeAccount(days int) (Account, error) {
 	var a Account
-	if days <= 0 {
-		return a, errors.New("days must be a positive number")
+	if err := ValidPostponeDays(days); err != nil {
+		return a, err
 	}
 	raw, err := f.C.Write(http.MethodPut, "/account/entropy", wrap("entropy", struct {
 		Days int `json:"auto_postpone_period_in_days"`
@@ -312,9 +323,10 @@ func (f *Fizzy) SetEmailFrequency(freq string) error {
 
 // -- activity -------------------------------------------------------------
 
-// Activities lists the activity feed, newest first, following every page.
-// An empty boardID or creatorID leaves that filter out.
-func (f *Fizzy) Activities(boardID, creatorID string) ([]Activity, error) {
+// Activities lists the activity feed, newest first. It stops reading pages
+// once it has limit items; a limit of 0 reads every page. An empty boardID
+// or creatorID leaves that filter out.
+func (f *Fizzy) Activities(boardID, creatorID string, limit int) ([]Activity, error) {
 	var parts []string
 	if boardID != "" {
 		parts = append(parts, url.QueryEscape("board_ids[]")+"="+url.QueryEscape(boardID))
@@ -326,7 +338,38 @@ func (f *Fizzy) Activities(boardID, creatorID string) ([]Activity, error) {
 	if len(parts) > 0 {
 		path += "?" + strings.Join(parts, "&")
 	}
-	return list[Activity](f.C, path)
+	return listUpTo[Activity](f.C, path, limit)
+}
+
+// listUpTo is list with a cap: it follows rel="next" only until it holds
+// limit items, then drops any extra from the last page. A limit of 0 reads
+// every page, as list does.
+func listUpTo[T any](c *client.Client, path string, limit int) ([]T, error) {
+	var out []T
+	next := c.URL(path, true)
+	seen := map[string]bool{}
+	for next != "" && (limit == 0 || len(out) < limit) {
+		if seen[next] {
+			return nil, fmt.Errorf("pagination loop: %s linked again", next)
+		}
+		seen[next] = true
+		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
+		if err != nil {
+			return nil, err
+		}
+		if len(payload) > 0 {
+			var page []T
+			if err := json.Unmarshal(payload, &page); err != nil {
+				return nil, err
+			}
+			out = append(out, page...)
+		}
+		next = client.NextLink(hdr.Get("Link"))
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 // -- exports --------------------------------------------------------------

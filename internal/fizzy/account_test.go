@@ -74,8 +74,13 @@ func TestAccountSettingsAndPostpone(t *testing.T) {
 	if c.Method != "PUT" || c.Path != "/1/account/entropy" || string(c.Body) != `{"entropy":{"auto_postpone_period_in_days":90}}` {
 		t.Errorf("second call %+v body %s", c, c.Body)
 	}
-	if _, err := f.PostponeAccount(0); err == nil {
-		t.Error("PostponeAccount(0) did not fail")
+	for _, d := range []int{0, 14} {
+		if _, err := f.PostponeAccount(d); err == nil || err.Error() != "auto-postpone must be one of (3, 7, 11, 30, 90, 365)" {
+			t.Errorf("PostponeAccount(%d) err = %v", d, err)
+		}
+	}
+	if len(s.calls) != 2 {
+		t.Errorf("calls = %+v", s.calls)
 	}
 }
 
@@ -169,14 +174,14 @@ func TestActivitiesFilters(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		jsonText(w, "["+shapeActivity+","+shapeCardEvent+"]")
 	})
-	acts, err := f.Activities("B1", "U1")
+	acts, err := f.Activities("B1", "U1", 0)
 	if err != nil || len(acts) != 2 {
 		t.Fatalf("acts=%+v err=%v", acts, err)
 	}
 	if s.calls[0].Path != "/1/activities" || s.calls[0].Query != "board_ids%5B%5D=B1&creator_ids%5B%5D=U1" {
 		t.Errorf("call %+v", s.calls[0])
 	}
-	if _, err := f.Activities("", ""); err != nil {
+	if _, err := f.Activities("", "", 0); err != nil {
 		t.Fatal(err)
 	}
 	if s.calls[1].Query != "" {
@@ -241,3 +246,33 @@ func TestStartAccountExportDryRun(t *testing.T) {
 }
 
 func decodeKeep(s string, v any) error { return json.Unmarshal([]byte(s), v) }
+
+// activityPages serves three pages of two activities each, linked by
+// rel="next", and records every request.
+func activityPages(t *testing.T) (*Fizzy, *stub) {
+	t.Helper()
+	var base string
+	f, s, _, srv := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		page := r.URL.Query().Get("page")
+		next := map[string]string{"": "2", "2": "3"}[page]
+		if next != "" {
+			w.Header().Set("Link", "<"+base+"/1/activities?page="+next+">; rel=\"next\"")
+		}
+		jsonText(w, "["+shapeCardEvent+","+shapeCardEvent+"]")
+	})
+	base = srv.URL
+	return f, s
+}
+
+func TestActivitiesLimitStopsPaging(t *testing.T) {
+	cases := []struct{ limit, items, requests int }{
+		{1, 1, 1}, {2, 2, 1}, {3, 3, 2}, {0, 6, 3}, {50, 6, 3},
+	}
+	for _, c := range cases {
+		f, s := activityPages(t)
+		acts, err := f.Activities("", "", c.limit)
+		if err != nil || len(acts) != c.items || len(s.calls) != c.requests {
+			t.Errorf("limit %d: %d items, %d requests (%v), want %d and %d", c.limit, len(acts), len(s.calls), err, c.items, c.requests)
+		}
+	}
+}

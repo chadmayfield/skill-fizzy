@@ -126,11 +126,15 @@ func TestAccountPostponeDryRun(t *testing.T) {
 
 func TestAccountPostponeBadDays(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{})
-	for _, d := range []string{"x", "0", "-3"} {
+	for _, d := range []string{"x", "0", "-3", "14"} {
 		r := runGo([]string{"account", "postpone", "--yes", "--", d})
 		if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: ") {
 			t.Errorf("%s: got %+v", d, r)
 		}
+	}
+	r := runGo([]string{"account", "postpone", "14", "--yes"})
+	if r.stderr != "fz: auto-postpone must be one of (3, 7, 11, 30, 90, 365)\n" {
+		t.Errorf("14: stderr = %q", r.stderr)
 	}
 	if len(calls()) != 0 {
 		t.Errorf("calls = %q", callList(calls()))

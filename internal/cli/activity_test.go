@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -154,5 +158,70 @@ func TestActivityListUnknownCreator(t *testing.T) {
 	r := runGo([]string{"activity", "list", "--creator", "Nobody"})
 	if r.code != 1 || r.stderr != "fz: no user 'Nobody' (have: Alex)\n" {
 		t.Fatalf("got %+v", r)
+	}
+}
+
+// A deactivated user is not in GET /users, so an id that matches nobody is
+// sent as it is.
+func TestActivityListCreatorIDPassesThrough(t *testing.T) {
+	_, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "]", "GET /1/activities": "[]"})
+	r := runGo([]string{"activity", "list", "--creator", "03abc123def456ghi789jkl0mn"})
+	if r.code != 0 || r.stdout != "(no activity)\n" {
+		t.Fatalf("got %+v", r)
+	}
+	cs := calls()
+	if last := cs[len(cs)-1]; last.path != "/1/activities?creator_ids%5B%5D=03abc123def456ghi789jkl0mn" {
+		t.Errorf("last call = %+v", last)
+	}
+}
+
+func TestActivityListLimit(t *testing.T) {
+	var mu sync.Mutex
+	requests := 0
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests++
+		mu.Unlock()
+		page := r.URL.Query().Get("page")
+		if page == "" {
+			page = "1"
+		}
+		if page != "3" {
+			n := map[string]string{"1": "2", "2": "3"}[page]
+			w.Header().Set("Link", "<"+srv.URL+"/1/activities?page="+n+">; rel=\"next\"")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, strings.Replace(actFeed, `"id":"V1"`, `"id":"P`+page+`"`, 1))
+	}))
+	t.Cleanup(srv.Close)
+	parityEnv(t, srv)
+	cases := []struct {
+		args          []string
+		lines, wantRq int
+	}{
+		{[]string{"activity", "list", "--limit", "3"}, 3, 1},
+		{[]string{"activity", "list", "--limit", "5"}, 5, 2},
+		{[]string{"activity", "list"}, 12, 3},
+		{[]string{"activity", "list", "--limit", "0"}, 12, 3},
+	}
+	for _, c := range cases {
+		mu.Lock()
+		requests = 0
+		mu.Unlock()
+		r := runGo(c.args)
+		mu.Lock()
+		got := requests
+		mu.Unlock()
+		if n := strings.Count(r.stdout, "\n"); r.code != 0 || n != c.lines || got != c.wantRq {
+			t.Errorf("%q: %d lines, %d requests (%+v), want %d and %d", c.args, n, got, r, c.lines, c.wantRq)
+		}
+	}
+	if r := runGo([]string{"activity", "list", "--limit", "-1"}); r.code != 2 {
+		t.Errorf("--limit -1: got %+v", r)
+	}
+	help := runGo([]string{"activity", "list", "--help"})
+	if !strings.Contains(help.stdout, "(default 50)") {
+		t.Errorf("help does not show the default:\n%s", help.stdout)
 	}
 }
