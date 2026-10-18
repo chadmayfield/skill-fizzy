@@ -40,9 +40,9 @@ func addPeopleCommands(root *cobra.Command) {
 		Long:  "Work with the people on the account.",
 	}
 	edit := &cobra.Command{
-		Use:     "edit ID",
+		Use:     "edit USER",
 		Short:   "rename a user (needs --yes)",
-		Long:    "Change a user's display name. Prints the current and new name, and refuses without --yes.",
+		Long:    "Change a user's display name. " + userArgHelp + " Prints the current and new name, and refuses without --yes.",
 		Example: examples(`fz user edit 03abc123def456ghi789jkl0mn --name "Gate Keeper" --yes`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userEdit),
@@ -57,10 +57,10 @@ func addPeopleCommands(root *cobra.Command) {
 		Args:    args(cobra.NoArgs),
 		RunE:    action(userList),
 	}, &cobra.Command{
-		Use:     "show ID",
+		Use:     "show USER",
 		Short:   "show one user",
-		Long:    "Print a user's id, name, email, role and link.",
-		Example: examples("fz user show 03abc123def456ghi789jkl0mn"),
+		Long:    "Print a user's id, name, email, role and link. " + userArgHelp,
+		Example: examples("fz user show 03abc123def456ghi789jkl0mn", "fz user show Alex"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userShow),
 	}, edit, &cobra.Command{
@@ -82,6 +82,10 @@ func addPeopleCommands(root *cobra.Command) {
 	}
 	root.AddCommand(tags, users, whoami)
 }
+
+// userArgHelp says how user show and user edit read their USER argument.
+const userArgHelp = "USER is a user id, a name or an email, matched as card assign matches one. " +
+	"A name two users share exits 2. An id that matches no active user is still tried, so a deactivated user's id works."
 
 func userLine(u fizzy.User) string {
 	line := u.ID + "  " + u.Name
@@ -132,12 +136,26 @@ func userList(c *cmdContext, _ []string) error {
 	return emit(c.cmd, rawList(users), listText(users, userLine, "(no users)"))
 }
 
+// findUser resolves a USER argument with MatchUser and fetches that user.
+// An id of the Fizzy form that matches no active user is passed through, so
+// a deactivated user's id still works.
+func findUser(fz *fizzy.Fizzy, s string) (fizzy.User, error) {
+	if err := fizzy.CheckIDs(s); err != nil {
+		return fizzy.User{}, err
+	}
+	m, err := fz.MatchUser(s, true)
+	if err != nil {
+		return fizzy.User{}, err
+	}
+	return fz.User(m.ID)
+}
+
 func userShow(c *cmdContext, a []string) error {
 	fz, err := c.api()
 	if err != nil {
 		return err
 	}
-	u, err := fz.User(a[0])
+	u, err := findUser(fz, a[0])
 	if err != nil {
 		return err
 	}
@@ -156,24 +174,24 @@ func userEdit(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	u, err := fz.User(a[0])
+	u, err := findUser(fz, a[0])
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", a[0], u.Name, name)
+	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", u.ID, u.Name, name)
 	if !yes {
 		fmt.Fprintln(c.errw(), "refusing without --yes")
 		return exitCode(2)
 	}
-	updated, err := fz.RenameUser(a[0], name)
+	updated, err := fz.RenameUser(u.ID, name)
 	if err != nil {
 		return err
 	}
-	var data any = obj{{"id", a[0]}, {"name", name}}
+	var data any = obj{{"id", u.ID}, {"name", name}}
 	if updated.Raw() != nil {
 		data = updated.Raw()
 	}
-	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", a[0], name), fmt.Sprintf("rename user %s to %s", a[0], name)))
+	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", u.ID, name), fmt.Sprintf("rename user %s to %s", u.ID, name)))
 }
 
 func userTimezone(c *cmdContext, a []string) error {

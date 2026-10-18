@@ -522,11 +522,16 @@ Drafts upload their images for you, so most people never need this command.
 fz tag list
 fz user list
 fz user show 03abc123def456ghi789jkl0mn
+fz user show Alex
 fz whoami
 ```
 
 `tag list` prints every tag on the account with its id. `user list` prints
-the active users with their id, name, email and role. `whoami` lists every
+the active users with their id, name, email and role. `user show` and
+`user edit` take a user id, a name or an email, matched the way
+`card assign` matches a user. A name two users share exits 2. An id that
+matches no active user is still tried, so a deactivated user's id works.
+`whoami` lists every
 account your token can reach, with your user on each, and marks the
 configured account with `*`.
 

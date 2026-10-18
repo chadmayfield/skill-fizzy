@@ -97,29 +97,29 @@ func TestWhoami(t *testing.T) {
 }
 
 func TestUserEditNeedsYes(t *testing.T) {
-	_, calls := acctServer(t, map[string]string{"GET /1/users/U1": acctUser, "PUT /1/users/U1": acctUser})
+	_, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "," + acctUser2 + "]", "GET /1/users/U1": acctUser, "PUT /1/users/U1": acctUser})
 	r := runGo([]string{"user", "edit", "U1", "--name", "Gate Keeper"})
 	if r.code != 2 || r.stdout != "" || r.stderr != "about to rename user U1 from Alex to Gate Keeper\nrefusing without --yes\n" {
 		t.Fatalf("got %+v", r)
 	}
-	if got := callList(calls()); got != "GET /1/users/U1" {
+	if got := callList(calls()); got != "GET /1/users\nGET /1/users/U1" {
 		t.Errorf("calls = %q", got)
 	}
 }
 
 func TestUserEditYes(t *testing.T) {
-	_, calls := acctServer(t, map[string]string{"GET /1/users/U1": acctUser, "PUT /1/users/U1": acctUser})
+	_, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "," + acctUser2 + "]", "GET /1/users/U1": acctUser, "PUT /1/users/U1": acctUser})
 	r := runGo([]string{"user", "edit", "U1", "--name", "Gate Keeper", "--yes"})
 	if r.code != 0 || r.stdout != "user U1 renamed to Gate Keeper\n" {
 		t.Fatalf("got %+v", r)
 	}
-	if got := callList(calls()); got != "GET /1/users/U1\nPUT /1/users/U1 {\"user\":{\"name\":\"Gate Keeper\"}}" {
+	if got := callList(calls()); got != "GET /1/users\nGET /1/users/U1\nPUT /1/users/U1 {\"user\":{\"name\":\"Gate Keeper\"}}" {
 		t.Errorf("calls = %q", got)
 	}
 }
 
 func TestUserEditDryRun(t *testing.T) {
-	srv, calls := acctServer(t, map[string]string{"GET /1/users/U1": acctUser})
+	srv, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "," + acctUser2 + "]", "GET /1/users/U1": acctUser})
 	r := runGo([]string{"--dry-run", "--json", "user", "edit", "U1", "--name", "Gate Keeper", "--yes"})
 	if r.code != 0 || r.stdout != "{\n  \"id\": \"U1\",\n  \"name\": \"Gate Keeper\",\n  \"dry_run\": true\n}\n" {
 		t.Fatalf("got %+v", r)
@@ -127,7 +127,7 @@ func TestUserEditDryRun(t *testing.T) {
 	if !strings.Contains(r.stderr, "[dry-run] PUT "+srv.URL+`/1/users/U1 {"user": {"name": "Gate Keeper"}}`) {
 		t.Errorf("stderr = %q", r.stderr)
 	}
-	if got := callList(calls()); got != "GET /1/users/U1" {
+	if got := callList(calls()); got != "GET /1/users\nGET /1/users/U1" {
 		t.Errorf("calls = %q", got)
 	}
 }
@@ -190,5 +190,60 @@ func TestUserTimezoneServerRejection(t *testing.T) {
 	r := runGo([]string{"user", "timezone", "America/Denver"})
 	if r.code != 1 || r.stderr != "fz: timezone America/Denver was rejected by the server; names are case-sensitive, for example America/Denver\n" {
 		t.Fatalf("got %+v", r)
+	}
+}
+
+// user show and user edit take a USER the way card assign does: an id, a
+// name, a name in any case when only one user has it, or an email.
+func TestUserShowAndEditMatchUser(t *testing.T) {
+	_, calls := acctServer(t, map[string]string{
+		"GET /1/users":    "[" + acctUser + "," + acctUser2 + "]",
+		"GET /1/users/U1": acctUser,
+		"GET /1/users/U2": acctUser2,
+		"PUT /1/users/U2": acctUser2,
+	})
+	for _, who := range []string{"U1", "Alex", "alex", "ALEX@example.com"} {
+		r := runGo([]string{"user", "show", who})
+		if r.code != 0 || !strings.HasPrefix(r.stdout, "U1  Alex <alex@example.com> owner\n") {
+			t.Errorf("show %s: %+v", who, r)
+		}
+	}
+	r := runGo([]string{"user", "edit", "sam@example.com", "--name", "Gate Keeper", "--yes"})
+	if r.code != 0 || r.stdout != "user U2 renamed to Gate Keeper\n" || r.stderr != "about to rename user U2 from Sam to Gate Keeper\n" {
+		t.Fatalf("edit %+v", r)
+	}
+	var puts []string
+	for _, c := range calls() {
+		if c.method != "GET" {
+			puts = append(puts, c.method+" "+c.path)
+		}
+	}
+	if len(puts) != 1 || puts[0] != "PUT /1/users/U2" {
+		t.Errorf("writes = %q", puts)
+	}
+}
+
+// A USER that matches nobody exits 1, and one that two users share exits 2.
+// Neither sends a write.
+func TestUserShowAndEditUnknownOrAmbiguous(t *testing.T) {
+	twin := strings.Replace(strings.Replace(acctUser2, `"U2"`, `"U3"`, 1), `"Sam"`, `"alex"`, 1)
+	_, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "," + twin + "]"})
+	for _, c := range []struct {
+		args []string
+		code int
+	}{
+		{[]string{"user", "show", "Nobody"}, 1},
+		{[]string{"user", "edit", "Nobody", "--name", "Gate Keeper", "--yes"}, 1},
+		{[]string{"user", "show", "ALEX"}, 2},
+		{[]string{"user", "edit", "ALEX", "--name", "Gate Keeper", "--yes"}, 2},
+	} {
+		if r := runGo(c.args); r.code != c.code || r.stdout != "" {
+			t.Errorf("%q: %+v", c.args, r)
+		}
+	}
+	for _, c := range calls() {
+		if c.method != "GET" || c.path != "/1/users" {
+			t.Errorf("sent %s %s", c.method, c.path)
+		}
 	}
 }
