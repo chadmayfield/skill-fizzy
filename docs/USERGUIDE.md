@@ -1145,7 +1145,7 @@ setup.
 | `the server URL must use https (plain http is allowed only for localhost)` | Use the https address. |
 | `the server URL must not hold a user name or password` | Remove the `name:password@` part. The token comes from the token command. |
 | `the server URL must not have a query` or `a fragment`, or `has no host` | Set `url` to `https://HOST`, with an optional path and nothing after it. |
-| `the account is empty`, `must not contain spaces`, `must not contain /, ?, # or %` or `must not contain ..` | Set `account` to the account part of your Fizzy URLs, such as `1`. |
+| `the account is empty`, `must not contain spaces`, `must not contain /, ?, # or %` or `must not contain ..` | Set `account` to the account part of your Fizzy URLs, such as `1`. `the account is empty` means the account held only slashes; an empty account gives the first message in this table. |
 | `no token: set FIZZY_TOKEN or FIZZY_TOKEN_CMD (or token_cmd in the config file)` | Give `fz` a token or a token command. |
 
 ### Token command failures
@@ -1159,6 +1159,7 @@ the reason in parentheses:
 | `not found` | There is no such command. Check the first word of `token_cmd`. |
 | `timed out after 30s` | The command ran for 30 seconds without finishing. A keychain prompt that nobody answered does this. |
 | `invalid command` | `token_cmd` has an unclosed quote, or holds only spaces. |
+| `could not run` | The command exists but could not start, for example because the file is not executable. |
 
 `token command printed nothing` means it ran but printed no token.
 

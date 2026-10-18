@@ -159,4 +159,7 @@ including embedded images. For a small fix, use `--replace`.
 - Cards nobody touches move to Not now after the board's auto-postpone period
   (3, 7, 11, 30, 90 or 365 days).
 - Tags are created by tagging a card; there is no empty tag.
-- Lists are paginated; `fz` always reads every page.
+- Most lists are paginated, and `fz` reads every page. Two do not:
+  `fz activity list` stops at `--limit`, 50 by default (`--limit 0` reads
+  every page), and `fz card pins` returns at most 100, because Fizzy does
+  not page them.

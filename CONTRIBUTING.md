@@ -39,6 +39,13 @@ update `docs/USERGUIDE.md` in the same commit.
 fz, which is no longer in the repo. It can never be regenerated. When a
 parity test fails, fix the Go code, not the golden file.
 
+The same rule covers the Markdown goldens in `internal/markdown/testdata/`
+and the draft goldens in `internal/draft/testdata/`. The Python converter
+and draft parser wrote them, and they are gone too.
+
+A golden file may change only to fix a confirmed bug. Edit it by hand,
+never by regenerating it, and name the bug in the commit message.
+
 ## Private files and test data
 
 A test in `internal/repocheck` fails `make test` and CI if git tracks a

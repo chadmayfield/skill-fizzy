@@ -61,5 +61,6 @@ but it goes wherever the server says.
 `fz webhook create` prints the new webhook's signing secret once. In text
 it goes to stderr, next to the warning to save it, so stdout stays free of
 it. With `--json` it is in the JSON on stdout, because a script needs it.
-`fz webhook show --reveal-secret` prints it again. Anyone who can read that
+`fz webhook show --json --reveal-secret` prints it again. Text output never
+includes it. Anyone who can read that
 output can sign requests as Fizzy, so keep it out of shared logs.
