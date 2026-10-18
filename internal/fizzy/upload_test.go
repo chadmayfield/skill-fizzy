@@ -94,6 +94,7 @@ func TestUploadStorageURL(t *testing.T) {
 		{func(string) string { return "ftp://storage.example.com/put" }, false, ""},
 		{func(string) string { return "javascript:alert(1)" }, false, ""},
 		{func(string) string { return "https:/put" }, false, ""},
+		{func(string) string { return "https://gate:hinge@storage.example.com/put" }, false, ""},
 	} {
 		f, s := uploadFizzy(t, false, tc.url)
 		_, err := f.Upload(smallFile(t))
@@ -103,7 +104,9 @@ func TestUploadStorageURL(t *testing.T) {
 			}
 			continue
 		}
-		if err == nil || len(s.calls) != 1 {
+		// A refusal, not a failed dial: the network guard in testenv.Main
+		// fails any dial off loopback, and that error is no Refusal.
+		if !IsRefusal(err) || len(s.calls) != 1 {
 			t.Errorf("%s: err %v, %d requests, want a refusal before the PUT", tc.url("SRV"), err, len(s.calls))
 		}
 	}

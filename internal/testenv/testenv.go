@@ -4,10 +4,15 @@
 package testenv
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 // fizzyVars are the environment variables fz reads. Isolate unsets them, so
@@ -79,13 +84,38 @@ func keepGoDirs() error {
 	return nil
 }
 
-// Main isolates the environment, runs the tests and exits with their code.
+// GuardNetwork replaces http.DefaultTransport with one that dials only
+// loopback addresses and uses no proxy. fz's API client uses the default
+// transport, so a test whose server or guard is wrong fails at the dial and
+// never reaches a real host. Only a literal loopback IP or localhost is
+// dialed, so no name is looked up either.
+func GuardNetwork() {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	d := &net.Dialer{Timeout: 5 * time.Second}
+	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		ip := net.ParseIP(host)
+		if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) {
+			return nil, fmt.Errorf("testenv: refused to dial %s: tests dial only loopback addresses", addr)
+		}
+		return d.DialContext(ctx, network, addr)
+	}
+	http.DefaultTransport = t
+}
+
+// Main isolates the environment, guards the network, runs the tests and
+// exits with their code.
 func Main(m *testing.M) {
 	cleanup, err := Isolate()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "testenv:", err)
 		os.Exit(1)
 	}
+	GuardNetwork()
 	code := m.Run()
 	cleanup()
 	os.Exit(code)
