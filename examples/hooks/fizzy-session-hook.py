@@ -129,6 +129,12 @@ def main():
 
     board = entry["board"]
     cards = json.loads(run(FZ, "--json", "cards", "--board", board))
+    # fz decodes a card number only as an int and fails on anything else,
+    # so the hook does the same: any other value prints nothing.
+    for c in cards:
+        n = c.get("number")
+        if not isinstance(n, int) or isinstance(n, bool):
+            return
     focus = card_number(entry.get("card"))
     if focus is REFUSED:
         return
@@ -138,7 +144,7 @@ def main():
         # Fizzy reports a card in Not now with no column and postponed true.
         if c.get("postponed") is True and c.get("column") is None:
             col = "Not now"
-        star = " ★" if c.get("golden") else ""
+        star = " ★" if c.get("golden") is True else ""
         # The column name and the title are JSON string literals, so a
         # quote or backslash in them cannot end them early.
         column = json.dumps(clean(col), ensure_ascii=False)
