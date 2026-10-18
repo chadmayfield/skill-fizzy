@@ -106,16 +106,6 @@ func splitLines(s string) []string {
 	return out
 }
 
-// readText reads a file the way Python's read_text does: universal newlines.
-func readText(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	s := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	return strings.ReplaceAll(s, "\r", "\n"), nil
-}
-
 func parseFront(text string) (map[string]string, error) {
 	meta := map[string]string{}
 	for _, raw := range splitLines(text) {
@@ -178,10 +168,11 @@ func parseStep(line string) (content string, done, ok bool) {
 
 // Parse reads and validates a draft file.
 func Parse(path string) (*Draft, error) {
-	text, err := readText(path)
+	src, err := readSource(path)
 	if err != nil {
 		return nil, err
 	}
+	text := src.text
 	m := frontRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		return nil, errf("%s: missing front matter (--- board: ... ---)", path)
@@ -398,44 +389,6 @@ func (d *Draft) DescriptionHTML(sgids map[string]string) string {
 		}
 	}
 	return out
-}
-
-// RecordFields writes key: value lines into the front matter. An existing line
-// for the same key (any case) is dropped, the rest keep their order, and the
-// new lines go at the end in the order given.
-func RecordFields(path string, fields ...KV) error {
-	text, err := readText(path)
-	if err != nil {
-		return err
-	}
-	m := frontRe.FindStringSubmatchIndex(text)
-	if m == nil {
-		return errf("%s: missing front matter", path)
-	}
-	var front []string
-	for _, ln := range splitLines(text[m[2]:m[3]]) {
-		lower := strings.ToLower(pyStrip(ln))
-		drop := false
-		for _, f := range fields {
-			if strings.HasPrefix(lower, strings.ToLower(f.Key)+":") {
-				drop = true
-				break
-			}
-		}
-		if !drop {
-			front = append(front, ln)
-		}
-	}
-	for _, f := range fields {
-		front = append(front, f.Key+": "+f.Value)
-	}
-	out := "---\n" + strings.Join(front, "\n") + "\n---\n" + text[m[1]:]
-	return os.WriteFile(path, []byte(out), 0o644)
-}
-
-// RecordCard writes card: n into the draft's front matter.
-func RecordCard(path string, n int) error {
-	return RecordFields(path, KV{"card", strconv.Itoa(n)})
 }
 
 // CardStep is a step already on a card.
