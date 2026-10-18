@@ -126,15 +126,9 @@ func manInstall(c *cmdContext, _ []string) error {
 	return err
 }
 
-// writeManPages writes DIR/man1/<command>.1 for root and every available
-// command below it. The pages hold no date, so two runs give the same bytes.
-//
-// It builds every page first, then refuses before writing any of them if a
-// page path is a symlink or anything but a regular file. Each page is
-// written to a temporary file and renamed into place, so a link planted
-// after the check is replaced, never written through. Last it removes the
-// fz.1 and fz-*.1 files in DIR/man1 that this run did not write, such as
-// the page of a command that no longer exists, and returns their paths.
+// writeManPages writes DIR/man1/<command>.1 for root and every command
+// below it, then removes stale fz.1 and fz-*.1 pages and returns their paths.
+// Pages are written by rename and never through a symlink.
 func writeManPages(root *cobra.Command, dir string) (int, []string, error) {
 	saved := root.Long
 	root.Long = manLong()
