@@ -33,8 +33,9 @@ Please do not open a public issue for a security problem.
 The config file holds your server URL and account number, and the token
 command, but not the token itself. Keep the token in a keychain or another
 secret store, and restrict who can read the config file. `fz` refuses a
-config file that the group or others can write, because it names a command
-that `fz` runs.
+config file that the group or others can write, or, on Unix, that another
+user owns, because it names a command that `fz` runs. It checks the file it
+has open, so the file cannot be swapped between the check and the read.
 
 ## Scope
 

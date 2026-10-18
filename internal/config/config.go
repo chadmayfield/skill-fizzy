@@ -175,6 +175,24 @@ func checkKeys(raw []byte, data map[string]any) error {
 	return nil
 }
 
+// readChecked checks the open config file f with checkFileInfo, on the
+// same handle, then reads it. Checking and reading one handle means the
+// file cannot be swapped between the two.
+func readChecked(f *os.File, path string) ([]byte, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+	}
+	if err := checkFileInfo(path, fi); err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+	}
+	return raw, nil
+}
+
 // Load reads the config file at path (or $FIZZY_CONFIG, or the default) and
 // applies environment overrides. A missing file is not an error.
 func Load(path string) (*Config, error) {
@@ -187,10 +205,12 @@ func Load(path string) (*Config, error) {
 	path = ExpandTilde(path)
 
 	data := map[string]any{}
-	raw, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	switch {
 	case err == nil:
-		if err := checkFileMode(path); err != nil {
+		raw, err := readChecked(f, path)
+		f.Close()
+		if err != nil {
 			return nil, err
 		}
 		dec := json.NewDecoder(bytes.NewReader(raw))

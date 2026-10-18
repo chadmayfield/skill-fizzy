@@ -1105,6 +1105,7 @@ setup.
 | `<file>: <key> must be a string or a number` | Give the key a value in quotes, or a number for `rules_card`. `true`, a list or an object is refused. |
 | `<file>: the config file cannot hold the token; ...` | Remove the `token` key. Put a command that prints the token in `token_cmd`, or set `FIZZY_TOKEN`. |
 | `<file> is writable by group or others, ...` | Run the `chmod go-w` command the message gives. |
+| `<file> is owned by another user, ...` | Use a config file that you own. On Unix, `fz` refuses a file another user owns, whatever its mode. |
 | `the server URL must start with https://` | Put `https://` in front of the host. |
 | `the server URL must use https (plain http is allowed only for localhost)` | Use the https address. |
 | `the server URL must not hold a user name or password` | Remove the `name:password@` part. The token comes from the token command. |
