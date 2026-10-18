@@ -431,7 +431,8 @@ func (f *Fizzy) AddComment(n int, bodyHTML string) (string, error) {
 
 // Upload sends a file and returns the sgid to embed as
 // <action-text-attachment sgid=...>. In dry-run mode it prints the blob
-// request and returns "DRY-RUN-SGID".
+// request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
+// it returns signed_id and prints a warning on the client's output.
 func (f *Fizzy) Upload(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -490,5 +491,6 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	if info.AttachableSgid != "" {
 		return info.AttachableSgid, nil
 	}
+	fmt.Fprintf(f.C.Out(), "fz: warning: Fizzy sent no attachable_sgid for %s, so fz used its signed_id; the attachment may not render\n", name)
 	return info.SignedID, nil
 }

@@ -3,6 +3,8 @@ package fizzy
 import (
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -90,5 +92,28 @@ func TestUpdateWebhookUnreadableReply(t *testing.T) {
 	f, s, _, _ := newFizzy(t, true, nil)
 	if w, err := f.UpdateWebhook("B1", "H1", &name, nil); err != nil || w.ID != "" || len(s.calls) != 0 {
 		t.Errorf("dry run: %+v %v %+v", w, err, s.calls)
+	}
+}
+
+// Without attachable_sgid, Upload falls back to signed_id, which renders as
+// a broken attachment. It still returns it, and warns on the client's
+// output.
+func TestUploadSignedIDFallbackWarns(t *testing.T) {
+	f, _, out, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+		if r.URL.Path == "/1/rails/active_storage/direct_uploads" {
+			jsonOK(w, map[string]any{"signed_id": "BLOB", "direct_upload": map[string]any{"url": "/put"}})
+			return
+		}
+		w.WriteHeader(204)
+	})
+	p := filepath.Join(t.TempDir(), "hinge.png")
+	os.WriteFile(p, []byte("x"), 0o644)
+	sgid, err := f.Upload(p)
+	if err != nil || sgid != "BLOB" {
+		t.Fatalf("sgid=%q err=%v", sgid, err)
+	}
+	want := "fz: warning: Fizzy sent no attachable_sgid for hinge.png, so fz used its signed_id; the attachment may not render\n"
+	if out.String() != want {
+		t.Errorf("out = %q, want %q", out.String(), want)
 	}
 }

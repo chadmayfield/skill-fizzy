@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -78,5 +80,20 @@ func TestExportStartedWithoutBody(t *testing.T) {
 	r = runGo([]string{"--json", "export", "account"})
 	if r.code != 0 || r.stdout != "{\n  \"started\": true\n}\n" {
 		t.Errorf("json: %+v", r)
+	}
+}
+
+// fz upload warns on stderr when it falls back to signed_id, and still
+// prints the id on stdout.
+func TestUploadSignedIDFallbackWarnsOnStderr(t *testing.T) {
+	acctServer(t, map[string]string{
+		"POST /1/rails/active_storage/direct_uploads": `{"signed_id":"BLOB","direct_upload":{"url":"/put","headers":{}}}`,
+		"PUT /put": "",
+	})
+	p := filepath.Join(t.TempDir(), "hinge.png")
+	os.WriteFile(p, []byte("x"), 0o644)
+	r := runGo([]string{"upload", p})
+	if r.code != 0 || r.stdout != "BLOB\n" || !strings.Contains(r.stderr, "the attachment may not render") {
+		t.Fatalf("got %+v", r)
 	}
 }
