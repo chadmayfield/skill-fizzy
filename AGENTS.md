@@ -179,8 +179,8 @@ the docs catch up. `fz help <noun>` must name a real command.
 ### Comments
 
 - Every exported name has a doc comment that starts with its name.
-- A comment says what the code does in a line or two, and why only when the code cannot show it: a server quirk, a limit, a security reason.
-- Never restate the code, and never describe how the code came to be: no review ids, finding or ruling numbers, plans, batches, model names or dates. That history lives in git.
+- A comment states what the code does, plus any gotcha or pitfall a developer must know: a server quirk, a limit, a security reason, an order that matters. Keep it to a line or two.
+- Comments describe the code as it is, never its history. Never restate the code, and never say how it came to be: no "used to", no review ids, finding or ruling numbers, plans, batches, model names or dates. History lives in git.
 - `internal/repocheck` fails on comments that do.
 
 ### Git
