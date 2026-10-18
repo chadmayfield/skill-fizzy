@@ -321,6 +321,9 @@ func cardCreate(c *cmdContext, a []string) error {
 			return usagef("--tag cannot be empty")
 		}
 	}
+	if fl.Changed("description") && fl.Changed("description-file") {
+		return usagef("argument --description-file: not allowed with argument --description")
+	}
 	desc, _ := fl.GetString("description")
 	if file, _ := fl.GetString("description-file"); file != "" {
 		d, err := readDescriptionFile(file)

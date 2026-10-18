@@ -121,3 +121,16 @@ func TestDecodeErrorText(t *testing.T) {
 		}
 	}
 }
+
+// card create refuses --description together with --description-file, as
+// card edit does, and sends nothing.
+func TestCreateBothDescriptions(t *testing.T) {
+	_, calls := acctServer(t, dryRunRoutes)
+	r := runGo([]string{"card", "create", "Home", "Fix the gate", "--description", "a", "--description-file", "gate.md"})
+	if r.code != 2 || !strings.Contains(r.stderr, "argument --description-file: not allowed with argument --description") {
+		t.Errorf("got %+v", r)
+	}
+	if len(calls()) != 0 {
+		t.Errorf("calls: %v", calls())
+	}
+}
