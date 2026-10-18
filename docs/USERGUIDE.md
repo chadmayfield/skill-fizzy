@@ -796,6 +796,16 @@ The hinge pin is worn. The latch is fine.
   optional. A draft with no column goes to Maybe?. When the board has a column of
   its own named like a keyword, a draft that would move the card there by
   that name is refused, as [`card move`](#cards) refuses it.
+- `tags:` is a comma-separated list, with or without `[ ]` around it. Quotes
+  around a tag and a leading `#` are dropped, so `['#buy', "gate"]` means
+  `buy` and `gate`.
+- `golden:` takes `true`, `yes`, `on` or `1`, or `false`, `no`, `off` or `0`,
+  in any case. `fz` refuses any other value and exits 2.
+- `card:` is the card number, `87` or `#87`. `fz` writes it after it creates
+  the card. `fz` refuses any other value, such as `87abc`, exits 2 and sends
+  nothing.
+- A `#` after a space starts a comment, unless it is inside quotes, so
+  `board: "Gate # 1"` names the board `Gate # 1`.
 - The `# ` line is the card title.
 - Everything except the title and the Steps section becomes the description.
 - Each `- [ ]` or `- [x]` line under `## Steps` becomes a step, ticked or not.
@@ -824,15 +834,28 @@ fz draft apply ~/.fizzy-inbox/drafts/
 ```
 
 - `check` parses each draft and finds its images. `--links` also fetches
-  every link and reports its status. Those fetches carry no token.
+  every link and reports its status. Those fetches carry no token and no
+  cookie, and use no proxy. Links inside code are not fetched.
+- `--links` never connects to this machine or a private network. A link
+  whose address is loopback, private, link-local or unspecified, or that
+  redirects to one, prints `skipped (local address)` and does not fail the
+  check.
 - `preview` prints the title, board, column, tags, description HTML and steps.
   It sends nothing.
-- `apply` parses every draft and finds its images before it creates
-  anything. Then it creates one card per draft and writes `card: N` into the
-  draft, so the same draft never makes a second card.
+- `apply` parses every draft, finds its images and checks that it can
+  rewrite the draft file before it creates anything. A read-only draft, or
+  one in a read-only folder, stops the run with exit 1 and nothing is sent.
+- Then it creates one card per draft. It writes `card: N` into the draft
+  right after the create, before it adds steps or tags, moves the card or
+  marks it golden, so the same draft never makes a second card.
+- If one of those later calls fails, `apply` exits 1. The message names the
+  card, says what was not sent, and gives the command that finishes it,
+  `fz draft apply --update FILE`. A run over several drafts stops at the
+  first failure and lists each draft and its card.
 - A draft that already has `card:` is skipped, unless you pass `--update`.
 - Each command takes files, folders or both. A folder means the `.md` files
-  directly inside it.
+  directly inside it. A draft named twice, by another path or through a
+  symlink, is read once.
 
 ### Updating a card from its draft
 
@@ -889,6 +912,11 @@ something other than a fingerprint, because it cannot tell what changed.
 
 `apply --update` checks every draft before it writes anything, so one refused
 draft stops the whole run and nothing is half applied.
+
+If a write fails partway through an update, `fz` has already printed each
+write that went through. It reads the card again, records `synced:` and
+`synced-fields:` from that read and exits 1. Run `fz draft apply --update
+FILE` again to send the rest. It needs no `--force`.
 
 ## The skill
 

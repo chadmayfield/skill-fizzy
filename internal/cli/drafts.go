@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chadmayfield/skill-fizzy/internal/config"
@@ -27,9 +29,10 @@ func addDraftCommands(root *cobra.Command) {
 	}
 	root.AddCommand(g)
 	check := &cobra.Command{
-		Use:     "check DRAFT...",
-		Short:   "validate drafts, and --links",
-		Long:    "Parse each draft, resolve its images, and with --links fetch every link.",
+		Use:   "check DRAFT...",
+		Short: "validate drafts, and --links",
+		Long: "Parse each draft, resolve its images, and with --links fetch every link outside code. " +
+			"A link to a loopback, private, link-local or unspecified address, or one that redirects there, is skipped and printed as skipped (local address).",
 		Example: examples("fz draft check ~/.fizzy-inbox/drafts/", "fz draft check gate.md --links"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftCheck),
@@ -47,6 +50,8 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "apply DRAFT...",
 		Short: "create cards from drafts, or --update them",
 		Long: "Create a card for each draft and write card: N and synced: back into it. " +
+			"card: N is written right after the create, before any step, tag, move or golden call, so a draft never makes a second card. " +
+			"If a later call fails, fz names the card and what was not sent; fz draft apply --update FILE finishes it. " +
 			"Drafts that already have card: are skipped, unless --update is given.\n\n" +
 			"With --update, a draft with card: N pushes its board, title, description, tags, column, golden mark and steps to card N. " +
 			"Matching steps are left alone, a draft tick ticks a card step, and nothing is ever unticked. " +
@@ -58,7 +63,7 @@ func addDraftCommands(root *cobra.Command) {
 			"If the card changed in Fizzy since then, or the draft has no synced: fingerprint, --update refuses that draft unless --force is given. " +
 			"The refusal names the fields that changed when synced-fields: is there.",
 		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
-			"fz draft apply --update gate.md", "fz draft apply --update --prune --force gate.md"),
+			"fz draft apply --update gate.md", "fz draft apply --update --prune gate.md"),
 		Args: args(cobra.MinimumNArgs(1)),
 		RunE: action(draftApply),
 	}
@@ -88,12 +93,22 @@ func pyPath(p string) string {
 }
 
 // draftPaths expands targets: a folder becomes its *.md files in name order.
+// A draft named more than once, by any path or through a symlink, is kept
+// once, where it first appears.
 func draftPaths(targets []string) ([]string, error) {
 	var paths []string
+	seen := map[string]bool{}
+	add := func(p string) {
+		key := draftKey(p)
+		if !seen[key] {
+			seen[key] = true
+			paths = append(paths, p)
+		}
+	}
 	for _, t := range targets {
 		p := pyPath(config.ExpandTilde(t))
 		if st, err := os.Stat(p); err != nil || !st.IsDir() {
-			paths = append(paths, p)
+			add(p)
 			continue
 		}
 		entries, err := os.ReadDir(p)
@@ -102,21 +117,67 @@ func draftPaths(targets []string) ([]string, error) {
 		}
 		for _, e := range entries {
 			if ok, _ := filepath.Match("*.md", e.Name()); ok {
-				paths = append(paths, pyPath(p+"/"+e.Name()))
+				add(pyPath(p + "/" + e.Name()))
 			}
 		}
 	}
 	return paths, nil
 }
 
-// linkStatus is an HTTP status, or the name of the error that stopped the
-// request.
-type linkStatus struct {
-	code int
-	err  string
+// draftKey is the cleaned absolute path of p with symlinks resolved, or as
+// much of that as the file system allows for a path that does not exist.
+func draftKey(p string) string {
+	if real, err := filepath.EvalSymlinks(p); err == nil {
+		p = real
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
 }
 
-func (s linkStatus) ok() bool { return s.err == "" && s.code < 400 }
+// errLocalAddress stops a link check that would connect to this machine
+// or a private network.
+var errLocalAddress = errors.New("local address")
+
+// linkDialBlocked reports whether a link check may not connect to a. It is
+// a variable so tests can let it reach their loopback servers.
+var linkDialBlocked = func(a netip.AddrPort) bool {
+	ip := a.Addr().Unmap()
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
+}
+
+// linkClient is the HTTP client for draft check --links. It checks the
+// address of every connection it makes, after DNS and on every redirect
+// hop, and refuses local and private ones before it connects. It uses no
+// proxy, so the address it checks is the one it reaches. It never sends a
+// token or a cookie.
+func linkClient() *http.Client {
+	d := &net.Dialer{
+		Timeout: 15 * time.Second,
+		Control: func(network, address string, _ syscall.RawConn) error {
+			ap, err := netip.ParseAddrPort(address)
+			if err != nil || linkDialBlocked(ap) {
+				return errLocalAddress
+			}
+			return nil
+		},
+	}
+	tr := &http.Transport{Proxy: nil, DialContext: d.DialContext, TLSHandshakeTimeout: 15 * time.Second}
+	return &http.Client{Timeout: 15 * time.Second, Transport: tr}
+}
+
+// linkStatus is an HTTP status, or the name of the error that stopped the
+// request. skipped is set when the link, or a redirect from it, points at a
+// local or private address, which fz does not fetch.
+type linkStatus struct {
+	code    int
+	err     string
+	skipped bool
+}
+
+func (s linkStatus) ok() bool { return s.skipped || (s.err == "" && s.code < 400) }
 
 func (s linkStatus) String() string {
 	if s.err != "" {
@@ -134,6 +195,9 @@ func checkLink(hc *http.Client, url string) linkStatus {
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (fizzy-skill link check)")
 	resp, err := hc.Do(req)
+	if errors.Is(err, errLocalAddress) {
+		return linkStatus{skipped: true}
+	}
 	if err != nil {
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
@@ -155,7 +219,7 @@ func draftCheck(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	hc := &http.Client{Timeout: 15 * time.Second}
+	hc := linkClient()
 	w := c.out()
 	bad := 0
 	for _, p := range paths {
@@ -180,6 +244,10 @@ func draftCheck(c *cmdContext, a []string) error {
 		if links {
 			for _, u := range d.Links() {
 				s := checkLink(hc, u)
+				if s.skipped {
+					fmt.Fprintf(w, "    skipped (local address) %s\n", u)
+					continue
+				}
 				mark := "BAD"
 				if s.ok() {
 					mark = "ok "
@@ -196,6 +264,16 @@ func draftCheck(c *cmdContext, a []string) error {
 	return nil
 }
 
+// parseDraft parses a draft for preview and apply. A front matter value fz
+// will not guess at, such as card: 87abc, is refused with exit 2.
+func parseDraft(path string) (*draft.Draft, error) {
+	d, err := draft.Parse(path)
+	if errors.Is(err, draft.ErrBadValue) {
+		return nil, usageError{err}
+	}
+	return d, err
+}
+
 func draftPreview(c *cmdContext, a []string) error {
 	paths, err := draftPaths(a)
 	if err != nil {
@@ -203,7 +281,7 @@ func draftPreview(c *cmdContext, a []string) error {
 	}
 	w := c.out()
 	for _, p := range paths {
-		d, err := draft.Parse(p)
+		d, err := parseDraft(p)
 		if err != nil {
 			return err
 		}
@@ -221,9 +299,31 @@ func draftPreview(c *cmdContext, a []string) error {
 	return nil
 }
 
+// unfinished is a failure after the card was created and card: written
+// into the draft: one follow-up call failed, and the ones after it were
+// not sent.
+type unfinished struct {
+	n       int
+	failed  string   // what failed, such as "adding its steps"
+	notSent []string // what was not sent after it
+	err     error
+}
+
+func (u *unfinished) Error() string {
+	msg := fmt.Sprintf("card #%d was created, but %s failed: %s", u.n, u.failed, errorText(u.err))
+	if len(u.notSent) > 0 {
+		msg += "; not sent: " + strings.Join(u.notSent, ", ")
+	}
+	return msg
+}
+
+func (u *unfinished) Unwrap() error { return u.err }
+
 // applyDraft creates the card for one draft and returns its number, or 0 in
 // dry-run mode, where it prints the follow-up calls against a placeholder
-// card instead.
+// card instead. Right after the create it writes card: N into the draft, so
+// a failure in a later call can never lead to a second card. A failure
+// after that returns the card number with an *unfinished error.
 func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (int, error) {
 	board, err := fz.Board(d.Board)
 	if err != nil {
@@ -248,7 +348,7 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 	if err != nil {
 		return 0, err
 	}
-	if n == 0 {
+	if c.dryRun {
 		for _, s := range d.Steps {
 			if _, err := fz.AddStep(0, s.Content, s.Done); err != nil {
 				return 0, err
@@ -265,27 +365,82 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}
 		return 0, nil
 	}
-	for _, s := range d.Steps {
-		if _, err := fz.AddStep(n, s.Content, s.Done); err != nil {
-			return 0, err
-		}
+	if n == 0 {
+		return 0, fmt.Errorf("%s: the server's reply to the create had no card number (no Location header), "+
+			"so a card may exist that the draft does not name; look on board %s before you apply it again", filepath.Base(d.Path), d.Board)
 	}
-	for _, t := range d.Tags {
-		if _, err := fz.AddTag(n, t); err != nil {
-			return 0, err
-		}
+	if err := draft.RecordCard(d.Path, n); err != nil {
+		return n, fmt.Errorf("card #%d was created, but fz could not write card: %d into %s (%v); "+
+			"add that line to the front matter by hand before you apply the draft again", n, n, d.Path, err)
+	}
+	// Each call has what it does, for the failure, and what it sends, for
+	// the list of what was not sent.
+	type call struct {
+		what, sends string
+		run         func() error
+	}
+	var calls []call
+	if len(d.Steps) > 0 {
+		calls = append(calls, call{"adding its steps", "the steps", func() error {
+			for _, s := range d.Steps {
+				if _, err := fz.AddStep(n, s.Content, s.Done); err != nil {
+					return err
+				}
+			}
+			return nil
+		}})
+	}
+	if len(d.Tags) > 0 {
+		calls = append(calls, call{"adding its tags", "the tags", func() error {
+			for _, t := range d.Tags {
+				if _, err := fz.AddTag(n, t); err != nil {
+					return err
+				}
+			}
+			return nil
+		}})
 	}
 	if !isMaybe(d.Column) {
-		if err := fz.MoveCard(n, d.Column, board.ID); err != nil {
-			return 0, err
-		}
+		calls = append(calls, call{"moving it to " + d.Column, "the move to " + d.Column, func() error { return fz.MoveCard(n, d.Column, board.ID) }})
 	}
 	if d.Golden {
-		if err := fz.SetGolden(n, true); err != nil {
-			return 0, err
+		calls = append(calls, call{"marking it golden", "the golden mark", func() error { return fz.SetGolden(n, true) }})
+	}
+	for i, cl := range calls {
+		if err := cl.run(); err != nil {
+			u := &unfinished{n: n, failed: cl.what, err: err}
+			for _, rest := range calls[i+1:] {
+				u.notSent = append(u.notSent, rest.sends)
+			}
+			return n, u
 		}
 	}
 	return n, nil
+}
+
+// shellArg quotes a path for a command line the user can paste.
+func shellArg(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/._-~+=,:@") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// failApply prints err the way the root command would, then the summary of
+// a run over more than one draft, and returns the exit code err gets.
+func failApply(c *cmdContext, err error, summary []string) error {
+	fmt.Fprintf(c.errw(), "fz: %s\n", errorText(err))
+	if len(summary) > 1 {
+		fmt.Fprintln(c.errw(), "fz: stopped. The drafts in this run:")
+		for _, line := range summary {
+			fmt.Fprintf(c.errw(), "  %s\n", line)
+		}
+	}
+	var u usageError
+	if errors.As(err, &u) || fizzy.IsRefusal(err) {
+		return exitCode(2)
+	}
+	return exitCode(1)
 }
 
 func draftApply(c *cmdContext, a []string) error {
@@ -312,16 +467,22 @@ func draftApply(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	// Validate every draft first: a parse error stops the batch before any
-	// card is created.
+	// Validate every draft first: a parse error, a missing image or a draft
+	// fz could not write card: back into stops the batch before any card is
+	// created.
 	var drafts []*draft.Draft
 	for _, p := range paths {
-		d, err := draft.Parse(p)
+		d, err := parseDraft(p)
 		if err != nil {
 			return err
 		}
 		if err := d.CheckImages(cfg.InboxPath()); err != nil {
 			return err
+		}
+		if d.Card == 0 || update {
+			if err := draft.CheckWritable(p); err != nil {
+				return fmt.Errorf("%s: fz cannot write card: and synced: back into this draft (%v), so it sends nothing", p, err)
+			}
 		}
 		drafts = append(drafts, d)
 	}
@@ -339,43 +500,88 @@ func draftApply(c *cmdContext, a []string) error {
 			return exitCode(1)
 		}
 	}
+	// summary has one line per draft for the report printed if the run
+	// stops early.
+	summary := make([]string, len(drafts))
+	for i, d := range drafts {
+		summary[i] = filepath.Base(d.Path) + ": not reached"
+	}
 	w := c.out()
-	for _, d := range drafts {
+	for i, d := range drafts {
+		name := filepath.Base(d.Path)
 		if d.Card != 0 {
 			if !update {
-				fmt.Fprintf(w, "skip %s: already card #%d (use --update to push changes)\n", filepath.Base(d.Path), d.Card)
+				summary[i] = fmt.Sprintf("%s: card #%d, skipped", name, d.Card)
+				fmt.Fprintf(w, "skip %s: already card #%d (use --update to push changes)\n", name, d.Card)
 				continue
 			}
-			report, err := syncDraft(fz, d, cfg.InboxPath(), prune, force)
-			if err != nil {
-				return err
-			}
-			for _, line := range report {
+			say := func(line string) {
 				if c.dryRun {
 					line = dryRunLine(line)
 				}
 				fmt.Fprintf(w, "#%d %s\n", d.Card, line)
 			}
+			_, err := syncDraft(fz, d, cfg.InboxPath(), prune, force, say)
+			var partial *partialSync
+			if errors.As(err, &partial) && !c.dryRun {
+				summary[i] = fmt.Sprintf("%s: card #%d, update not finished", name, d.Card)
+				// The writes printed above went through. Record synced: from
+				// the card as it is now, so the retry needs no --force; the
+				// draft's changes not yet sent still differ from the card,
+				// so the retry sends them.
+				finish := "fz draft apply --update " + shellArg(d.Path)
+				msg := fmt.Errorf("card #%d: the update stopped partway: %w\nfz: synced: is recorded from the card as it is now. Finish it with: %s",
+					d.Card, err, finish)
+				if rerr := recordSynced(fz, d.Path, d.Card); rerr != nil {
+					msg = fmt.Errorf("card #%d: the update stopped partway: %w\nfz: reading the card back failed (%s), so synced: is unchanged; check the card, then finish it with: %s --force",
+						d.Card, err, errorText(rerr), finish)
+				}
+				return failApply(c, msg, summary)
+			}
+			if err != nil {
+				summary[i] = fmt.Sprintf("%s: card #%d, not updated", name, d.Card)
+				return failApply(c, err, summary)
+			}
 			if !c.dryRun {
 				if err := recordSynced(fz, d.Path, d.Card); err != nil {
-					return err
+					summary[i] = fmt.Sprintf("%s: card #%d, updated, synced: not recorded", name, d.Card)
+					return failApply(c, err, summary)
 				}
 			}
+			summary[i] = fmt.Sprintf("%s: card #%d, updated", name, d.Card)
 			continue
 		}
 		n, err := applyDraft(c, fz, d, cfg.InboxPath())
-		if err != nil {
-			return err
+		var u *unfinished
+		switch {
+		case errors.As(err, &u):
+			summary[i] = fmt.Sprintf("%s: card #%d, not finished", name, n)
+			// Record synced: from the card as it is now, so the retry with
+			// --update needs no --force.
+			finish := "fz draft apply --update " + shellArg(d.Path)
+			msg := fmt.Errorf("%w\nfz: card: %d is written into %s. Finish it with: %s", err, n, name, finish)
+			if rerr := recordSynced(fz, d.Path, n); rerr != nil {
+				msg = fmt.Errorf("%w\nfz: card: %d is written into %s, but reading the card back failed (%s). Finish it with: fz draft apply --update --force %s",
+					err, n, name, errorText(rerr), shellArg(d.Path))
+			}
+			return failApply(c, msg, summary)
+		case err != nil && n != 0:
+			summary[i] = fmt.Sprintf("%s: card #%d, card: not written", name, n)
+			return failApply(c, err, summary)
+		case err != nil:
+			summary[i] = name + ": no card created"
+			return failApply(c, err, summary)
 		}
 		if n == 0 {
+			summary[i] = name + ": dry run"
 			fmt.Fprintf(w, "[dry-run] %s → %s / %s\n", d.Title, d.Board, d.Column)
 			continue
 		}
-		if err := draft.RecordCard(d.Path, n); err != nil {
-			return err
-		}
+		summary[i] = fmt.Sprintf("%s: card #%d", name, n)
 		if err := recordSynced(fz, d.Path, n); err != nil {
-			return err
+			summary[i] = fmt.Sprintf("%s: card #%d, synced: not recorded", name, n)
+			return failApply(c, fmt.Errorf("card #%d was created and card: %d written into %s, but reading it back for synced: failed (%s); the next --update needs --force",
+				n, n, name, errorText(err)), summary)
 		}
 		fmt.Fprintf(w, "#%d %s → %s / %s   %s/%s/cards/%d\n", n, d.Title, d.Board, d.Column, cfg.URL, cfg.Account, n)
 	}

@@ -18,6 +18,7 @@
 package markdown
 
 import (
+	"html"
 	"strconv"
 	"strings"
 	"unicode"
@@ -273,7 +274,7 @@ func Inline(text string) string {
 	text = stashCode(text, &codes)
 	text = escape(text, false)
 	text = links(text)
-	text = bareURLs(text)
+	text = bareURLs(text, &codes)
 	text = bold(text)
 	text = starEm(text)
 	text = underscoreEm(text)
@@ -345,7 +346,7 @@ func links(text string) string {
 	for i := 0; i < len(r); {
 		if r[i] == '[' {
 			if end, label, url, ok := linkAt(r, i); ok {
-				b.WriteString(`<a href="` + escape(url, true) + `">` + label + "</a>")
+				b.WriteString(`<a href="` + hrefFrom(url, true) + `">` + label + "</a>")
 				i = end
 				continue
 			}
@@ -403,16 +404,49 @@ func hasPrefix(r []rune, i int, prefix string) bool {
 	return true
 }
 
+// hrefFrom turns a URL taken from text that Inline already escaped into an
+// href value with each & escaped exactly once. It undoes Inline's escape to
+// get the draft's own text, reads a written &amp; as &, and escapes the
+// result once. quote also escapes quotes.
+func hrefFrom(escaped string, quote bool) string {
+	raw := html.UnescapeString(escaped)
+	raw = strings.ReplaceAll(raw, "&amp;", "&")
+	return escape(raw, quote)
+}
+
 // bareURLs links a URL that is not already inside an anchor. Python:
 // (?<!["=>])\b(https?://[^\s<]+[^\s<.,;:!?)])
-func bareURLs(text string) string {
+// Unlike Python, the URL also ends at a quote and at an escaped < or >,
+// because Python's pattern let a " close the href and add an attribute.
+//
+// It also stashes each anchor's opening tag, and each bare URL's whole
+// anchor, in codes the way stashCode does, so bold and emphasis never run
+// inside a URL. A link label stays in the text and still gets them.
+func bareURLs(text string, codes *[]string) string {
 	r := []rune(text)
 	var b strings.Builder
+	stash := func(s string) {
+		*codes = append(*codes, restoreCode(s, *codes))
+		b.WriteString("\x00" + strconv.Itoa(len(*codes)-1) + "\x00")
+	}
 	for i := 0; i < len(r); {
+		// Text is escaped by now, so a raw < is only ever a tag that links
+		// wrote, and its href holds no raw quote.
+		if hasPrefix(r, i, `<a href="`) {
+			if end := indexFrom(r, i, `">`); end >= 0 {
+				stash(string(r[i : end+2]))
+				i = end + 2
+				continue
+			}
+		}
 		if r[i] == 'h' && (i == 0 || (r[i-1] != '"' && r[i-1] != '=' && r[i-1] != '>' && !isWord(r[i-1]))) {
 			if p := schemeEnd(r, i, false); p >= 0 {
 				q := p
-				for q < len(r) && !isSpace(r[q]) && r[q] != '<' {
+				// A URL ends at whitespace, a quote, or a < or > (escaped by
+				// now, or a tag that links added), so it cannot close the
+				// href attribute.
+				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'", r[q]) &&
+					!hasPrefix(r, q, "&lt;") && !hasPrefix(r, q, "&gt;") {
 					q++
 				}
 				// The last character may not be trailing punctuation, and
@@ -423,7 +457,7 @@ func bareURLs(text string) string {
 				}
 				if e > p {
 					url := string(r[i : e+1])
-					b.WriteString(`<a href="` + url + `">` + url + "</a>")
+					stash(`<a href="` + hrefFrom(url, true) + `">` + url + "</a>")
 					i = e + 1
 					continue
 				}
@@ -433,6 +467,16 @@ func bareURLs(text string) string {
 		i++
 	}
 	return b.String()
+}
+
+// indexFrom returns the index of sub in r at or after i, or -1.
+func indexFrom(r []rune, i int, sub string) int {
+	for ; i < len(r); i++ {
+		if hasPrefix(r, i, sub) {
+			return i
+		}
+	}
+	return -1
 }
 
 // bold replaces \*\*(.+?)\*\* with <strong>.

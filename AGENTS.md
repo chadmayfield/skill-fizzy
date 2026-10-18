@@ -103,6 +103,8 @@ the docs catch up. `fz help <noun>` must name a real command.
 - **Markdown and draft goldens.** The files in `internal/markdown/testdata/`
   and `internal/draft/testdata/` were written by the Python converter and
   draft parser. The same rule applies: fix the Go code.
+- **Changing a golden.** A golden file may change only to fix a confirmed
+  bug, by hand, never by regenerating it, and the commit names the bug.
 - **Live shapes.** `internal/fizzy/shapes_test.go` decodes JSON with the key
   names and value types a real Fizzy server sends, filled with invented
   gate and hinge values.

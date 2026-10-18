@@ -25,6 +25,11 @@ import (
 // ErrDraft is matched by errors.Is for every problem found in a draft.
 var ErrDraft = errors.New("draft error")
 
+// ErrBadValue is matched by errors.Is for a front matter value that fz
+// refuses rather than guess at, such as card: 87abc or golden: maybe. Every
+// such error also matches ErrDraft.
+var ErrBadValue = errors.New("bad front matter value")
+
 type draftError struct{ msg string }
 
 func (e *draftError) Error() string        { return e.msg }
@@ -106,22 +111,52 @@ func splitLines(s string) []string {
 	return out
 }
 
-// readText reads a file the way Python's read_text does: universal newlines.
-func readText(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
+// commentStart returns where a # comment starts in a front matter line, or
+// -1. A comment is a # after whitespace and before whitespace or the end of
+// the line. A # inside a quoted value, or inside a quoted item of a [list],
+// is part of the value. A quote counts only where a value or list item
+// starts and only when the same quote closes it later on the line, so an
+// apostrophe in a plain value does not hide a comment.
+func commentStart(line string) int {
+	afterColon, itemStart := false, false
+	var quote rune
+	prev := rune(-1)
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case itemStart && (r == '"' || r == '\'') && strings.ContainsRune(line[i+1:], r):
+			quote, itemStart = r, false
+		case r == '#' && prev >= 0 && isSpace(prev):
+			next, _ := utf8.DecodeRuneInString(line[i+1:])
+			if i+1 == len(line) || isSpace(next) {
+				// The comment takes the whitespace before it too.
+				return len(strings.TrimRightFunc(line[:i], isSpace))
+			}
+			itemStart = false
+		case !afterColon && r == ':':
+			afterColon, itemStart = true, true
+		case afterColon && (r == '[' || r == ','):
+			itemStart = true
+		case isSpace(r):
+		default:
+			itemStart = false
+		}
+		prev = r
 	}
-	s := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	return strings.ReplaceAll(s, "\r", "\n"), nil
+	return -1
 }
 
-func parseFront(text string) (map[string]string, error) {
-	meta := map[string]string{}
+// parseFront reads the front matter lines. It returns each key's value and
+// the line it came from, for error messages. The last line for a key wins.
+func parseFront(text string) (meta, lines map[string]string, err error) {
+	meta, lines = map[string]string{}, map[string]string{}
 	for _, raw := range splitLines(text) {
 		line := raw
-		if loc := commentRe.FindStringIndex(raw); loc != nil {
-			line = raw[:loc[0]]
+		if i := commentStart(raw); i >= 0 {
+			line = raw[:i]
 		}
 		line = strings.TrimRightFunc(line, isSpace)
 		if pyStrip(line) == "" || strings.HasPrefix(strings.TrimLeftFunc(line, isSpace), "#") {
@@ -129,13 +164,23 @@ func parseFront(text string) (map[string]string, error) {
 		}
 		k, v, ok := strings.Cut(line, ":")
 		if !ok {
-			return nil, errf("front matter line has no ':': '%s'", raw)
+			return nil, nil, errf("front matter line has no ':': '%s'", raw)
 		}
 		v = strings.Trim(pyStrip(v), `"`)
 		v = strings.Trim(v, `'`)
-		meta[strings.ToLower(pyStrip(k))] = v
+		key := strings.ToLower(pyStrip(k))
+		meta[key] = v
+		lines[key] = pyStrip(raw)
 	}
-	return meta, nil
+	return meta, lines, nil
+}
+
+// unquote removes one matching pair of single or double quotes around s.
+func unquote(s string) string {
+	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
+		return s[1 : len(s)-1]
+	}
+	return s
 }
 
 func splitList(value string) []string {
@@ -145,7 +190,8 @@ func splitList(value string) []string {
 		if pyStrip(t) == "" {
 			continue
 		}
-		t = strings.TrimLeft(pyStrip(t), "#")
+		t = pyStrip(unquote(pyStrip(t)))
+		t = strings.TrimLeft(t, "#")
 		t = strings.Trim(pyStrip(t), `"`)
 		tags = append(tags, strings.ToLower(t))
 	}
@@ -178,15 +224,16 @@ func parseStep(line string) (content string, done, ok bool) {
 
 // Parse reads and validates a draft file.
 func Parse(path string) (*Draft, error) {
-	text, err := readText(path)
+	src, err := readSource(path)
 	if err != nil {
 		return nil, err
 	}
+	text := src.text
 	m := frontRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		return nil, errf("%s: missing front matter (--- board: ... ---)", path)
 	}
-	meta, err := parseFront(text[m[2]:m[3]])
+	meta, lines, err := parseFront(text[m[2]:m[3]])
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +246,19 @@ func Parse(path string) (*Draft, error) {
 	haveTitle := false
 	var body []string
 	steps := []Step{}
-	inSteps := false
+	inSteps, inFence := false, false
 	for _, line := range strings.Split(rest, "\n") {
+		// Inside a fenced code block, as markdown.ToHTML reads one, a
+		// heading is code, not the title or the Steps section.
+		if !inSteps && strings.HasPrefix(pyStrip(line), "```") {
+			inFence = !inFence
+			body = append(body, line)
+			continue
+		}
+		if inFence {
+			body = append(body, line)
+			continue
+		}
 		h := headingRe.FindStringSubmatch(line)
 		if h != nil && len(h[1]) == 1 && !haveTitle {
 			title, haveTitle = h[2], true
@@ -230,18 +288,17 @@ func Parse(path string) (*Draft, error) {
 	if column == "" {
 		column = "Maybe?"
 	}
-	card := 0
-	if c := meta["card"]; c != "" && isASCIIDigits(c) {
-		if n, err := strconv.Atoi(c); err == nil {
-			card = n
-		}
+	card, err := cardNumber(meta["card"])
+	if err != nil {
+		return nil, badValue(path, lines["card"], err.Error())
 	}
 	golden := false
-	if g, ok := meta["golden"]; ok {
-		switch strings.ToLower(g) {
-		case "true", "yes", "1":
-			golden = true
-		}
+	switch strings.ToLower(meta["golden"]) {
+	case "true", "yes", "on", "1":
+		golden = true
+	case "", "false", "no", "off", "0":
+	default:
+		return nil, badValue(path, lines["golden"], "golden: must be true or false (yes, no, on, off, 1 and 0 also work)")
 	}
 	return &Draft{
 		Path:   path,
@@ -256,6 +313,34 @@ func Parse(path string) (*Draft, error) {
 		Steps:  steps,
 		Meta:   meta,
 	}, nil
+}
+
+// cardNumber reads a card: value: a card number such as 87, or #87 the way
+// Fizzy writes it. An empty value means the draft has no card yet.
+func cardNumber(v string) (int, error) {
+	if v == "" {
+		return 0, nil
+	}
+	digits := strings.TrimPrefix(v, "#")
+	if isASCIIDigits(digits) {
+		if n, err := strconv.Atoi(digits); err == nil && n > 0 {
+			return n, nil
+		}
+	}
+	return 0, errors.New("card: must be a card number such as 87 or #87")
+}
+
+// valueError is a front matter value fz will not guess at. It is a draft
+// error, and the CLI refuses it with exit 2.
+type valueError struct{ msg string }
+
+func (e *valueError) Error() string { return e.msg }
+func (e *valueError) Is(target error) bool {
+	return target == ErrDraft || target == ErrBadValue
+}
+
+func badValue(path, line, why string) error {
+	return &valueError{fmt.Sprintf("%s: front matter line '%s': %s", path, line, why)}
 }
 
 func isASCIIDigits(s string) bool {
@@ -296,7 +381,42 @@ func pyRepr(s string) string {
 	return b.String()
 }
 
-// Links returns the distinct http(s) URLs in the body, in order of first use.
+// blankCode returns text with fenced code blocks and inline code spans
+// turned into spaces, so Links finds no URL inside code. Offsets and line
+// breaks stay where they were.
+func blankCode(text string) string {
+	lines := strings.Split(text, "\n")
+	inFence := false
+	for i, line := range lines {
+		fence := strings.HasPrefix(pyStrip(line), "```")
+		if inFence || fence {
+			lines[i] = strings.Repeat(" ", len(line))
+			if fence {
+				inFence = !inFence
+			}
+			continue
+		}
+		b := []byte(line)
+		for j := 0; j < len(b); j++ {
+			if b[j] != '`' {
+				continue
+			}
+			k := strings.IndexByte(line[j+1:], '`')
+			if k <= 0 {
+				continue
+			}
+			for x := j; x <= j+1+k; x++ {
+				b[x] = ' '
+			}
+			j += k + 1
+		}
+		lines[i] = string(b)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Links returns the distinct http(s) URLs in the body, in order of first
+// use, leaving out any URL inside code.
 // The Python pattern is
 //
 //	\[[^\]]*\]\((https?://[^)\s]+)\)|(?<![("])\b(https?://[^\s<>)]+[^\s<>).,;:!?])
@@ -311,7 +431,7 @@ func (d *Draft) Links() []string {
 			found = append(found, u)
 		}
 	}
-	text := d.BodyMD
+	text := blankCode(d.BodyMD)
 	for i := 0; i < len(text); {
 		if m := mdLinkRe.FindStringSubmatch(text[i:]); m != nil {
 			add(m[1])
@@ -398,44 +518,6 @@ func (d *Draft) DescriptionHTML(sgids map[string]string) string {
 		}
 	}
 	return out
-}
-
-// RecordFields writes key: value lines into the front matter. An existing line
-// for the same key (any case) is dropped, the rest keep their order, and the
-// new lines go at the end in the order given.
-func RecordFields(path string, fields ...KV) error {
-	text, err := readText(path)
-	if err != nil {
-		return err
-	}
-	m := frontRe.FindStringSubmatchIndex(text)
-	if m == nil {
-		return errf("%s: missing front matter", path)
-	}
-	var front []string
-	for _, ln := range splitLines(text[m[2]:m[3]]) {
-		lower := strings.ToLower(pyStrip(ln))
-		drop := false
-		for _, f := range fields {
-			if strings.HasPrefix(lower, strings.ToLower(f.Key)+":") {
-				drop = true
-				break
-			}
-		}
-		if !drop {
-			front = append(front, ln)
-		}
-	}
-	for _, f := range fields {
-		front = append(front, f.Key+": "+f.Value)
-	}
-	out := "---\n" + strings.Join(front, "\n") + "\n---\n" + text[m[1]:]
-	return os.WriteFile(path, []byte(out), 0o644)
-}
-
-// RecordCard writes card: n into the draft's front matter.
-func RecordCard(path string, n int) error {
-	return RecordFields(path, KV{"card", strconv.Itoa(n)})
 }
 
 // CardStep is a step already on a card.

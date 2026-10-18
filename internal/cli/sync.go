@@ -103,29 +103,56 @@ func dryRunLine(line string) string {
 	return line
 }
 
+// partialSync is a sync that failed after it began sending card writes.
+// The writes before the failure may have gone through.
+type partialSync struct{ err error }
+
+func (p *partialSync) Error() string { return p.err.Error() }
+func (p *partialSync) Unwrap() error { return p.err }
+
 // syncDraft pushes a draft onto its existing card d.Card and returns one
-// report line per change. Unless force is set, it refuses a draft with no
+// report line per change. It passes each line to say, when say is set, as
+// soon as the change is made. On an error it still returns the lines for
+// the changes made before it, and an error after the first card write is
+// a *partialSync. Unless force is set, it refuses a draft with no
 // usable synced: line, or one whose card changed in Fizzy since synced:,
 // before sending any write, and uploads images before any card write. Steps are never unticked. With prune, unticked card
 // steps and card tags the draft lacks are removed; ticked steps always stay.
-func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool) ([]string, error) {
+func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool, say func(string)) (report []string, err error) {
 	card, err := fz.Card(d.Card)
 	if err != nil {
-		return nil, err
+		return report, err
 	}
 	if !force {
 		if err := checkSynced(d, card); err != nil {
-			return nil, err
+			return report, err
 		}
 	}
-	var report []string
+	add := func(line string) {
+		report = append(report, line)
+		if say != nil {
+			say(line)
+		}
+	}
+	// sending is set before the first card write, so a failure from then
+	// on is reported as partial.
+	sending := false
+	defer func() {
+		if err != nil && sending {
+			err = &partialSync{err}
+		}
+	}()
 	board, err := fz.Board(d.Board)
 	if err != nil {
-		return nil, err
+		return report, err
 	}
-	if !card.Closed && cardLane(card) != lane(d.Column) {
+	// After a board move the card's old column says nothing about where it
+	// lands, so the column is always set on the new board.
+	moveBoard := card.Board.ID != board.ID
+	moveColumn := !card.Closed && (moveBoard || cardLane(card) != lane(d.Column))
+	if moveColumn {
 		if err := fz.CheckMoveTarget(board.ID, d.Column); err != nil {
-			return nil, err
+			return report, err
 		}
 	}
 	// Upload first, so a failed upload leaves the card untouched.
@@ -133,56 +160,57 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 	for _, img := range d.Images() {
 		path, err := d.ResolveImage(img, inbox)
 		if err != nil {
-			return nil, err
+			return report, err
 		}
 		if sgids[img], err = fz.Upload(path); err != nil {
-			return nil, err
+			return report, err
 		}
 	}
-	if card.Board.ID != board.ID {
+	sending = true
+	if moveBoard {
 		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
-			return nil, err
+			return report, err
 		}
-		report = append(report, "moved to board "+board.Name)
+		add("moved to board " + board.Name)
 	}
 	title, desc := d.Title, d.DescriptionHTML(sgids)
 	if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
-		return nil, err
+		return report, err
 	}
-	report = append(report, "title and description sent")
+	add("title and description sent")
 
 	plan := draft.PlanSteps(d.Steps, card.Steps)
 	for _, s := range plan.Add {
 		if _, err := fz.AddStep(d.Card, s.Content, s.Done); err != nil {
-			return nil, err
+			return report, err
 		}
-		report = append(report, "step added: "+s.Content)
+		add("step added: " + s.Content)
 	}
 	ticked := true
 	for _, id := range plan.Tick {
 		if err := fz.UpdateStep(d.Card, id, nil, &ticked); err != nil {
-			return nil, err
+			return report, err
 		}
-		report = append(report, "step ticked: "+id)
+		add("step ticked: " + id)
 	}
 	for _, s := range plan.Extra {
 		if prune && !s.Completed {
 			if err := fz.DeleteStep(d.Card, s.ID); err != nil {
-				return nil, err
+				return report, err
 			}
-			report = append(report, "step deleted: "+s.Content)
+			add("step deleted: " + s.Content)
 		} else {
-			report = append(report, "step kept, not in draft: "+s.Content)
+			add("step kept, not in draft: " + s.Content)
 		}
 	}
 
 	for _, t := range d.Tags {
 		changed, err := fz.AddTag(d.Card, t)
 		if err != nil {
-			return nil, err
+			return report, err
 		}
 		if changed {
-			report = append(report, "tag added: "+t)
+			add("tag added: " + t)
 		}
 	}
 	for _, t := range card.Tags {
@@ -190,35 +218,35 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 			continue
 		}
 		if !prune {
-			report = append(report, "tag kept, not in draft: "+t)
+			add("tag kept, not in draft: " + t)
 			continue
 		}
 		changed, err := fz.RemoveTag(d.Card, t)
 		if err != nil {
-			return nil, err
+			return report, err
 		}
 		if changed {
-			report = append(report, "tag removed: "+t)
+			add("tag removed: " + t)
 		}
 	}
 
 	switch {
 	case card.Closed:
-		report = append(report, "card is closed; column left alone")
-	case cardLane(card) != lane(d.Column):
+		add("card is closed; column left alone")
+	case moveColumn:
 		if err := fz.MoveCard(d.Card, d.Column, board.ID); err != nil {
-			return nil, err
+			return report, err
 		}
-		report = append(report, "moved to "+d.Column)
+		add("moved to " + d.Column)
 	}
 	if card.Golden != d.Golden {
 		if err := fz.SetGolden(d.Card, d.Golden); err != nil {
-			return nil, err
+			return report, err
 		}
 		if d.Golden {
-			report = append(report, "golden on")
+			add("golden on")
 		} else {
-			report = append(report, "golden off")
+			add("golden off")
 		}
 	}
 	return report, nil

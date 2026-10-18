@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -226,6 +227,13 @@ func readParityFile(t *testing.T) parityFile {
 // printed.
 func TestParityWithPython(t *testing.T) {
 	f := newParityFixture(t)
+	// The link cases fetch from the fake server, which is on loopback, so
+	// the link check may reach its port. Python fz had no local-address
+	// guard; that guard has its own tests in links_test.go.
+	port := netip.MustParseAddrPort(strings.TrimPrefix(f.srv.URL, "http://")).Port()
+	oldBlocked := linkDialBlocked
+	linkDialBlocked = func(a netip.AddrPort) bool { return a.Port() != port && oldBlocked(a) }
+	t.Cleanup(func() { linkDialBlocked = oldBlocked })
 	p := readParityFile(t)
 	for _, c := range p.Cases {
 		args := f.unmarkAll(c.Args)
