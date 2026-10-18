@@ -14,7 +14,6 @@ package fizzy
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -50,7 +49,7 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 		present = present || a.ID == u.ID
 	}
 	if !present && card.HasMore {
-		return u, false, fmt.Errorf("card #%d has more than 5 assignees and Fizzy lists only the first 5, so fz cannot tell whether %s is assigned; change it in Fizzy",
+		return u, false, refusef("card #%d has more than 5 assignees and Fizzy lists only the first 5, so fz cannot tell whether %s is assigned; change it in Fizzy",
 			n, u.Name)
 	}
 	if present == want {
@@ -142,10 +141,10 @@ func (f *Fizzy) Boosts(n int) ([]Boost, error) {
 // stores.
 func CheckBoost(text string) error {
 	if text == "" {
-		return errors.New("a boost needs some text")
+		return refusef("a boost needs some text")
 	}
 	if l := BoostLength(text); l > MaxBoostChars {
-		return fmt.Errorf("a boost is at most %d characters; this one is %d", MaxBoostChars, l)
+		return refusef("a boost is at most %d characters; this one is %d", MaxBoostChars, l)
 	}
 	return nil
 }

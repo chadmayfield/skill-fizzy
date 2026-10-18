@@ -359,3 +359,15 @@ func TestCardListAssigneeUnknownID(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 }
+
+// fz cannot see past the first five assignees, so it refuses with exit 2.
+func TestCardAssignRefusesWhenListIsCut(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"assignees":[{"id":"u1"}],"has_more_assignees":true}`)
+	r := runGo([]string{"card", "assign", "87", "u2"})
+	if r.code != 2 || !strings.Contains(r.stderr, "more than 5 assignees") {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 0 {
+		t.Errorf("writes %+v", w)
+	}
+}

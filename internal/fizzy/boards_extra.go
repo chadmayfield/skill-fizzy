@@ -2,7 +2,6 @@ package fizzy
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -61,10 +60,10 @@ type BoardFields struct {
 // sent as given, so the caller converts Markdown first.
 func (f *Fizzy) UpdateBoard(boardID string, fields BoardFields) error {
 	if fields == (BoardFields{}) {
-		return errors.New("nothing to update")
+		return refusef("nothing to update")
 	}
 	if fields.PostponeDays != nil && !slices.Contains(AutoPostponeDays, *fields.PostponeDays) {
-		return errors.New("auto-postpone must be one of " + pyIntTuple(AutoPostponeDays))
+		return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
 	}
 	_, err := f.C.Write(http.MethodPut, "/boards/"+boardID, wrap("board", fields))
 	return err
@@ -200,7 +199,7 @@ type ColumnFields struct {
 // UpdateColumn changes a column's name or color.
 func (f *Fizzy) UpdateColumn(boardID, columnID string, fields ColumnFields) error {
 	if fields == (ColumnFields{}) {
-		return errors.New("nothing to update")
+		return refusef("nothing to update")
 	}
 	body := struct {
 		Name  *string `json:"name,omitempty"`
