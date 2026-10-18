@@ -42,6 +42,7 @@ change the guide and the command's help text in the same commit.
 | `internal/markdown/` | Converting draft Markdown to the HTML Fizzy stores. |
 | `internal/richtext/` | Small edits to Fizzy rich text, used by `card edit --replace`. |
 | `internal/review/` | Gathering and formatting `fz review`. |
+| `internal/testenv/` | `Main`, which every test package that builds a client or runs commands calls from its `TestMain`. It gives the tests a temporary HOME, a missing config file and no `FIZZY_*` variables, so no test reads the real config or reaches a real server. A test that needs a variable sets it with `t.Setenv`. |
 | `internal/docscheck/` | Tests that keep the Markdown docs honest. |
 | `internal/repocheck/` | A test that fails if git tracks a private planning or agent file. |
 | `internal/releasecheck/` | Tests for the release build and the tag guard script. |
