@@ -196,6 +196,16 @@ func draftCheck(c *cmdContext, a []string) error {
 	return nil
 }
 
+// parseDraft parses a draft for preview and apply. A front matter value fz
+// will not guess at, such as card: 87abc, is refused with exit 2.
+func parseDraft(path string) (*draft.Draft, error) {
+	d, err := draft.Parse(path)
+	if errors.Is(err, draft.ErrBadValue) {
+		return nil, usageError{err}
+	}
+	return d, err
+}
+
 func draftPreview(c *cmdContext, a []string) error {
 	paths, err := draftPaths(a)
 	if err != nil {
@@ -203,7 +213,7 @@ func draftPreview(c *cmdContext, a []string) error {
 	}
 	w := c.out()
 	for _, p := range paths {
-		d, err := draft.Parse(p)
+		d, err := parseDraft(p)
 		if err != nil {
 			return err
 		}
@@ -316,7 +326,7 @@ func draftApply(c *cmdContext, a []string) error {
 	// card is created.
 	var drafts []*draft.Draft
 	for _, p := range paths {
-		d, err := draft.Parse(p)
+		d, err := parseDraft(p)
 		if err != nil {
 			return err
 		}

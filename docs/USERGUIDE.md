@@ -796,6 +796,16 @@ The hinge pin is worn. The latch is fine.
   optional. A draft with no column goes to Maybe?. When the board has a column of
   its own named like a keyword, a draft that would move the card there by
   that name is refused, as [`card move`](#cards) refuses it.
+- `tags:` is a comma-separated list, with or without `[ ]` around it. Quotes
+  around a tag and a leading `#` are dropped, so `['#buy', "gate"]` means
+  `buy` and `gate`.
+- `golden:` takes `true`, `yes`, `on` or `1`, or `false`, `no`, `off` or `0`,
+  in any case. `fz` refuses any other value and exits 2.
+- `card:` is the card number, `87` or `#87`. `fz` writes it after it creates
+  the card. `fz` refuses any other value, such as `87abc`, exits 2 and sends
+  nothing.
+- A `#` after a space starts a comment, unless it is inside quotes, so
+  `board: "Gate # 1"` names the board `Gate # 1`.
 - The `# ` line is the card title.
 - Everything except the title and the Steps section becomes the description.
 - Each `- [ ]` or `- [x]` line under `## Steps` becomes a step, ticked or not.
