@@ -55,3 +55,40 @@ func TestCommentHelpMakesNoUncitedClaims(t *testing.T) {
 		}
 	}
 }
+
+// An empty or blank name exits 2 and sends nothing, for every command that
+// sets a name, as user edit and webhook edit already did.
+func TestEmptyNamesRefuse(t *testing.T) {
+	_, calls := acctServer(t, map[string]string{
+		"GET /1/boards":             `[{"id":"B1","name":"Home"}]`,
+		"GET /1/boards/B1":          `{"id":"B1","name":"Home","all_access":true}`,
+		"GET /1/boards/B1/columns":  `[{"id":"c1","name":"Next","color":{"name":"Lime","value":"var(--color-card-4)"}}]`,
+		"GET /1/boards/B1/webhooks": "[]",
+	})
+	for _, name := range []string{"", "  "} {
+		for _, args := range [][]string{
+			{"board", "edit", "Home", "--name", name},
+			{"column", "create", "Home", name},
+			{"column", "edit", "Home", "Next", "--name", name},
+			{"webhook", "create", "Home", "--name", name, "--url", "https://hooks.example.com/x", "--actions", "card_closed", "--yes"},
+			{"webhook", "edit", "Home", "H1", "--name", name, "--yes"},
+			{"user", "edit", "U1", "--name", name, "--yes"},
+		} {
+			for _, dry := range []bool{false, true} {
+				a := args
+				if dry {
+					a = append([]string{"--dry-run"}, args...)
+				}
+				r := runGo(a)
+				if r.code != 2 || r.stdout != "" || strings.Contains(r.stderr, "[dry-run]") {
+					t.Errorf("%q: %+v", a, r)
+				}
+			}
+		}
+	}
+	for _, c := range calls() {
+		if c.method != "GET" {
+			t.Errorf("sent %s %s %s", c.method, c.path, c.body)
+		}
+	}
+}

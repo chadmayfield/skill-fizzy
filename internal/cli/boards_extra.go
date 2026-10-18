@@ -38,7 +38,8 @@ func addBoardExtraCommands(root *cobra.Command) {
 		Short: "rename a board or change its postpone period",
 		Long: "Change a board's name, its auto-postpone period or its public description. " +
 			"The period must be one of 3, 7, 11, 30, 90 or 365 days. " +
-			"The public description is Markdown, shown on the public page once the board is published.",
+			"The public description is Markdown, shown on the public page once the board is published. " +
+			"An empty or blank --name exits 2 and sends nothing.",
 		Example: examples(`fz board edit Home --name "Gate and hinge"`, "fz board edit Home --postpone 90", `fz board edit Home --public-description "Notes on the gate"`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardEdit),
@@ -152,6 +153,9 @@ func boardEdit(c *cmdContext, a []string) error {
 	var changed []string
 	if fl.Changed("name") {
 		name, _ := fl.GetString("name")
+		if err := checkName("--name", name); err != nil {
+			return err
+		}
 		fields.Name = &name
 		changed = append(changed, "name")
 	}

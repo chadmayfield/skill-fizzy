@@ -47,7 +47,7 @@ func addWebhookCommands(root *cobra.Command) {
 		Use:   "create BOARD --name NAME --url URL --actions A,B --yes",
 		Short: "create a webhook (needs --yes)",
 		Long: "Create a webhook that sends the listed actions to a URL. The URL must be https, or http for localhost. " +
-			"It cannot change after creation. Prints the URL and actions and refuses without --yes. " +
+			"It cannot change after creation. An empty or blank name exits 2 and sends nothing. Prints the URL and actions and refuses without --yes. " +
 			"The reply includes the signing secret. Create prints it once, in text and with --json, and list and show hide it afterwards.",
 		Example: examples(`fz webhook create Gate --name "Hinge alerts" --url https://fizzy.example.com/hook --actions card_closed,comment_created --yes`),
 		Args:    args(cobra.ExactArgs(1)),
@@ -62,7 +62,7 @@ func addWebhookCommands(root *cobra.Command) {
 		Use:   "edit BOARD ID [--name NAME] [--actions A,B] --yes",
 		Short: "change a webhook's name or actions (needs --yes)",
 		Long: "Change a webhook's name or the actions it sends. The URL cannot change. " +
-			"Prints the URL and the new actions and refuses without --yes.",
+			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes.",
 		Example: examples("fz webhook edit Gate 03abc123def456ghi789jkl0mn --actions card_closed --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(webhookEdit),
@@ -234,6 +234,8 @@ func webhookCreate(c *cmdContext, a []string) error {
 	switch {
 	case name == "":
 		return usagef("--name is required")
+	case strings.TrimSpace(name) == "":
+		return checkName("--name", name)
 	case hookURL == "":
 		return usagef("--url is required")
 	case len(actions) == 0:
@@ -279,8 +281,8 @@ func webhookEdit(c *cmdContext, a []string) error {
 	var name *string
 	if c.cmd.Flags().Changed("name") {
 		n, _ := c.cmd.Flags().GetString("name")
-		if strings.TrimSpace(n) == "" {
-			return usagef("--name cannot be empty")
+		if err := checkName("--name", n); err != nil {
+			return err
 		}
 		name = &n
 	}

@@ -185,7 +185,7 @@ and JSON as the Python fz did.
 |---|---|
 | 0 | Success. |
 | 1 | An API, config or draft error. The message says which. |
-| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, and sends nothing. |
+| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, and an empty or blank name, and sends nothing. |
 
 ### Boards
 

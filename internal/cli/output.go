@@ -252,6 +252,15 @@ func (e exitCode) Error() string { return "exit status " + strconv.Itoa(int(e)) 
 // usagef returns a usage error, which exits 2 like an argparse error.
 func usagef(format string, a ...any) error { return usageError{fmt.Errorf(format, a...)} }
 
+// checkName refuses an empty or blank name with a usage error, before
+// anything is sent. what names the flag or argument in the message.
+func checkName(what, name string) error {
+	if strings.TrimSpace(name) == "" {
+		return usagef("%s cannot be empty", what)
+	}
+	return nil
+}
+
 // cardNumber parses a card number argument.
 func cardNumber(s string) (int, error) {
 	n, err := strconv.Atoi(s)

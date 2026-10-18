@@ -24,7 +24,7 @@ func addColumnCommands(root *cobra.Command) {
 	create := &cobra.Command{
 		Use:     "create BOARD NAME",
 		Short:   "add a column to a board",
-		Long:    "Add a custom column at the right of the others. " + columnColorHelp,
+		Long:    "Add a custom column at the right of the others. An empty or blank name exits 2 and sends nothing. " + columnColorHelp,
 		Example: examples(`fz column create Home "Gate repairs" --color Lime`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(columnCreate),
@@ -33,7 +33,7 @@ func addColumnCommands(root *cobra.Command) {
 	edit := &cobra.Command{
 		Use:     "edit BOARD COLUMN",
 		Short:   "rename or recolor a column",
-		Long:    "Change a custom column's name or color. " + columnColorHelp,
+		Long:    "Change a custom column's name or color. An empty or blank name exits 2 and sends nothing. " + columnColorHelp,
 		Example: examples(`fz column edit Home Next --name "Hinge repairs"`, "fz column edit Home Next --color tan"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(columnEdit),
@@ -103,6 +103,9 @@ func columnShow(c *cmdContext, a []string) error {
 }
 
 func columnCreate(c *cmdContext, a []string) error {
+	if err := checkName("the column name", a[1]); err != nil {
+		return err
+	}
 	color, _ := c.cmd.Flags().GetString("color")
 	if c.cmd.Flags().Changed("color") {
 		v, err := fizzy.ColumnColorValue(color)
@@ -133,6 +136,9 @@ func columnEdit(c *cmdContext, a []string) error {
 	var changed []string
 	if fl.Changed("name") {
 		name, _ := fl.GetString("name")
+		if err := checkName("--name", name); err != nil {
+			return err
+		}
 		fields.Name = &name
 		changed = append(changed, "name")
 	}
