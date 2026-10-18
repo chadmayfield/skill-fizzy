@@ -241,7 +241,9 @@ replaces the whole list, so anyone not named loses access. Each entry is a
 user id, a name or an email, matched the way `card assign` matches a user.
 If an entry matches nobody or more than one user, `fz` exits 2 and changes
 nothing. Both changes print the old and new access first, with each user's
-name and id, and refuse without `--yes`. `--all` on a board that every user
+name and id, and refuse without `--yes`. The `--users` preview lists who
+keeps access, who gains it and who loses it. When Fizzy's reply does not say
+who has access now, the preview says the current list is unknown. `--all` on a board that every user
 can already reach prints that no change is needed, exits 0 and sends
 nothing.
 

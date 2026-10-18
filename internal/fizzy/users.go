@@ -98,6 +98,11 @@ func (f *Fizzy) MatchUsers(specs []string) ([]UserMatch, error) {
 	if err != nil {
 		return nil, err
 	}
+	return MatchUsersIn(users, specs)
+}
+
+// MatchUsersIn is MatchUsers over a user list the caller already holds.
+func MatchUsersIn(users []User, specs []string) ([]UserMatch, error) {
 	var out []UserMatch
 	seen := map[string]bool{}
 	for _, s := range specs {

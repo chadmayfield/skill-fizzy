@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -82,6 +84,7 @@ func addBoardExtraCommands(root *cobra.Command) {
 			"Each USER is a user id, a name or an email, matched as card assign matches one. " +
 			"fz refuses a USER that matches nobody or more than one user, and sends nothing. " +
 			"Either change prints what it would do, naming each user with their id, and refuses without --yes. " +
+			"The --users preview lists who keeps access, who gains it and who loses it, or says the current list is unknown when Fizzy's reply has none. " +
 			"--all on a board that every user can already reach says no change is needed and sends nothing.",
 		Example: examples("fz board access Home", "fz board access Home --all --yes", "fz board access Home --users 03abc123def456ghi789jkl0mn --yes", "fz board access Home --users Alex,Sam --yes"),
 		Args:    args(cobra.ExactArgs(1)),
@@ -308,12 +311,17 @@ func boardAccess(c *cmdContext, a []string) error {
 		return boardAccessList(c, fz, b)
 	}
 	var ids, named []string
+	var users []fizzy.User
 	if !all {
-		users, err := fz.MatchUsers(specs)
+		users, err = fz.Users()
 		if err != nil {
 			return err
 		}
-		for _, u := range users {
+		matched, err := fizzy.MatchUsersIn(users, specs)
+		if err != nil {
+			return err
+		}
+		for _, u := range matched {
 			ids = append(ids, u.ID)
 			named = append(named, fmt.Sprintf("%s (%s)", u.Name, u.ID))
 		}
@@ -331,7 +339,9 @@ func boardAccess(c *cmdContext, a []string) error {
 	if all {
 		fmt.Fprintln(w, "  new: all users")
 	} else {
-		fmt.Fprintf(w, "  new: only these users: %s\n  --users replaces the whole list; anyone not named loses access\n", strings.Join(named, ", "))
+		fmt.Fprintf(w, "  new: only these users: %s\n", strings.Join(named, ", "))
+		accessChanges(w, d, users, ids)
+		fmt.Fprintln(w, "  --users replaces the whole list; anyone not named loses access")
 	}
 	if !yes {
 		return refuse(c)
@@ -345,6 +355,56 @@ func boardAccess(c *cmdContext, a []string) error {
 	}
 	text := c.wrote(fmt.Sprintf("board %s access set to %s", b.Name, to), fmt.Sprintf("set board %s access to %s", b.Name, to))
 	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}), text)
+}
+
+// accessChanges prints who keeps, gains and loses access when the board's
+// list becomes ids. On an all-access board every active user has access now.
+// A reply without user_ids does not say who has access, so it says that.
+func accessChanges(w io.Writer, d fizzy.BoardInfo, users []fizzy.User, ids []string) {
+	names := map[string]string{}
+	var current []string
+	for _, u := range users {
+		names[u.ID] = u.Name
+		if d.AllAccess {
+			current = append(current, u.ID)
+		}
+	}
+	if !d.AllAccess {
+		if d.UserIDs == nil {
+			fmt.Fprintln(w, "  the current list is unknown, so fz cannot say who keeps or loses access")
+			return
+		}
+		current = d.UserIDs
+	}
+	label := func(id string) string {
+		if n := names[id]; n != "" {
+			return fmt.Sprintf("%s (%s)", n, id)
+		}
+		return id
+	}
+	var keeps, gains, loses []string
+	for _, id := range ids {
+		if slices.Contains(current, id) {
+			keeps = append(keeps, label(id))
+		} else {
+			gains = append(gains, label(id))
+		}
+	}
+	for _, id := range current {
+		if !slices.Contains(ids, id) {
+			loses = append(loses, label(id))
+		}
+	}
+	for _, row := range []struct {
+		what string
+		who  []string
+	}{{"keeps", keeps}, {"gains", gains}, {"loses", loses}} {
+		list := "none"
+		if len(row.who) > 0 {
+			list = strings.Join(row.who, ", ")
+		}
+		fmt.Fprintf(w, "  %s access: %s\n", row.what, list)
+	}
 }
 
 func boardAccessList(c *cmdContext, fz *fizzy.Fizzy, b fizzy.Board) error {
