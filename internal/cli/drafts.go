@@ -712,7 +712,7 @@ func draftApply(c *cmdContext, a []string) error {
 		// The draft's hash is taken before anything is sent, so an edit
 		// made while fz runs is sent by the next --update.
 		dh := ""
-		if !c.dryRun && (d.Card == 0 || update) {
+		if d.Card == 0 || update {
 			h, err := draftHash(d, cfg.InboxPath())
 			if err != nil {
 				return failApply(c, refuseImage(err), summary)
@@ -731,7 +731,7 @@ func draftApply(c *cmdContext, a []string) error {
 				}
 				fmt.Fprintf(w, "#%d %s\n", d.Card, line)
 			}
-			_, err := syncDraft(fz, d, cfg.InboxPath(), prune, force, say)
+			_, err := syncDraftHashed(fz, d, cfg.InboxPath(), dh, prune, force, say)
 			var partial *partialSync
 			if errors.As(err, &partial) && !c.dryRun {
 				summary[i] = fmt.Sprintf("%s: card #%d, update not finished", name, d.Card)

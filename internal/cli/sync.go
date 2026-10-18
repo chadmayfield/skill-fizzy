@@ -120,6 +120,12 @@ func (p *partialSync) Unwrap() error { return p.err }
 // before sending any write, and uploads images before any card write. Steps are never unticked. With prune, unticked card
 // steps and card tags the draft lacks are removed; ticked steps always stay.
 func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool, say func(string)) (report []string, err error) {
+	return syncDraftHashed(fz, d, inbox, "", prune, force, say)
+}
+
+// syncDraftHashed is syncDraft with the draft's draftHash already taken,
+// so a run reads each image once. An empty dh is taken here.
+func syncDraftHashed(fz *fizzy.Fizzy, d *draft.Draft, inbox, dh string, prune, force bool, say func(string)) (report []string, err error) {
 	card, err := fz.Card(d.Card)
 	if err != nil {
 		return report, err
@@ -159,9 +165,10 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 	// When neither the draft's title, body and images nor the card's title
 	// and description changed since the last sync, there is nothing to
 	// upload or send for them.
-	dh, err := draftHash(d, inbox)
-	if err != nil {
-		return report, err
+	if dh == "" {
+		if dh, err = draftHash(d, inbox); err != nil {
+			return report, err
+		}
 	}
 	sameText := d.Meta[syncedDraftKey] == dh && textSynced(d.Meta["synced-fields"], card)
 	// Upload first, so a failed upload leaves the card untouched.

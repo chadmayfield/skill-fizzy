@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -13,6 +15,9 @@ import (
 	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
+
+// openImage is os.Open. A test replaces it to count the image reads.
+var openImage = os.Open
 
 // syncedDraftKey is the front matter key for draftHash.
 const syncedDraftKey = "synced-draft"
@@ -29,12 +34,11 @@ func draftHash(d *draft.Draft, inbox string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		b, err := os.ReadFile(path)
+		h, err := imageHash(path)
 		if err != nil {
 			return "", err
 		}
-		sum := sha256.Sum256(b)
-		images = append(images, hex.EncodeToString(sum[:]))
+		images = append(images, h)
 	}
 	b, _ := json.Marshal(struct {
 		Title  string   `json:"title"`
@@ -43,6 +47,31 @@ func draftHash(d *draft.Draft, inbox string) (string, error) {
 	}{d.Title, d.BodyMD, images})
 	sum := sha256.Sum256(b)
 	return fingerprintPrefix + hex.EncodeToString(sum[:])[:16], nil
+}
+
+// imageHash returns the hex SHA-256 of the file at path. It first refuses
+// what Upload refuses, a file that is not regular or is over
+// fizzy.MaxUploadSize, with the same Refusal, and then streams the file, so
+// memory stays small whatever its size.
+func imageHash(path string) (string, error) {
+	fi, err := fizzy.CheckUpload(path)
+	if err != nil {
+		return "", err
+	}
+	f, err := openImage(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(f, fizzy.MaxUploadSize+1))
+	if err != nil {
+		return "", err
+	}
+	if n != fi.Size() {
+		return "", fmt.Errorf("%s changed size while fz read it", fizzy.PyRepr(path))
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // textSynced reports whether the card's title and description hash to the
