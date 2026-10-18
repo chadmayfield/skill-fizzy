@@ -48,9 +48,10 @@ func addBoardExtraCommands(root *cobra.Command) {
 	}
 	del.Flags().Bool("yes", false, "really delete")
 	publish := &cobra.Command{
-		Use:     "publish BOARD",
-		Short:   "publish a board to a public link (needs --yes)",
-		Long:    "Publish a board. Anyone with the public link can read it without logging in. Prints the link. Refuses without --yes.",
+		Use:   "publish BOARD",
+		Short: "publish a board to a public link (needs --yes)",
+		Long: "Publish a board. Anyone with the public link can read it without logging in. Prints the link. Refuses without --yes. " +
+			"A board that is already published prints its link and that no change is needed, sends nothing and exits 0.",
 		Example: examples("fz board publish Home --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardPublish),
@@ -233,6 +234,14 @@ func boardPublish(c *cmdContext, a []string) error {
 	b, err := fz.Board(a[0])
 	if err != nil {
 		return err
+	}
+	d, err := fz.BoardDetail(b.ID)
+	if err != nil {
+		return err
+	}
+	if d.PublicURL != "" {
+		return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"public_url", d.PublicURL}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("board %s is already published: %s; no change needed", line(b.Name), line(d.PublicURL))))
 	}
 	fmt.Fprintf(c.errw(), "about to publish board %s (%s): anyone with the link can read it without logging in\n", line(b.Name), line(b.ID))
 	if !yes {

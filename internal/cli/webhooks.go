@@ -63,7 +63,8 @@ func addWebhookCommands(root *cobra.Command) {
 		Use:   "edit BOARD ID",
 		Short: "change a webhook's name or actions (needs --yes)",
 		Long: "Change a webhook's name or the actions it sends. The URL cannot change. " +
-			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes.",
+			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes. " +
+			"When the webhook already has the name and actions given, it says no change is needed, sends nothing and exits 0.",
 		Example: examples("fz webhook edit Gate 03abc123def456ghi789jkl0mn --actions card_closed --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(webhookEdit),
@@ -320,6 +321,10 @@ func webhookEdit(c *cmdContext, a []string) error {
 	h, err := fz.Webhook(board, a[1])
 	if err != nil {
 		return adminOnly(err)
+	}
+	if (name == nil || *name == h.Name) && (actions == nil || sameIDs(actions, h.SubscribedActions)) {
+		return emit(c.cmd, c.dry(obj{{"id", h.ID}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("webhook %s already has these values; no change needed", line(h.ID))))
 	}
 	var changes []string
 	if name != nil {

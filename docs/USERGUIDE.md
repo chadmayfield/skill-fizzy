@@ -265,7 +265,9 @@ fz board unpublish Home
 ```
 
 Anyone with the public link can read a published board without logging in.
-`board publish` prints the link and refuses without `--yes`. `board unpublish`
+`board publish` prints the link and refuses without `--yes`. On a board that
+is already published it prints the link, says no change is needed, sends
+nothing and exits 0. `board unpublish`
 needs no `--yes`, because it only closes access.
 
 Access:
@@ -733,7 +735,8 @@ fz webhook activate Gate 03abc123def456ghi789jkl0mn
   `card_sent_back_to_triage`, `card_triaged`, `card_unassigned` and
   `comment_created`.
 - `create`, `edit` and `delete` print what they would do and refuse without
-  `--yes`.
+  `--yes`. An `edit` whose name and actions the webhook already has says no
+  change is needed, sends nothing and exits 0.
 - `webhook create` prints the signing secret once. Save it then. In text
   it goes to stderr, after the warning to save it, so stdout holds only the
   webhook id. With `--json` it is in the JSON on stdout, and the warning
