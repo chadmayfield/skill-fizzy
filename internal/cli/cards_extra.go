@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
@@ -157,15 +156,7 @@ func cardPins(c *cmdContext, _ []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(cards))
-	for i, card := range cards {
-		lines[i] = cardLine(card)
-	}
-	text := strings.Join(lines, "\n")
-	if text == "" {
-		text = "(no pinned cards)"
-	}
-	return emit(c.cmd, rawList(cards), text)
+	return emit(c.cmd, rawList(cards), listText(cards, cardLine, "(no pinned cards)"))
 }
 
 func cardBoost(c *cmdContext, a []string) error {
@@ -208,15 +199,8 @@ func cardBoosts(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(bs))
-	for i, b := range bs {
-		lines[i] = fmt.Sprintf("%s  %s  (%s)", b.ID, b.Content, b.Reacter.Name)
-	}
-	text := strings.Join(lines, "\n")
-	if text == "" {
-		text = "(no boosts)"
-	}
-	return emit(c.cmd, rawList(bs), text)
+	line := func(b fizzy.Boost) string { return fmt.Sprintf("%s  %s  (%s)", b.ID, b.Content, b.Reacter.Name) }
+	return emit(c.cmd, rawList(bs), listText(bs, line, "(no boosts)"))
 }
 
 func cardUnboost(c *cmdContext, a []string) error {

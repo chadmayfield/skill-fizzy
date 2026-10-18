@@ -96,18 +96,6 @@ func userLine(u fizzy.User) string {
 	return line
 }
 
-// listText joins one line per item, or the empty text when there are none.
-func listText[T any](items []T, line func(T) string, empty string) string {
-	out := make([]string, len(items))
-	for i, it := range items {
-		out[i] = line(it)
-	}
-	if len(out) == 0 {
-		return empty
-	}
-	return strings.Join(out, "\n")
-}
-
 func tagList(c *cmdContext, _ []string) error {
 	fz, err := c.api()
 	if err != nil {

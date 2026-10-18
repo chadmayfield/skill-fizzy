@@ -324,3 +324,15 @@ func refuse(c *cmdContext) error {
 	fmt.Fprintln(c.errw(), "refusing without --yes")
 	return exitCode(2)
 }
+
+// listText joins one line per item, or the empty text when there are none.
+func listText[T any](items []T, line func(T) string, empty string) string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = line(it)
+	}
+	if len(out) == 0 {
+		return empty
+	}
+	return strings.Join(out, "\n")
+}
