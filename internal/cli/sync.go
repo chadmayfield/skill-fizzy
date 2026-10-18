@@ -171,7 +171,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
 			return report, err
 		}
-		add("moved to board "+board.Name)
+		add("moved to board " + board.Name)
 	}
 	title, desc := d.Title, d.DescriptionHTML(sgids)
 	if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
@@ -184,23 +184,23 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		if _, err := fz.AddStep(d.Card, s.Content, s.Done); err != nil {
 			return report, err
 		}
-		add("step added: "+s.Content)
+		add("step added: " + s.Content)
 	}
 	ticked := true
 	for _, id := range plan.Tick {
 		if err := fz.UpdateStep(d.Card, id, nil, &ticked); err != nil {
 			return report, err
 		}
-		add("step ticked: "+id)
+		add("step ticked: " + id)
 	}
 	for _, s := range plan.Extra {
 		if prune && !s.Completed {
 			if err := fz.DeleteStep(d.Card, s.ID); err != nil {
 				return report, err
 			}
-			add("step deleted: "+s.Content)
+			add("step deleted: " + s.Content)
 		} else {
-			add("step kept, not in draft: "+s.Content)
+			add("step kept, not in draft: " + s.Content)
 		}
 	}
 
@@ -210,7 +210,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 			return report, err
 		}
 		if changed {
-			add("tag added: "+t)
+			add("tag added: " + t)
 		}
 	}
 	for _, t := range card.Tags {
@@ -218,7 +218,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 			continue
 		}
 		if !prune {
-			add("tag kept, not in draft: "+t)
+			add("tag kept, not in draft: " + t)
 			continue
 		}
 		changed, err := fz.RemoveTag(d.Card, t)
@@ -226,7 +226,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 			return report, err
 		}
 		if changed {
-			add("tag removed: "+t)
+			add("tag removed: " + t)
 		}
 	}
 
@@ -237,7 +237,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		if err := fz.MoveCard(d.Card, d.Column, board.ID); err != nil {
 			return report, err
 		}
-		add("moved to "+d.Column)
+		add("moved to " + d.Column)
 	}
 	if card.Golden != d.Golden {
 		if err := fz.SetGolden(d.Card, d.Golden); err != nil {
