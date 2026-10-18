@@ -874,6 +874,38 @@ The hinge pin is worn. The latch is fine.
 - Each `- [ ]` or `- [x]` line under `## Steps` becomes a step, ticked or not.
 - `skill/templates/card.md` in this repo is a blank draft to copy.
 
+### Markdown
+
+The description supports headings, paragraphs, bullet and numbered lists,
+task items (`- [ ]` and `- [x]`), fenced code blocks, blockquotes, links,
+bold, italic, inline code, horizontal rules and image lines. It also
+supports these three:
+
+- `~~text~~` is struck through. A lone `~` or an unmatched `~~` stays as
+  typed, and code spans and URLs keep their tildes.
+- A pipe table has a header row, a row of dashes, then body rows. It ends
+  at a blank line or a line with no pipe. Outer pipes are optional, and
+  `\|` is a pipe inside a cell. Short rows get empty cells and long rows
+  are cut to the header's width. Alignment colons are accepted and ignored.
+- A list item nests under the item above it when it is indented with
+  spaces to where that item's text starts: 2 spaces under `- `, 3 under
+  `1. `. Lists nest three levels deep. A deeper item stays at the third
+  level. A tab indent does not nest, and a blank line still ends the list.
+  Steps under `## Steps` stay flat, however they are indented.
+
+```markdown
+The ~~old~~ new hinge.
+
+| Part  | Qty |
+|-------|-----|
+| hinge | 2   |
+| latch | 1   |
+
+- Gate
+  - Hinge
+    - [ ] Order the pin
+```
+
 ### Images
 
 An image line, `![alt](file.jpg)`, must sit on a line by itself. Inside a

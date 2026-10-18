@@ -1,11 +1,14 @@
 // Package markdown converts card-draft Markdown to the HTML Fizzy stores.
 //
-// It produces the same bytes as the earlier Python fz's converter, which the
-// golden files in testdata pin.
 // It supports what card drafts need and nothing more: ATX headings,
-// paragraphs, bullet and numbered lists (one level), task-list items, fenced
-// code blocks, blockquotes, links, bold, italic, inline code, horizontal
-// rules, and image lines. Fizzy sanitizes rich text on its side as well.
+// paragraphs, bullet and numbered lists nested up to three levels, task-list
+// items, pipe tables without alignment, fenced code blocks, blockquotes,
+// links, bold, italic, ~~strikethrough~~, inline code, horizontal rules, and
+// image lines. Fizzy sanitizes rich text on its side as well.
+//
+// Input without tables, strikethrough or space-indented list items gives the
+// same bytes as the earlier Python fz's converter, which the golden files in
+// testdata pin.
 //
 // A line that is only ![alt](target) becomes the placeholder
 // <!--attach:target-->, which the draft layer replaces with an uploaded file.
@@ -28,7 +31,7 @@ import (
 func ToHTML(md string) string {
 	lines := lines(md)
 	var out, para []string
-	listTag := "" // "ul" or "ol"
+	var list []listLevel // open lists, outermost first
 
 	flushPara := func() {
 		if len(para) > 0 {
@@ -40,12 +43,23 @@ func ToHTML(md string) string {
 			para = para[:0]
 		}
 	}
-	closeList := func() {
-		if listTag != "" {
-			out = append(out, "</"+listTag+">")
-			listTag = ""
+	// closeTo closes the lists deeper than depth n. A nested list ends its
+	// parent's <li>.
+	closeTo := func(n int) {
+		for len(list) > n {
+			top := list[len(list)-1]
+			list = list[:len(list)-1]
+			if top.pending != nil {
+				out = append(out, "<li>"+*top.pending+"</li>")
+			}
+			end := "</" + top.tag + ">"
+			if len(list) > 0 {
+				end += "</li>"
+			}
+			out = append(out, end)
 		}
 	}
+	closeList := func() { closeTo(0) }
 
 	for i := 0; i < len(lines); {
 		line := lines[i]
@@ -110,6 +124,38 @@ func ToHTML(md string) string {
 			continue
 		}
 
+		// An indented line under a list item belongs to the list, so it
+		// cannot start a table.
+		if i+1 < len(lines) && (len(list) == 0 || !isSpace([]rune(line)[0])) {
+			if head, ok := tableHead(line, lines[i+1]); ok {
+				flushPara()
+				closeList()
+				// Padding short rows may add no more cells than the table
+				// has bytes, so a wide header over many short rows cannot
+				// make the output quadratic. A row past that ends the table.
+				budget := len(line) + len(lines[i+1])
+				i += 2
+				var rows [][]string
+				for i < len(lines) && strip(lines[i]) != "" && strings.ContainsRune(lines[i], '|') {
+					if _, _, img := ImageLine(lines[i]); img {
+						break
+					}
+					cells, _ := splitRow(lines[i])
+					budget += len(lines[i])
+					if pad := len(head) - len(cells); pad > 0 {
+						if pad > budget {
+							break
+						}
+						budget -= pad
+					}
+					rows = append(rows, cells)
+					i++
+				}
+				out = append(out, table(head, rows))
+				continue
+			}
+		}
+
 		item, isBullet := bullet(line)
 		if !isBullet {
 			var isNumbered bool
@@ -126,26 +172,177 @@ func ToHTML(md string) string {
 		if isBullet {
 			tag = "ul"
 		}
-		if listTag != tag {
-			closeList()
-			out = append(out, "<"+tag+">")
-			listTag = tag
-		}
+		body := Inline(item)
 		if checked, text, ok := task(item); ok {
 			box := "☐"
 			if checked {
 				box = "☑"
 			}
-			out = append(out, "<li>"+box+" "+Inline(text)+"</li>")
-		} else {
-			out = append(out, "<li>"+Inline(item)+"</li>")
+			body = box + " " + Inline(text)
 		}
+		depth := itemDepth(list, line)
+		if depth > len(list) {
+			// A new level opens inside the item above, which stays open.
+			if n := len(list); n > 0 {
+				out = append(out, "<li>"+*list[n-1].pending+"<"+tag+">")
+				list[n-1].pending = nil
+			} else {
+				out = append(out, "<"+tag+">")
+			}
+			list = append(list, listLevel{tag: tag})
+		} else {
+			closeTo(depth)
+			lv := &list[depth-1]
+			if lv.pending != nil {
+				out = append(out, "<li>"+*lv.pending+"</li>")
+			}
+			if lv.tag != tag {
+				out = append(out, "</"+lv.tag+">", "<"+tag+">")
+				lv.tag = tag
+			}
+		}
+		list[depth-1].pending = &body
+		list[depth-1].col = len([]rune(line)) - len([]rune(item))
 		i++
 	}
 
 	flushPara()
 	closeList()
 	return strings.Join(out, "\n")
+}
+
+// maxDepth is how deep lists nest. A deeper item stays at this depth.
+const maxDepth = 3
+
+// listLevel is one open list.
+type listLevel struct {
+	tag string
+	// col is the content column of the list's last item: where its text
+	// begins, so 2 for "- x" and 3 for "1. x".
+	col int
+	// pending is the last item's HTML until it is written. It is nil once
+	// a nested list has opened inside that item.
+	pending *string
+}
+
+// itemDepth returns the depth, from 1, of the list item on line, given the
+// lists open above it. An item nests one level under the item above when it
+// is indented with spaces only, at least to that item's content column.
+// Otherwise it joins the deepest open list whose parent item it reaches, or
+// the outermost one. Tab indents never nest.
+func itemDepth(list []listLevel, line string) int {
+	if len(list) == 0 {
+		return 1
+	}
+	indent := 0
+	for _, c := range line {
+		if c != ' ' {
+			if isSpace(c) {
+				return 1
+			}
+			break
+		}
+		indent++
+	}
+	if indent >= list[len(list)-1].col {
+		return min(len(list)+1, maxDepth)
+	}
+	for d := len(list); d > 1; d-- {
+		if indent >= list[d-2].col {
+			return d
+		}
+	}
+	return 1
+}
+
+// tableHead reports whether line and next start a pipe table: a header row
+// that is not a list item, then a delimiter row with as many cells, each of
+// dashes with an optional colon at either end. Both rows need an unescaped
+// pipe. It returns the header cells.
+func tableHead(line, next string) ([]string, bool) {
+	if _, ok := bullet(line); ok {
+		return nil, false
+	}
+	if _, ok := numbered(line); ok {
+		return nil, false
+	}
+	head, ok := splitRow(line)
+	if !ok {
+		return nil, false
+	}
+	delim, ok := splitRow(next)
+	if !ok || len(delim) != len(head) {
+		return nil, false
+	}
+	for _, c := range delim {
+		c = strings.TrimPrefix(strings.TrimSuffix(c, ":"), ":")
+		if c == "" || strings.Trim(c, "-") != "" {
+			return nil, false
+		}
+	}
+	return head, true
+}
+
+// splitRow splits a table row on its unescaped pipes and trims each cell. A
+// leading and a trailing pipe are dropped, and \| is a literal pipe. ok
+// reports whether the row held an unescaped pipe.
+func splitRow(line string) (cells []string, ok bool) {
+	r := []rune(strip(line))
+	var cell []rune
+	for i := 0; i < len(r); i++ {
+		switch {
+		case r[i] == '\\' && i+1 < len(r) && r[i+1] == '|':
+			cell = append(cell, '|')
+			i++
+		case r[i] == '|':
+			ok = true
+			cells = append(cells, strip(string(cell)))
+			cell = cell[:0]
+		default:
+			cell = append(cell, r[i])
+		}
+	}
+	cells = append(cells, strip(string(cell)))
+	if !ok {
+		return cells, false
+	}
+	n := len(r)
+	if n > 1 && r[n-1] == '|' && r[n-2] != '\\' {
+		cells = cells[:len(cells)-1]
+	}
+	if r[0] == '|' {
+		cells = cells[1:]
+	}
+	return cells, true
+}
+
+// table renders a pipe table on one line. Each row is padded or cut to the
+// header's width. Alignment is dropped, and tbody is left out when there are
+// no body rows.
+func table(head []string, rows [][]string) string {
+	var b strings.Builder
+	b.WriteString("<table><thead><tr>")
+	for _, c := range head {
+		b.WriteString("<th>" + Inline(c) + "</th>")
+	}
+	b.WriteString("</tr></thead>")
+	if len(rows) > 0 {
+		b.WriteString("<tbody>")
+		for _, row := range rows {
+			b.WriteString("<tr>")
+			for k := range head {
+				c := ""
+				if k < len(row) {
+					c = row[k]
+				}
+				b.WriteString("<td>" + Inline(c) + "</td>")
+			}
+			b.WriteString("</tr>")
+		}
+		b.WriteString("</tbody>")
+	}
+	b.WriteString("</table>")
+	return b.String()
 }
 
 // lines splits md into lines the way ToHTML does: \r\n becomes \n, and only
@@ -303,7 +500,8 @@ func task(item string) (checked bool, text string, ok bool) {
 	return r[1] != ' ', text, ok
 }
 
-// Inline escapes text, then applies inline code, links, bold and italic.
+// Inline escapes text, then applies inline code, links, bold, strikethrough
+// and italic.
 func Inline(text string) string {
 	var codes []string
 	text = stashCode(text, &codes)
@@ -311,6 +509,7 @@ func Inline(text string) string {
 	text = links(text)
 	text = bareURLs(text, &codes)
 	text = bold(text)
+	text = strike(text)
 	text = starEm(text)
 	text = underscoreEm(text)
 	return restoreCode(text, codes)
@@ -538,6 +737,48 @@ scan:
 					i = k + 3
 					continue scan
 				}
+			}
+		}
+		b.WriteRune(r[i])
+		i++
+	}
+	return b.String()
+}
+
+// strike replaces ~~text~~ with <del>. Each marker is a run of exactly two
+// tildes. The opener must not be followed by whitespace, the closer must not
+// follow it, and the run may not cross a newline. It runs after bareURLs, so
+// tildes in a URL are already stashed.
+func strike(text string) string {
+	if !strings.Contains(text, "~~") {
+		return text
+	}
+	r := []rune(text)
+	pair := func(k int) bool {
+		return k+1 < len(r) && r[k] == '~' && r[k+1] == '~' &&
+			(k == 0 || r[k-1] != '~') && (k+2 >= len(r) || r[k+2] != '~')
+	}
+	// closer[k] is the first closing marker at or after k, and nl[k] the
+	// first newline at or after k, or len(r) for either, so an opener that
+	// never closes does not scan to the end of the line.
+	closer, nl := make([]int, len(r)+1), make([]int, len(r)+1)
+	closer[len(r)], nl[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		closer[k], nl[k] = closer[k+1], nl[k+1]
+		if k > 0 && pair(k) && !isSpace(r[k-1]) {
+			closer[k] = k
+		}
+		if r[k] == '\n' {
+			nl[k] = k
+		}
+	}
+	var b strings.Builder
+	for i := 0; i < len(r); {
+		if pair(i) && i+2 < len(r) && !isSpace(r[i+2]) {
+			if j := closer[i+3]; j < nl[i+2] {
+				b.WriteString("<del>" + string(r[i+2:j]) + "</del>")
+				i = j + 2
+				continue
 			}
 		}
 		b.WriteRune(r[i])
