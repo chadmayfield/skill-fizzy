@@ -434,6 +434,12 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		if err != nil {
 			return 0, err
 		}
+		// Name the file before it is sent, so the user sees which file
+		// left the disk. A dry run sends no file, and the parity golden
+		// pins its output.
+		if !c.dryRun {
+			fmt.Fprintln(c.out(), "image: "+line(path))
+		}
 		if sgids[img], err = fz.Upload(path); err != nil {
 			return 0, err
 		}

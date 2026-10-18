@@ -887,7 +887,11 @@ There is no flag to allow more. Copy the file into the inbox instead.
 An image line inside a fenced code block is code. It is shown as text, and
 `fz` neither checks nor uploads its file.
 
-`apply` uploads each image and embeds it in the description.
+`apply` uploads each image and embeds it in the description. Before it
+sends each file, it prints `image:` and the file's real path, with symlinks
+resolved, so you can see which file left the disk. With `--update` the line
+starts with the card number. A dry run sends no file and prints no
+`image:` line.
 
 ### Check, preview, apply
 

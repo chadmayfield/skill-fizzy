@@ -163,6 +163,9 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		if err != nil {
 			return report, err
 		}
+		// Name the file before it is sent, so the user sees which file
+		// left the disk.
+		add("image: " + line(path))
 		if sgids[img], err = fz.Upload(path); err != nil {
 			return report, err
 		}
@@ -172,7 +175,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
 			return report, err
 		}
-		add("moved to board " + board.Name)
+		add("moved to board " + line(board.Name))
 	}
 	title, desc := d.Title, d.DescriptionHTML(sgids)
 	if err := fz.UpdateCard(d.Card, fizzy.CardFields{Title: &title, Description: &desc}); err != nil {
