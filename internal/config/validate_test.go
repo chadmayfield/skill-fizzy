@@ -162,7 +162,7 @@ func TestTokenCmdFailureReason(t *testing.T) {
 	if strings.Contains(msg, "SECRET") {
 		t.Errorf("stdout leaked: %q", msg)
 	}
-	if !strings.Contains(msg, "exit status 3") || !strings.Contains(msg, "keychain locked") {
+	if !strings.Contains(msg, "exit status 3") || !strings.Contains(msg, "run the command by hand") {
 		t.Errorf("error = %q", msg)
 	}
 }
@@ -175,24 +175,15 @@ func TestTokenCmdNotFound(t *testing.T) {
 	}
 }
 
-func TestTokenCmdStderrCleaned(t *testing.T) {
-	c := &Config{TokenCmd: `sh -c 'printf "\033[2J\033]0;title\007gate\r\n" >&2; printf "%0300d" 0 >&2; exit 1'`}
+// A broken token command may print the token on stderr, so fz never shows it.
+func TestTokenCmdHidesStderr(t *testing.T) {
+	c := &Config{TokenCmd: `sh -c 'echo hinge-token-on-stderr >&2; exit 1'`}
 	_, err := c.ResolveToken()
 	if err == nil {
 		t.Fatal("want an error")
 	}
-	msg := err.Error()
-	for _, r := range msg {
-		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
-			t.Fatalf("control character %U in %q", r, msg)
-		}
-	}
-	i := strings.Index(msg, "gate")
-	if i < 0 {
-		t.Fatalf("stderr missing: %q", msg)
-	}
-	if tail := len([]rune(msg[i:])); tail > 200 {
-		t.Errorf("stderr part is %d chars, want at most 200: %q", tail, msg)
+	if msg := err.Error(); strings.Contains(msg, "hinge-token-on-stderr") {
+		t.Errorf("stderr shown: %q", msg)
 	}
 }
 

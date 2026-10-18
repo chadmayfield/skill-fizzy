@@ -66,8 +66,9 @@ func (c *Config) LogFile() string { return ExpandTilde(c.LogPath) }
 
 // ResolveToken returns the token from Token, or by running TokenCmd. The
 // command gets tokenCmdTimeout to finish. A failure names the exit status, or
-// "not found", plus up to 200 characters of cleaned stderr. Stdout never
-// appears in an error, because it may hold the secret.
+// "not found", and says to run the command by hand. Neither stdout nor stderr
+// appears in an error, because a broken command may print the secret on
+// either one.
 func (c *Config) ResolveToken() (string, error) {
 	if c.Token != "" {
 		return c.Token, nil
@@ -82,12 +83,10 @@ func (c *Config) ResolveToken() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), tokenCmdTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, words[0], words[1:]...)
-	// A child that keeps stdout or stderr open would hold Wait past the kill.
+	// A child that keeps stdout open would hold Wait past the kill.
 	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
-	stderr := &capWriter{max: 4096}
 	cmd.Stdout = &out
-	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		var reason string
 		var exitErr *exec.ExitError
@@ -101,11 +100,7 @@ func (c *Config) ResolveToken() (string, error) {
 		default:
 			reason = "could not run"
 		}
-		detail := SafeText(stderr.String(), 200)
-		if detail != "" {
-			detail = ": " + detail
-		}
-		return "", fmt.Errorf("%w: token command failed (%s)%s", ErrConfig, reason, detail)
+		return "", fmt.Errorf("%w: token command failed (%s); run the command by hand to see its error", ErrConfig, reason)
 	}
 	token := strings.TrimSpace(out.String())
 	if token == "" {
@@ -113,25 +108,6 @@ func (c *Config) ResolveToken() (string, error) {
 	}
 	return token, nil
 }
-
-// capWriter keeps the first max bytes written to it and drops the rest.
-type capWriter struct {
-	buf bytes.Buffer
-	max int
-}
-
-func (w *capWriter) Write(p []byte) (int, error) {
-	if room := w.max - w.buf.Len(); room > 0 {
-		if len(p) > room {
-			w.buf.Write(p[:room])
-		} else {
-			w.buf.Write(p)
-		}
-	}
-	return len(p), nil
-}
-
-func (w *capWriter) String() string { return w.buf.String() }
 
 // scalar renders a JSON string or number as text. Other types give "".
 func scalar(v any) string {

@@ -120,7 +120,7 @@ The matching token command is
 
 | Key | What it holds |
 |---|---|
-| `url` | The server's address. Required. |
+| `url` | The server's address, such as `https://fizzy.example.com`. Required. It must use https. Plain http is allowed only for localhost, 127.0.0.1 and ::1. It cannot hold a user name, a password, a query or a fragment. |
 | `account` | The account number, the `1` in `https://fizzy.example.com/1/boards`. Required. |
 | `token_cmd` | A command that prints the token. `fz` splits it into words like a shell does, but does not run it through a shell. |
 | `inbox` | The inbox folder. The default is `~/.fizzy-inbox`. |
@@ -128,6 +128,10 @@ The matching token command is
 
 A missing config file is not an error, as long as the environment supplies
 the URL and account.
+
+The file names a command that `fz` runs, so `fz` refuses a config file that
+the group or others can write. `chmod 600` on the file fixes that. The file
+cannot hold the token itself, so a `token` key is an error.
 
 ### Environment variables
 
@@ -968,16 +972,33 @@ setup.
 | `set FIZZY_URL and FIZZY_ACCOUNT, or url/account in <file>` | The file is missing or lacks `url` or `account`. Check the path `fz` names. |
 | `<file>: invalid JSON (...)` | Fix the JSON in the config file. |
 | `rules_card "<value>" is not a number` | `rules_card` must be a card number. |
+| `<file>: invalid JSON (text after the JSON object)` | Remove whatever follows the closing `}`. |
+| `<file>: the config file cannot hold the token; ...` | Remove the `token` key. Put a command that prints the token in `token_cmd`, or set `FIZZY_TOKEN`. |
+| `<file> is writable by group or others, ...` | Run the `chmod go-w` command the message gives. |
+| `the server URL must start with https://` | Put `https://` in front of the host. |
+| `the server URL must use https (plain http is allowed only for localhost)` | Use the https address. |
+| `the server URL must not hold a user name or password` | Remove the `name:password@` part. The token comes from the token command. |
+| `the server URL must not have a query` or `a fragment`, or `has no host` | Set `url` to `https://HOST`, with an optional path and nothing after it. |
+| `the account is empty`, `must not contain spaces`, `must not contain /, ?, # or %` or `must not contain ..` | Set `account` to the account part of your Fizzy URLs, such as `1`. |
 | `no token: set FIZZY_TOKEN or FIZZY_TOKEN_CMD (or token_cmd in the config file)` | Give `fz` a token or a token command. |
 
 ### Token command failures
 
-`token command failed` means the command exited with an error.
-`token command printed nothing` means it ran but printed no token. The
-message never includes the command's output, because that output may hold
-the token.
+`token command failed` means the command did not work. The message gives
+the reason in parentheses:
 
-Run the command yourself in a terminal to see its error.
+| Reason | What happened |
+|---|---|
+| `exit status N` | The command ran and exited with status N. |
+| `not found` | There is no such command. Check the first word of `token_cmd`. |
+| `timed out after 30s` | The command ran for 30 seconds without finishing. A keychain prompt that nobody answered does this. |
+| `invalid command` | `token_cmd` has an unclosed quote, or holds only spaces. |
+
+`token command printed nothing` means it ran but printed no token.
+
+The message never includes anything the command printed, on stdout or on
+stderr, because a broken command may print the token on either one. Run the
+command yourself in a terminal to see its error.
 
 ### Timeouts
 
@@ -1005,5 +1026,19 @@ move what you want to keep into the draft, then rerun with `--force`. See
 
 `t` is the time in UTC. `method` and `path` name the request. `status` is the
 HTTP status the server returned. A status of 300 or above means the write
-failed. The log never holds the token or the request and response bodies. A
-dry run sends nothing, so it logs nothing.
+failed. A status of 0 means the write got no reply, for example after a
+timeout or a dropped connection, so the server may or may not have applied
+it. Check in Fizzy before you run it again. The log never holds the token or
+the request and response bodies. A dry run sends nothing, so it logs nothing.
+
+`fz` creates the log with mode 0600, so only you can read it, and sets an
+existing log to 0600.
+
+### A redirected write
+
+`POST /1/boards -> HTTP 301: the server redirected a write, and fz does not
+follow that; the configured URL may need https` means the server answered a
+write with a redirect. The status can also be 302 or 303. Following it would turn the write into a read, so `fz` stops and
+nothing changes. This usually means `url` names an http address that
+redirects to https. Set `url` to the https address. `fz` never follows a
+redirect from https to http either.
