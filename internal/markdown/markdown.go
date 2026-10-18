@@ -18,6 +18,7 @@
 package markdown
 
 import (
+	"html"
 	"strconv"
 	"strings"
 	"unicode"
@@ -345,7 +346,7 @@ func links(text string) string {
 	for i := 0; i < len(r); {
 		if r[i] == '[' {
 			if end, label, url, ok := linkAt(r, i); ok {
-				b.WriteString(`<a href="` + escape(url, true) + `">` + label + "</a>")
+				b.WriteString(`<a href="` + hrefFrom(url, true) + `">` + label + "</a>")
 				i = end
 				continue
 			}
@@ -403,6 +404,16 @@ func hasPrefix(r []rune, i int, prefix string) bool {
 	return true
 }
 
+// hrefFrom turns a URL taken from text that Inline already escaped into an
+// href value with each & escaped exactly once. It undoes Inline's escape to
+// get the draft's own text, reads a written &amp; as &, and escapes the
+// result once. quote also escapes quotes.
+func hrefFrom(escaped string, quote bool) string {
+	raw := html.UnescapeString(escaped)
+	raw = strings.ReplaceAll(raw, "&amp;", "&")
+	return escape(raw, quote)
+}
+
 // bareURLs links a URL that is not already inside an anchor. Python:
 // (?<!["=>])\b(https?://[^\s<]+[^\s<.,;:!?)])
 func bareURLs(text string) string {
@@ -423,7 +434,7 @@ func bareURLs(text string) string {
 				}
 				if e > p {
 					url := string(r[i : e+1])
-					b.WriteString(`<a href="` + url + `">` + url + "</a>")
+					b.WriteString(`<a href="` + hrefFrom(url, false) + `">` + url + "</a>")
 					i = e + 1
 					continue
 				}
