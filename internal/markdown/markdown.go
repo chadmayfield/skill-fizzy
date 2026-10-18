@@ -416,6 +416,8 @@ func hrefFrom(escaped string, quote bool) string {
 
 // bareURLs links a URL that is not already inside an anchor. Python:
 // (?<!["=>])\b(https?://[^\s<]+[^\s<.,;:!?)])
+// Unlike Python, the URL also ends at a quote and at an escaped < or >,
+// because Python's pattern let a " close the href and add an attribute.
 func bareURLs(text string) string {
 	r := []rune(text)
 	var b strings.Builder
@@ -423,7 +425,11 @@ func bareURLs(text string) string {
 		if r[i] == 'h' && (i == 0 || (r[i-1] != '"' && r[i-1] != '=' && r[i-1] != '>' && !isWord(r[i-1]))) {
 			if p := schemeEnd(r, i, false); p >= 0 {
 				q := p
-				for q < len(r) && !isSpace(r[q]) && r[q] != '<' {
+				// A URL ends at whitespace, a quote, or a < or > (escaped by
+				// now, or a tag that links added), so it cannot close the
+				// href attribute.
+				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'", r[q]) &&
+					!hasPrefix(r, q, "&lt;") && !hasPrefix(r, q, "&gt;") {
 					q++
 				}
 				// The last character may not be trailing punctuation, and
@@ -434,7 +440,7 @@ func bareURLs(text string) string {
 				}
 				if e > p {
 					url := string(r[i : e+1])
-					b.WriteString(`<a href="` + hrefFrom(url, false) + `">` + url + "</a>")
+					b.WriteString(`<a href="` + hrefFrom(url, true) + `">` + url + "</a>")
 					i = e + 1
 					continue
 				}

@@ -17,3 +17,21 @@ func TestHrefEscapesAmpersandOnce(t *testing.T) {
 		}
 	}
 }
+
+// TestBareURLCannotLeaveHref checks that a bare URL ends at a quote, < or
+// >, so its text cannot close the href and add an attribute such as an
+// event handler.
+func TestBareURLCannotLeaveHref(t *testing.T) {
+	for in, want := range map[string]string{
+		`http://x.example/"onmouseover=alert(1)//`: `<p><a href="http://x.example/">http://x.example/</a>"onmouseover=alert(1)//</p>`,
+		`http://x.example/'onclick=alert(1)`:       `<p><a href="http://x.example/">http://x.example/</a>'onclick=alert(1)</p>`,
+		`http://x.example/<b>x</b>`:                `<p><a href="http://x.example/">http://x.example/</a>&lt;b&gt;x&lt;/b&gt;</p>`,
+		`http://x.example/a>b`:                     `<p><a href="http://x.example/a">http://x.example/a</a>&gt;b</p>`,
+		`see http://x.example/a"b and more`:        `<p>see <a href="http://x.example/a">http://x.example/a</a>"b and more</p>`,
+	} {
+		got := ToHTML(in)
+		if got != want {
+			t.Errorf("ToHTML(%q)\n got  %s\n want %s", in, got, want)
+		}
+	}
+}
