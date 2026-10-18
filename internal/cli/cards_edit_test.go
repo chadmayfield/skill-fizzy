@@ -14,8 +14,10 @@ import (
 
 type seenCall struct{ method, path, body string }
 
-// editServer answers GET /1/cards/5 with card and records every call.
-func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall) {
+// recordingServer starts a test server that records each request's method,
+// path and body, sets a JSON content type, and then calls h. The function it
+// returns gives a copy of the calls so far.
+func recordingServer(t *testing.T, h func(w http.ResponseWriter, r *http.Request)) (*httptest.Server, func() []seenCall) {
 	t.Helper()
 	var mu sync.Mutex
 	var calls []seenCall
@@ -25,11 +27,7 @@ func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall)
 		calls = append(calls, seenCall{r.Method, r.URL.Path, string(b)})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodGet {
-			io.WriteString(w, card)
-			return
-		}
-		io.WriteString(w, "{}")
+		h(w, r)
 	}))
 	t.Cleanup(srv.Close)
 	return srv, func() []seenCall {
@@ -37,6 +35,18 @@ func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall)
 		defer mu.Unlock()
 		return append([]seenCall(nil), calls...)
 	}
+}
+
+// editServer answers GET /1/cards/5 with card and records every call.
+func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall) {
+	t.Helper()
+	return recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			io.WriteString(w, card)
+			return
+		}
+		io.WriteString(w, "{}")
+	})
 }
 
 func editEnv(t *testing.T, srv *httptest.Server) {

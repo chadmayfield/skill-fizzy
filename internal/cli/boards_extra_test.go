@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -13,15 +12,9 @@ import (
 // and records every call.
 func bxServer(t *testing.T, allAccess bool) (*httptest.Server, func() []seenCall) {
 	t.Helper()
-	var mu sync.Mutex
-	var calls []seenCall
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		calls = append(calls, seenCall{r.Method, r.URL.Path, string(b)})
-		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
+	var calls func() []seenCall
+	srv, calls = recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
 		access := "false"
 		if allAccess {
@@ -64,13 +57,8 @@ func bxServer(t *testing.T, allAccess bool) (*httptest.Server, func() []seenCall
 		default:
 			w.WriteHeader(204)
 		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv, func() []seenCall {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]seenCall(nil), calls...)
-	}
+	})
+	return srv, calls
 }
 
 func writes(cs []seenCall) []seenCall {
