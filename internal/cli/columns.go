@@ -108,7 +108,7 @@ func columnCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", orNull(id)}, {"name", a[1]}},
+	return emit(c.cmd, c.dry(obj{{"id", orNull(id)}, {"name", a[1]}}),
 		c.wrote(fmt.Sprintf("column %s created: %s", pyRepr(a[1]), orNone(id)), "create column "+pyRepr(a[1])))
 }
 
@@ -137,7 +137,7 @@ func columnEdit(c *cmdContext, a []string) error {
 		return err
 	}
 	slices.Sort(changed)
-	return emit(c.cmd, obj{{"id", col.ID}, {"changed", changed}},
+	return emit(c.cmd, c.dry(obj{{"id", col.ID}, {"changed", changed}}),
 		c.wrote(fmt.Sprintf("column %s updated: %s", col.Name, strings.Join(changed, ", ")),
 			fmt.Sprintf("update column %s: %s", col.Name, strings.Join(changed, ", "))))
 }
@@ -159,7 +159,7 @@ func columnDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteColumn(b.ID, col.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"deleted", col.ID}}, c.wrote(fmt.Sprintf("column %s deleted", col.Name), "delete column "+col.Name))
+	return emit(c.cmd, c.dry(obj{{"deleted", col.ID}}), c.wrote(fmt.Sprintf("column %s deleted", col.Name), "delete column "+col.Name))
 }
 
 func columnCards(c *cmdContext, a []string) error {

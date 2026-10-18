@@ -175,8 +175,9 @@ fz --json card show 87
 ```
 
 In a dry run, the commands added after fz 0.1 end with a line such as
-`dry-run: nothing sent; would watch card #87`. The fz 0.1 commands print the
-same text as the Python fz did.
+`dry-run: nothing sent; would watch card #87`. With `--json` they add
+`"dry_run": true` to their output. The fz 0.1 commands print the same text
+and JSON as the Python fz did.
 
 ### Exit status
 

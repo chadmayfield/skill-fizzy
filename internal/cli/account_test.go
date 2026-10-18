@@ -113,7 +113,7 @@ func TestAccountPostponeYes(t *testing.T) {
 func TestAccountPostponeDryRun(t *testing.T) {
 	srv, calls := acctServer(t, map[string]string{"GET /1/account/settings": acctSettings})
 	r := runGo([]string{"--dry-run", "--json", "account", "postpone", "90", "--yes"})
-	if r.code != 0 || r.stdout != "{\n  \"auto_postpone_period_in_days\": 90\n}\n" {
+	if r.code != 0 || r.stdout != "{\n  \"auto_postpone_period_in_days\": 90,\n  \"dry_run\": true\n}\n" {
 		t.Fatalf("got %+v", r)
 	}
 	if !strings.Contains(r.stderr, "[dry-run] PUT "+srv.URL+`/1/account/entropy {"entropy": {"auto_postpone_period_in_days": 90}}`) {

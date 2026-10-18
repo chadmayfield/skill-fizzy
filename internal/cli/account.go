@@ -123,7 +123,7 @@ func accountPostpone(c *cmdContext, a []string) error {
 	if updated.Raw() != nil {
 		data = updated.Raw()
 	}
-	return emit(c.cmd, data, c.wrote(fmt.Sprintf("account auto-postpone set to %d days", days), fmt.Sprintf("set account auto-postpone to %d days", days)))
+	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("account auto-postpone set to %d days", days), fmt.Sprintf("set account auto-postpone to %d days", days)))
 }
 
 func exportLine(e fizzy.Export) string {
@@ -134,7 +134,7 @@ func exportLine(e fizzy.Export) string {
 // what names the export for that note.
 func emitStarted(c *cmdContext, e fizzy.Export, what string) error {
 	if e.Raw() == nil {
-		return emit(c.cmd, obj{{"id", nil}}, c.wrote("export started", "start "+what))
+		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("export started", "start "+what))
 	}
 	return emit(c.cmd, e.Raw(), exportLine(e))
 }

@@ -176,7 +176,7 @@ func boardEdit(c *cmdContext, a []string) error {
 	if err := fz.UpdateBoard(b.ID, fields); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"changed", changed}},
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"changed", changed}}),
 		c.wrote(fmt.Sprintf("board %s updated: %s", b.Name, strings.Join(changed, ", ")),
 			fmt.Sprintf("update board %s: %s", b.Name, strings.Join(changed, ", "))))
 }
@@ -225,7 +225,7 @@ func boardDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteBoard(b.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"deleted", b.ID}}, c.wrote(fmt.Sprintf("board %s deleted", b.Name), "delete board "+b.Name))
+	return emit(c.cmd, c.dry(obj{{"deleted", b.ID}}), c.wrote(fmt.Sprintf("board %s deleted", b.Name), "delete board "+b.Name))
 }
 
 func boardPublish(c *cmdContext, a []string) error {
@@ -246,7 +246,7 @@ func boardPublish(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"public_url", orNull(link)}},
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"public_url", orNull(link)}}),
 		c.wrote(fmt.Sprintf("board %s published: %s", b.Name, orNone(link)), "publish board "+b.Name))
 }
 
@@ -262,7 +262,7 @@ func boardUnpublish(c *cmdContext, a []string) error {
 	if err := fz.UnpublishBoard(b.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"published", false}}, c.wrote(fmt.Sprintf("board %s unpublished", b.Name), "unpublish board "+b.Name))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"published", false}}), c.wrote(fmt.Sprintf("board %s unpublished", b.Name), "unpublish board "+b.Name))
 }
 
 func boardAccess(c *cmdContext, a []string) error {
@@ -321,7 +321,7 @@ func boardAccess(c *cmdContext, a []string) error {
 		to = plural(len(ids), "user", "users")
 	}
 	text := c.wrote(fmt.Sprintf("board %s access set to %s", b.Name, to), fmt.Sprintf("set board %s access to %s", b.Name, to))
-	return emit(c.cmd, obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}, text)
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}), text)
 }
 
 func boardAccessList(c *cmdContext, fz *fizzy.Fizzy, b fizzy.Board) error {

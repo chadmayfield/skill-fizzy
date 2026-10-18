@@ -173,7 +173,7 @@ func userEdit(c *cmdContext, a []string) error {
 	if updated.Raw() != nil {
 		data = updated.Raw()
 	}
-	return emit(c.cmd, data, c.wrote(fmt.Sprintf("user %s renamed to %s", a[0], name), fmt.Sprintf("rename user %s to %s", a[0], name)))
+	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", a[0], name), fmt.Sprintf("rename user %s to %s", a[0], name)))
 }
 
 func userTimezone(c *cmdContext, a []string) error {
@@ -192,7 +192,7 @@ func userTimezone(c *cmdContext, a []string) error {
 		}
 		return err
 	}
-	return emit(c.cmd, obj{{"timezone_name", name}}, c.wrote("timezone set to "+name, "set timezone to "+name))
+	return emit(c.cmd, c.dry(obj{{"timezone_name", name}}), c.wrote("timezone set to "+name, "set timezone to "+name))
 }
 
 // validTimezone reports whether time.LoadLocation knows name. It also

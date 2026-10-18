@@ -262,7 +262,7 @@ func webhookCreate(c *cmdContext, a []string) error {
 		return adminOnly(err)
 	}
 	if c.dryRun {
-		return emit(c.cmd, obj{{"id", nil}}, c.wrote("", "create webhook "+pyRepr(name)))
+		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("", "create webhook "+pyRepr(name)))
 	}
 	text := "webhook created: " + orNone(h.ID)
 	if h.SigningSecret != "" {
@@ -335,7 +335,7 @@ func webhookEdit(c *cmdContext, a []string) error {
 	if upd.Raw() != nil {
 		return emit(c.cmd, stripSecret(upd.Raw()), text)
 	}
-	return emit(c.cmd, obj{{"updated", a[1]}}, text)
+	return emit(c.cmd, c.dry(obj{{"updated", a[1]}}), text)
 }
 
 func webhookDelete(c *cmdContext, a []string) error {
@@ -357,7 +357,7 @@ func webhookDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteWebhook(board, a[1]); err != nil {
 		return adminOnly(err)
 	}
-	return emit(c.cmd, obj{{"deleted", a[1]}}, c.wrote("webhook "+a[1]+" deleted", "delete webhook "+a[1]))
+	return emit(c.cmd, c.dry(obj{{"deleted", a[1]}}), c.wrote("webhook "+a[1]+" deleted", "delete webhook "+a[1]))
 }
 
 func webhookActivate(c *cmdContext, a []string) error {
@@ -380,7 +380,7 @@ func webhookActivate(c *cmdContext, a []string) error {
 	case c.dryRun:
 		text = c.wrote("", "activate webhook "+a[1])
 	}
-	return emit(c.cmd, obj{{"id", a[1]}, {"changed", changed}}, text)
+	return emit(c.cmd, c.dry(obj{{"id", a[1]}, {"changed", changed}}), text)
 }
 
 func webhookDeliveries(c *cmdContext, a []string) error {

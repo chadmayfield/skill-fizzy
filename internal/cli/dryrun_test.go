@@ -81,6 +81,19 @@ func TestDryRunTextSaysNothingSent(t *testing.T) {
 				t.Errorf("%s: sent %s %s", name, call.method, call.path)
 			}
 		}
+		r = runGo(append([]string{"--dry-run", "--json"}, c.args...))
+		if r.code != 0 || !strings.HasPrefix(r.stdout, "{\n") || !strings.Contains(r.stdout, "\n  \"dry_run\": true\n}\n") {
+			t.Errorf("--json %s: got %+v, want a dry_run key", name, r)
+		}
+	}
+}
+
+// Without --dry-run, --json has no dry_run key.
+func TestJSONWithoutDryRunHasNoKey(t *testing.T) {
+	acctServer(t, map[string]string{"POST /1/cards/87/watch": ""})
+	r := runGo([]string{"--json", "card", "watch", "87"})
+	if r.code != 0 || r.stdout != "{\n  \"number\": 87,\n  \"watching\": true\n}\n" {
+		t.Fatalf("got %+v", r)
 	}
 }
 
