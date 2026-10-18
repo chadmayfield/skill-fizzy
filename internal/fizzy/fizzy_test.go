@@ -275,7 +275,9 @@ func TestBoardLookup(t *testing.T) {
 	if b, err := f.Board("HOME"); err != nil || b.ID != "B1" {
 		t.Errorf("by name: %+v %v", b, err)
 	}
-	if _, err := f.Board("shop"); err == nil || !strings.Contains(err.Error(), "2 boards are named") {
+	// An ambiguous name is a Refusal, so it exits 2 like an ambiguous
+	// column, tag or user.
+	if _, err := f.Board("shop"); !IsRefusal(err) || !strings.Contains(err.Error(), "2 boards are named") {
 		t.Errorf("ambiguous: %v", err)
 	}
 	_, err := f.Board("zzz")

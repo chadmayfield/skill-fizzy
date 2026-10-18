@@ -205,7 +205,7 @@ and JSON as the Python fz did.
 |---|---|
 | 0 | Success. |
 | 1 | An API, config or draft error. The message says which. |
-| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, a USER that matches nobody, and an empty or blank name, title, step, comment, boost or reaction, and sends nothing. |
+| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a name that two users, boards, columns or tags share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, a USER that matches nobody, and an empty or blank name, title, step, comment, boost or reaction, and sends nothing. |
 
 ### Boards
 
@@ -219,7 +219,7 @@ to Not now. `--columns` takes custom columns, left to right. `fz` creates the
 board first and then sets the period, because Fizzy can refuse both in one
 request.
 
-A board is named by its name or its id in every board command.
+A board is named by its name or its id in every board command. Case does not matter. A name that two boards share in any case exits 2; use the board id.
 
 Show and edit:
 

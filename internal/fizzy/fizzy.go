@@ -96,7 +96,7 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 		}
 		return Board{}, fmt.Errorf("no board named %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
 	}
-	return Board{}, fmt.Errorf("%d boards are named %s; use the board id", len(matches), pyRepr(nameOrID))
+	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), pyRepr(nameOrID))
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in

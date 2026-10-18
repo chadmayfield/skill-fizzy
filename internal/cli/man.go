@@ -58,7 +58,7 @@ The board is required. The column, tags and golden lines are optional. Everythin
 - FIZZY_RULES_CARD is the number of the card that holds your own conventions.`},
 	{"EXIT STATUS", `- 0 means success.
 - 1 means an API, config or draft error. The message says which.
-- 2 means a usage error or any refusal. fz refuses a change that needs --yes when run without --yes, a name that matches more than one user, and a change it cannot check first. A refusal changes nothing.`},
+- 2 means a usage error or any refusal. fz refuses a change that needs --yes when run without --yes, a name that matches more than one user, board, column or tag, and a change it cannot check first. A refusal changes nothing.`},
 }
 
 const rootIntro = "fz is a command-line client for the Fizzy API. The server URL, account and token come from the config file or from environment variables."
