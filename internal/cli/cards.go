@@ -94,6 +94,17 @@ func addCardCommands(root *cobra.Command) {
 		RunE:    action(cardReopen),
 	}
 
+	closeCmd := &cobra.Command{
+		Use:   "close NUMBER",
+		Short: "close a card (move it to Done)",
+		Long: "Close a card, the same as card move --to done, but without looking up the board's columns, " +
+			"so it works on a board with a column of its own named Done. A card that is already closed needs no change, so fz sends nothing. " +
+			"card reopen undoes it.",
+		Example: examples("fz card close 87", "fz --dry-run card close 87"),
+		Args:    args(cobra.ExactArgs(1)),
+		RunE:    action(cardClose),
+	}
+
 	golden := &cobra.Command{
 		Use:     "golden NUMBER",
 		Short:   "mark a card golden, or --off",
@@ -125,7 +136,7 @@ func addCardCommands(root *cobra.Command) {
 	}
 	del.Flags().Bool("yes", false, "really delete")
 
-	g.AddCommand(list, show, create, move, reopen, golden, tag, del)
+	g.AddCommand(list, show, create, move, closeCmd, reopen, golden, tag, del)
 }
 
 func cardList(c *cmdContext, _ []string) error {
@@ -394,6 +405,26 @@ func cardReopen(c *cmdContext, a []string) error {
 		return err
 	}
 	return emit(c.cmd, obj{{"number", n}}, fmt.Sprintf("card #%d reopened", n))
+}
+
+func cardClose(c *cmdContext, a []string) error {
+	n, err := cardNumber(a[0])
+	if err != nil {
+		return err
+	}
+	fz, err := c.api()
+	if err != nil {
+		return err
+	}
+	changed, err := fz.CloseCard(n)
+	if err != nil {
+		return err
+	}
+	text := c.wrote(fmt.Sprintf("card #%d closed", n), fmt.Sprintf("close card #%d", n))
+	if !changed {
+		text = noChange(c, fmt.Sprintf("card #%d is already closed; no change needed", n))
+	}
+	return emit(c.cmd, c.dry(obj{{"number", n}, {"changed", changed}}), text)
 }
 
 func cardGolden(c *cmdContext, a []string) error {

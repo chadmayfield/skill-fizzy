@@ -157,6 +157,9 @@ the docs catch up. `fz help <noun>` must name a real command.
   `move --to maybe`. Each one removes a mark, reopens a card, returns it to
   Maybe? or closes access, and can be redone. Changing a card's drafted or
   published status with `card edit --status` needs no `--yes` either.
+- `card close` and `card move --to done` send a POST and need no `--yes`.
+  `card reopen` undoes them. `card close` on a closed card says so, sends
+  nothing and exits 0.
 - `draft apply --update` needs no `--yes`. It can send the same DELETEs, for
   golden off and a move to Maybe?. With `--prune` it also deletes unticked
   steps and removes tags that the draft no longer has.

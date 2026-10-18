@@ -233,9 +233,19 @@ type Client struct {
 	http   *http.Client
 	origin *url.URL // the configured URL; nil when it does not parse
 
-	mu     sync.Mutex // guards token and hasTok
-	token  string
-	hasTok bool
+	mu       sync.Mutex // guards token, hasTok and tokenCtx
+	token    string
+	hasTok   bool
+	tokenCtx context.Context // nil unless SetTokenContext was called
+}
+
+// SetTokenContext ties the token command to ctx: when ctx ends, the command
+// and every process it started are killed. See config.ResolveTokenContext.
+// Without it the command gets its usual time limit only.
+func (c *Client) SetTokenContext(ctx context.Context) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tokenCtx = ctx
 }
 
 // New returns a client. Dry-run lines go to out.
@@ -286,7 +296,12 @@ func (c *Client) auth() (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.hasTok {
-		t, err := c.cfg.ResolveToken()
+		resolve := c.cfg.ResolveToken
+		if c.tokenCtx != nil {
+			ctx := c.tokenCtx
+			resolve = func() (string, error) { return c.cfg.ResolveTokenContext(ctx) }
+		}
+		t, err := resolve()
 		if err != nil {
 			return "", err
 		}
