@@ -41,8 +41,14 @@ newly built binary, so allow `fz` there too.
 
 ### Install
 
-Install `fz` from a release archive, described below, or build it from
-source. To build it, from a checkout of this repo:
+Install `fz` from a release archive, described below, or with Go 1.27.2 or
+later:
+
+```sh
+go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
+```
+
+Or build it from a checkout of this repo:
 
 ```sh
 make install

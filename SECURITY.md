@@ -2,13 +2,9 @@
 
 ## Reporting a problem
 
-The repository is private for now. Until it is public, report a security
-problem to the owner, [chadmayfield](https://github.com/chadmayfield), through
-GitHub.
-
-Once the repository is public, GitHub's private vulnerability reporting will
-be the route. Open the repository's Security tab and choose "Report a
-vulnerability".
+Report a security problem through GitHub's private vulnerability reporting:
+open the repository's Security tab and choose "Report a vulnerability". Only
+the reporter and the repository's maintainers see the report.
 
 Please do not open a public issue for a security problem.
 
