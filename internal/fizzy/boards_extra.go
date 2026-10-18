@@ -3,6 +3,7 @@ package fizzy
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -45,7 +46,7 @@ func (b *BoardInfo) UnmarshalJSON(data []byte) error {
 // BoardDetail fetches one board by id.
 func (f *Fizzy) BoardDetail(boardID string) (BoardInfo, error) {
 	var b BoardInfo
-	err := f.C.Get("/boards/"+boardID, &b)
+	err := f.C.Get("/boards/"+url.PathEscape(boardID), &b)
 	return b, err
 }
 
@@ -65,7 +66,7 @@ func (f *Fizzy) UpdateBoard(boardID string, fields BoardFields) error {
 	if fields.PostponeDays != nil && !slices.Contains(AutoPostponeDays, *fields.PostponeDays) {
 		return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
 	}
-	_, err := f.C.Write(http.MethodPut, "/boards/"+boardID, wrap("board", fields))
+	_, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(boardID), wrap("board", fields))
 	return err
 }
 
@@ -83,14 +84,14 @@ func (f *Fizzy) SetBoardAccess(boardID string, all bool, userIDs []string) error
 			UserIDs []string `json:"user_ids"`
 		}{false, userIDs})
 	}
-	_, err := f.C.Write(http.MethodPut, "/boards/"+boardID, body)
+	_, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(boardID), body)
 	return err
 }
 
 // PublishBoard publishes a board and returns its public link, empty in
 // dry-run mode.
 func (f *Fizzy) PublishBoard(boardID string) (string, error) {
-	raw, err := f.C.Write(http.MethodPost, "/boards/"+boardID+"/publication", nil)
+	raw, err := f.C.Write(http.MethodPost, "/boards/"+url.PathEscape(boardID)+"/publication", nil)
 	if err != nil || raw == nil {
 		return "", err
 	}
@@ -103,13 +104,13 @@ func (f *Fizzy) PublishBoard(boardID string) (string, error) {
 
 // UnpublishBoard removes a board's public link.
 func (f *Fizzy) UnpublishBoard(boardID string) error {
-	_, err := f.C.Write(http.MethodDelete, "/boards/"+boardID+"/publication", nil)
+	_, err := f.C.Write(http.MethodDelete, "/boards/"+url.PathEscape(boardID)+"/publication", nil)
 	return err
 }
 
 // DeleteBoard deletes a board and its cards.
 func (f *Fizzy) DeleteBoard(boardID string) error {
-	_, err := f.C.Write(http.MethodDelete, "/boards/"+boardID, nil)
+	_, err := f.C.Write(http.MethodDelete, "/boards/"+url.PathEscape(boardID), nil)
 	return err
 }
 
@@ -150,7 +151,7 @@ type BoardAccess struct {
 // BoardAccesses reads who can reach a board, following every page.
 func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
 	var out BoardAccess
-	next := f.C.URL("/boards/"+boardID+"/accesses", true)
+	next := f.C.URL("/boards/"+url.PathEscape(boardID)+"/accesses", true)
 	seen := map[string]bool{}
 	for next != "" && !seen[next] {
 		seen[next] = true
@@ -185,7 +186,7 @@ func ColumnColorValue(color string) string {
 // GetColumn fetches one column by id.
 func (f *Fizzy) GetColumn(boardID, columnID string) (Column, error) {
 	var c Column
-	err := f.C.Get("/boards/"+boardID+"/columns/"+columnID, &c)
+	err := f.C.Get("/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID), &c)
 	return c, err
 }
 
@@ -209,12 +210,12 @@ func (f *Fizzy) UpdateColumn(boardID, columnID string, fields ColumnFields) erro
 		c := ColumnColorValue(*fields.Color)
 		body.Color = &c
 	}
-	_, err := f.C.Write(http.MethodPut, "/boards/"+boardID+"/columns/"+columnID, wrap("column", body))
+	_, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID), wrap("column", body))
 	return err
 }
 
 // DeleteColumn deletes a column.
 func (f *Fizzy) DeleteColumn(boardID, columnID string) error {
-	_, err := f.C.Write(http.MethodDelete, "/boards/"+boardID+"/columns/"+columnID, nil)
+	_, err := f.C.Write(http.MethodDelete, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID), nil)
 	return err
 }

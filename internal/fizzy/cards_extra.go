@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -167,7 +168,7 @@ func (f *Fizzy) AddBoost(n int, text string) (json.RawMessage, error) {
 
 // RemoveBoost removes one of the current user's boosts from a card.
 func (f *Fizzy) RemoveBoost(n int, id string) error {
-	return f.cardWrite(http.MethodDelete, n, "/reactions/"+id)
+	return f.cardWrite(http.MethodDelete, n, "/reactions/"+url.PathEscape(id))
 }
 
 // -- lookups for card list filters ---------------------------------------------

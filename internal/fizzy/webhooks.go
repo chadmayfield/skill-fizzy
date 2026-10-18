@@ -127,12 +127,12 @@ func CheckWebhookActions(actions []string) error {
 }
 
 func webhookPath(boardID, id string) string {
-	return "/boards/" + boardID + "/webhooks/" + id
+	return "/boards/" + url.PathEscape(boardID) + "/webhooks/" + url.PathEscape(id)
 }
 
 // Webhooks lists a board's webhooks. Only account admins may.
 func (f *Fizzy) Webhooks(boardID string) ([]Webhook, error) {
-	return list[Webhook](f.C, "/boards/"+boardID+"/webhooks")
+	return list[Webhook](f.C, "/boards/"+url.PathEscape(boardID)+"/webhooks")
 }
 
 // Webhook fetches one webhook.
@@ -160,7 +160,7 @@ func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (
 	if err := CheckWebhookActions(actions); err != nil {
 		return Webhook{}, err
 	}
-	status, hdr, payload, err := f.C.Do(http.MethodPost, "/boards/"+boardID+"/webhooks", wrap("webhook", struct {
+	status, hdr, payload, err := f.C.Do(http.MethodPost, "/boards/"+url.PathEscape(boardID)+"/webhooks", wrap("webhook", struct {
 		Name    string   `json:"name"`
 		URL     string   `json:"url"`
 		Actions []string `json:"subscribed_actions"`

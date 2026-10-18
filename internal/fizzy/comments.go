@@ -3,6 +3,7 @@ package fizzy
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -70,7 +71,7 @@ func (r *Reaction) UnmarshalJSON(data []byte) error {
 }
 
 func commentPath(n int, id string) string {
-	return "/cards/" + strconv.Itoa(n) + "/comments/" + id
+	return "/cards/" + strconv.Itoa(n) + "/comments/" + url.PathEscape(id)
 }
 
 // Comments lists a card's comments, oldest first.
@@ -114,6 +115,6 @@ func (f *Fizzy) ReactToComment(n int, id, content string) (string, error) {
 
 // DeleteCommentReaction removes a reaction from a comment.
 func (f *Fizzy) DeleteCommentReaction(n int, id, reactionID string) error {
-	_, err := f.C.Write(http.MethodDelete, commentPath(n, id)+"/reactions/"+reactionID, nil)
+	_, err := f.C.Write(http.MethodDelete, commentPath(n, id)+"/reactions/"+url.PathEscape(reactionID), nil)
 	return err
 }
