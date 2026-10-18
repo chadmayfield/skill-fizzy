@@ -323,7 +323,6 @@ func TestApplyHelpDoesNotPairPruneWithForce(t *testing.T) {
 
 // TestSyncBoardMoveThenColumn checks that after a board move the column is
 // set on the new board, even when the card's old column had the same name.
-// It also kills mutation M56, which skips the board move.
 func TestSyncBoardMoveThenColumn(t *testing.T) {
 	text := strings.Replace(syncDraftText, "board: Home\ncolumn: Maybe?\n", "board: Garage\ncolumn: Next\n", 1)
 	srv := newSyncServer(t)

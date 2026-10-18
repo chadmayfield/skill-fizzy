@@ -364,7 +364,6 @@ func TestRecordFieldsNeedsFrontMatter(t *testing.T) {
 }
 
 // Only the first # heading is the title. A second one stays in the body.
-// (Mutant 5 in opus-integrity.)
 func TestSecondH1StaysInBody(t *testing.T) {
 	d, err := Parse(writeFile(t, t.TempDir(), "gate.md", "---\nboard: Home\n---\n# Fix the gate\n\n# Hinge notes\nOil it.\n"))
 	if err != nil {
@@ -376,7 +375,6 @@ func TestSecondH1StaysInBody(t *testing.T) {
 }
 
 // A draft tick on a card step that is already ticked sends no tick.
-// (Mutant 6 in opus-integrity.)
 func TestPlanStepsSkipsTickedSteps(t *testing.T) {
 	plan := PlanSteps([]Step{{"Oil the hinge", true}}, []CardStep{{ID: "03abc123def456ghi789jkl0mn", Content: "Oil the hinge", Completed: true}})
 	if len(plan.Tick) != 0 || len(plan.Add) != 0 || len(plan.Extra) != 0 {
