@@ -53,7 +53,7 @@ func newFingerprintState(c fizzy.Card) fingerprintState {
 		st.Steps = append(st.Steps, fingerprintStep{ID: s.ID, Content: s.Content, Completed: s.Completed})
 	}
 	for _, t := range c.Tags {
-		st.Tags = append(st.Tags, tagKey(t))
+		st.Tags = append(st.Tags, fizzy.TagTitle(t))
 	}
 	sort.Strings(st.Tags)
 	if c.Column != nil {

@@ -214,7 +214,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		}
 	}
 	for _, t := range card.Tags {
-		if hasTag(d.Tags, tagKey(t)) {
+		if hasTag(d.Tags, t) {
 			continue
 		}
 		if !prune {
@@ -252,15 +252,12 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 	return report, nil
 }
 
-// tagKey normalizes a tag the way fizzy's AddTag and RemoveTag do, so a card
-// tag written "#Buy" matches the draft tag "buy".
-func tagKey(t string) string {
-	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(t, "#")))
-}
-
+// hasTag reports whether tags holds t, compared with fizzy.TagTitle as
+// AddTag and RemoveTag compare them, so a card tag written "#Buy" matches
+// the draft tag "buy".
 func hasTag(tags []string, t string) bool {
 	for _, x := range tags {
-		if x == t {
+		if fizzy.TagTitle(x) == fizzy.TagTitle(t) {
 			return true
 		}
 	}

@@ -787,3 +787,30 @@ func TestSyncReportsExtraCardTagWithoutPrune(t *testing.T) {
 		t.Errorf("reported a draft tag as extra: %q", report)
 	}
 }
+
+// A card tag the server writes as "#Buy" is the draft's tag "buy" in every
+// comparison: --update neither toggles it nor prunes it. A draft tag "Buy"
+// matches the card's "buy" the same way.
+func TestApplyUpdateTagCompareIgnoresHashAndCase(t *testing.T) {
+	for _, tc := range []struct{ cardTags, draftTag string }{
+		{`["#Buy"]`, "buy"},
+		{`["buy"]`, "Buy"},
+		{`[" #buy "]`, "#BUY"},
+	} {
+		srv := newSyncServer(t)
+		srv.mu.Lock()
+		srv.state.tags = tc.cardTags
+		srv.mu.Unlock()
+		path := filepath.Join(t.TempDir(), "gate.md")
+		writeFile(t, path, srv.draft(t, strings.Replace(syncDraftText, "tags: buy\n", "tags: "+tc.draftTag+"\n", 1)))
+		got := syncRun(t, srv, "draft", "apply", "--update", "--prune", path)
+		if got.code != 0 {
+			t.Fatalf("%s: exit %d: %s", tc.cardTags, got.code, got.stderr)
+		}
+		for _, w := range srv.writes() {
+			if strings.Contains(w, "/taggings") {
+				t.Errorf("card %s, draft %s: the tag was toggled: %q", tc.cardTags, tc.draftTag, srv.writes())
+			}
+		}
+	}
+}

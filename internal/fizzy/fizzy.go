@@ -496,7 +496,7 @@ func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
 	}
 	present := false
 	for _, t := range c.Tags {
-		present = present || strings.ToLower(t) == tag
+		present = present || TagTitle(t) == tag
 	}
 	if present == wantPresent {
 		return false, nil
