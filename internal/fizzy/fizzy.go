@@ -226,7 +226,7 @@ func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error)
 // UpdateCard changes the fields that are set.
 func (f *Fizzy) UpdateCard(n int, fields CardFields) error {
 	if fields == (CardFields{}) {
-		return errors.New("nothing to update")
+		return refusef("nothing to update")
 	}
 	_, err := f.C.Write(http.MethodPut, "/cards/"+strconv.Itoa(n), wrap("card", fields))
 	return err
@@ -342,7 +342,7 @@ func (f *Fizzy) UpdateStep(n int, id string, content *string, completed *bool) e
 		return err
 	}
 	if content == nil && completed == nil {
-		return errors.New("nothing to update")
+		return refusef("nothing to update")
 	}
 	_, err := f.C.Write(http.MethodPut, "/cards/"+strconv.Itoa(n)+"/steps/"+url.PathEscape(id), wrap("step", struct {
 		Content   *string `json:"content,omitempty"`

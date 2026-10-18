@@ -401,8 +401,10 @@ fz card unassign 87 "Gate Keeper"
 
 USER is a user id, a name or an email address. `fz` tries, in order, an exact
 id, an exact name, a name with any case when only one user has it, and an
-email with any case. If two users have the name, `fz` refuses and exits with
-status 2. It prints which user it matched and how.
+email with any case. If two users have the name, or no user matches, `fz`
+refuses and exits with status 2. It prints which user it matched and how.
+`card unassign` also takes an id that matches no active user and sends it as
+it is, so a deactivated user can be removed. `card assign` does not.
 
 Fizzy's assign call toggles, like the tag call. `fz` reads the card first and
 only sends a change when one is needed. The card lists at most 5 assignees.
@@ -531,7 +533,8 @@ fz whoami
 `tag list` prints every tag on the account with its id. `user list` prints
 the active users with their id, name, email and role. `user show` and
 `user edit` take a user id, a name or an email, matched the way
-`card assign` matches a user. A name two users share exits 2. An id that
+`card assign` matches a user. A name two users share, or a USER that
+matches nobody, exits 2. An id that
 matches no active user is still tried, so a deactivated user's id works.
 `whoami` lists every
 account your token can reach, with your user on each, and marks the

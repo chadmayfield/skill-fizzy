@@ -223,7 +223,7 @@ func TestUserShowAndEditMatchUser(t *testing.T) {
 	}
 }
 
-// A USER that matches nobody exits 1, and one that two users share exits 2.
+// A USER that matches nobody, or one that two users share, exits 2.
 // Neither sends a write.
 func TestUserShowAndEditUnknownOrAmbiguous(t *testing.T) {
 	twin := strings.Replace(strings.Replace(acctUser2, `"U2"`, `"U3"`, 1), `"Sam"`, `"alex"`, 1)
@@ -232,8 +232,8 @@ func TestUserShowAndEditUnknownOrAmbiguous(t *testing.T) {
 		args []string
 		code int
 	}{
-		{[]string{"user", "show", "Nobody"}, 1},
-		{[]string{"user", "edit", "Nobody", "--name", "Gate Keeper", "--yes"}, 1},
+		{[]string{"user", "show", "Nobody"}, 2},
+		{[]string{"user", "edit", "Nobody", "--name", "Gate Keeper", "--yes"}, 2},
 		{[]string{"user", "show", "ALEX"}, 2},
 		{[]string{"user", "edit", "ALEX", "--name", "Gate Keeper", "--yes"}, 2},
 	} {

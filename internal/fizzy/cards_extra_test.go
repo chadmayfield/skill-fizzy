@@ -236,3 +236,30 @@ func TestAssignRefusesWithoutAssignees(t *testing.T) {
 		}
 	}
 }
+
+// A deactivated user is not in GET /users. Unassign passes an id of the
+// Fizzy form through so the assignment can still be cleared. Assign does
+// not, because a typo there would assign someone.
+func TestUnassignPassesUnknownIDThrough(t *testing.T) {
+	const id = "03abc123def456ghi789jkl0mn"
+	card := `{"number":87,"assignees":[{"id":"` + id + `"}],"has_more_assignees":false}`
+	f, s, _, _ := newFizzy(t, false, cardServer(card))
+	m, changed, err := f.Unassign(87, id)
+	if err != nil || !changed || m.ID != id || m.By != "id" {
+		t.Fatalf("unassign: %+v %v %v", m, changed, err)
+	}
+	last := s.calls[len(s.calls)-1]
+	if last.Method != http.MethodPost || string(last.Body) != `{"assignee_id":"`+id+`"}` {
+		t.Errorf("unassign call %s %s %s", last.Method, last.Path, last.Body)
+	}
+
+	s.calls = nil
+	if _, _, err := f.Assign(87, "03zzz123def456ghi789jkl0mn"); !IsRefusal(err) || !strings.HasPrefix(err.Error(), "no user ") {
+		t.Errorf("assign unknown id: %v", err)
+	}
+	for _, c := range s.calls {
+		if c.Method != http.MethodGet {
+			t.Errorf("sent %s %s", c.Method, c.Path)
+		}
+	}
+}

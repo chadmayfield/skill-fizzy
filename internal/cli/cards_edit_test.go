@@ -183,7 +183,7 @@ func TestCardEditErrors(t *testing.T) {
 		wantCode int
 		wantErr  string
 	}{
-		{"nothing", []string{"card", "edit", "5"}, 1, "nothing to update"},
+		{"nothing", []string{"card", "edit", "5"}, 2, "nothing to update"},
 		{"missing phrase", []string{"card", "edit", "5", "--replace", "y", "z"}, 1, "not found"},
 		{"replace needs both", []string{"card", "edit", "5", "--replace", "y"}, 2, "--replace needs OLD and NEW"},
 		{"extra args", []string{"card", "edit", "5", "y", "z"}, 2, "OLD and NEW only go with --replace"},

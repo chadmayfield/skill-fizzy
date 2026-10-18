@@ -32,7 +32,10 @@ func BoostLength(text string) int { return utf8.RuneCountInString(text) }
 // -- assignments (idempotent over Fizzy's toggle) ----------------------------
 
 func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, error) {
-	u, err := f.MatchUser(user, false)
+	// Unassign passes an unknown id of the Fizzy form through, so a
+	// deactivated user can still be removed. Assign does not, because a typo
+	// there would assign someone.
+	u, err := f.MatchUser(user, !want)
 	if err != nil {
 		return UserMatch{}, false, err
 	}
@@ -48,7 +51,7 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 		return u, false, err
 	}
 	if card.Assignees == nil {
-		return u, false, refusef("card #%d has no assignees list in Fizzy's reply, so fz cannot tell whether %s is assigned", n, u.Name)
+		return u, false, refusef("card #%d has no assignees list in Fizzy's reply, so fz cannot tell whether %s is assigned", n, u.Label())
 	}
 	present := false
 	for _, a := range *card.Assignees {
@@ -56,7 +59,7 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 	}
 	if !present && card.HasMore {
 		return u, false, refusef("card #%d has more than 5 assignees and Fizzy lists only the first 5, so fz cannot tell whether %s is assigned; change it in Fizzy",
-			n, u.Name)
+			n, u.Label())
 	}
 	if present == want {
 		return u, false, nil
@@ -74,7 +77,7 @@ func (f *Fizzy) Assign(n int, user string) (UserMatch, bool, error) {
 }
 
 // Unassign removes a user from a card and reports whether it changed
-// anything.
+// anything. An id that matches no active user is passed through.
 func (f *Fizzy) Unassign(n int, user string) (UserMatch, bool, error) {
 	return f.setAssigned(n, user, false)
 }

@@ -156,7 +156,7 @@ func TestActivityListFilters(t *testing.T) {
 func TestActivityListUnknownCreator(t *testing.T) {
 	acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "]"})
 	r := runGo([]string{"activity", "list", "--creator", "Nobody"})
-	if r.code != 1 || r.stderr != "fz: no user 'Nobody' (have: Alex)\n" {
+	if r.code != 2 || r.stderr != "fz: no user 'Nobody' (have: Alex)\n" {
 		t.Fatalf("got %+v", r)
 	}
 }
