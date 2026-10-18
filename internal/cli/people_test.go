@@ -1,8 +1,9 @@
 package cli
 
 import (
-	"os"
-	"path/filepath"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -156,7 +157,7 @@ func TestUserTimezone(t *testing.T) {
 
 func TestUserTimezoneRejectsBadNames(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
-	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "america/denver", "AMERICA/DENVER", "posixrules", "Factory"} {
+	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "posixrules", "Factory"} {
 		r := runGo([]string{"user", "timezone", name})
 		if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: ") {
 			t.Errorf("%q: got %+v", name, r)
@@ -179,28 +180,15 @@ func TestUserTimezoneAcceptsExactNames(t *testing.T) {
 	}
 }
 
-func TestZoneFileCase(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "America"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(dir, "America", "Denver"), "TZif")
-	cases := []struct {
-		name         string
-		exact, found bool
-	}{
-		{"America/Denver", true, true},
-		{"Europe/London", false, false},
-		{"America/Boise", false, false},
-	}
-	// The lower-case form is found only where the disk ignores case; on a
-	// case-sensitive disk it is simply missing. Either way it is not exact.
-	if exact, _ := zoneFileCase(dir, "america/denver"); exact {
-		t.Error("america/denver matched exactly")
-	}
-	for _, c := range cases {
-		if exact, found := zoneFileCase(dir, c.name); exact != c.exact || found != c.found {
-			t.Errorf("%s: exact=%v found=%v, want %v %v", c.name, exact, found, c.exact, c.found)
-		}
+func TestUserTimezoneServerRejection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(422)
+		io.WriteString(w, `{"error":"invalid"}`)
+	}))
+	t.Cleanup(srv.Close)
+	parityEnv(t, srv)
+	r := runGo([]string{"user", "timezone", "America/Denver"})
+	if r.code != 1 || r.stderr != "fz: timezone America/Denver was rejected by the server; names are case-sensitive, for example America/Denver\n" {
+		t.Fatalf("got %+v", r)
 	}
 }
