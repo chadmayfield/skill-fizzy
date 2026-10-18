@@ -182,8 +182,11 @@ func notificationList(c *cmdContext, _ []string) error {
 
 func notificationRead(c *cmdContext, a []string) error {
 	all, _ := c.cmd.Flags().GetBool("all")
-	if all == (len(a) == 1) {
-		return usagef("notification read needs an ID or --all, not both")
+	switch {
+	case all && len(a) == 1:
+		return usagef("give an ID or --all, not both")
+	case !all && len(a) == 0:
+		return usagef("give an ID or --all")
 	}
 	fz, err := c.api()
 	if err != nil {

@@ -125,12 +125,12 @@ func boardShow(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	days := "None"
+	postpone := "postpone off"
 	if d.AutoPostponePeriodInDays != nil {
-		days = strconv.Itoa(*d.AutoPostponePeriodInDays)
+		postpone = "postpone " + strconv.Itoa(*d.AutoPostponePeriodInDays) + "d"
 	}
 	lines := []string{
-		fmt.Sprintf("%s  %s  (postpone %sd)", d.ID, d.Name, days),
+		fmt.Sprintf("%s  %s  (%s)", d.ID, d.Name, postpone),
 		"access: " + accessSummary(d),
 	}
 	if d.Creator.Name != "" {
