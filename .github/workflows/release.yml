@@ -20,9 +20,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # No Go cache: the release builds with empty module and build caches,
+      # so nothing another workflow run saved can reach the archives.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
       - name: Check the tag
         id: guard
         run: sh scripts/release-guard.sh
