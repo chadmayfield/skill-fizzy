@@ -78,7 +78,7 @@ func TestListsKeepRawPerElement(t *testing.T) {
 }
 
 func TestErrorTextsMatchPython(t *testing.T) {
-	// Expected strings come from running the Python fz's api.py (removed in 562a4a9).
+	// The expected strings are the earlier Python fz's error texts.
 	boards := `[{"id":"B1","name":"Home"},{"id":"B2","name":"it's"},{"id":"B3","name":"Dup"},{"id":"B4","name":"dup"}]`
 	cols := `[{"id":"C1","name":"Now"},{"id":"C2","name":"Café"}]`
 	f, _, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
@@ -106,7 +106,7 @@ func TestErrorTextsMatchPython(t *testing.T) {
 	check("column", err, "no column 'later' (have: Now, Café)")
 	_, err = f.Column("B1", "l'a")
 	check("column dq", err, `no column "l'a" (have: Now, Café)`)
-	_, err = f.CreateBoard("x", 5)
+	_, err = f.CreateBoard("x", 5, nil)
 	check("postpone", err, "auto-postpone must be one of (3, 7, 11, 30, 90, 365)")
 	err = f.UpdateCard(1, CardFields{})
 	check("nothing", err, "nothing to update")

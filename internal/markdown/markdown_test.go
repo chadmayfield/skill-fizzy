@@ -72,13 +72,13 @@ func quoteLine(s string, present bool) string {
 
 func TestMarkdown(t *testing.T) {
 	t.Run("basics", func(t *testing.T) {
-		h := ToHTML("## Goal\nShip **it** by `Friday`.\n\n- [x] one\n- [ ] two\n\nSee [docs](https://ex.com/a).")
+		h := ToHTML("## Goal\nShip **it** by `Friday`.\n\n- [x] one\n- [ ] two\n\nSee [docs](https://example.com/a).")
 		for _, want := range []string{
 			"<h3>Goal</h3>",
 			"<strong>it</strong>",
 			"<code>Friday</code>",
 			"<li>☑ one</li>",
-			`<a href="https://ex.com/a">docs</a>`,
+			`<a href="https://example.com/a">docs</a>`,
 		} {
 			if !strings.Contains(h, want) {
 				t.Errorf("missing %q in %q", want, h)

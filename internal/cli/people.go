@@ -4,11 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
-	"time"
-	// The embedded zone database lets user timezone check names on a system
-	// without zoneinfo files.
-	_ "time/tzdata"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -36,13 +33,13 @@ func addPeopleCommands(root *cobra.Command) {
 
 	users := &cobra.Command{
 		Use:   "user",
-		Short: "list, show and rename users",
+		Short: "list, show and rename users, and set your timezone",
 		Long:  "Work with the people on the account.",
 	}
 	edit := &cobra.Command{
 		Use:     "edit USER",
 		Short:   "rename a user (needs --yes)",
-		Long:    "Change a user's display name. " + userArgHelp + " Prints the current and new name, and refuses without --yes.",
+		Long:    "Change a user's display name. " + userArgHelp + " Prints the current and new name, and refuses without --yes. A user who already has the name needs no change, so fz sends nothing.",
 		Example: examples(`fz user edit 03abc123def456ghi789jkl0mn --name "Gate Keeper" --yes`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userEdit),
@@ -66,7 +63,7 @@ func addPeopleCommands(root *cobra.Command) {
 	}, edit, &cobra.Command{
 		Use:     "timezone NAME",
 		Short:   "set your timezone",
-		Long:    "Set your timezone, which Fizzy uses for times in notification emails. NAME is an IANA name such as America/Denver. fz checks that the name exists before sending it; the server also checks its case.",
+		Long:    "Set your timezone, which Fizzy uses for times in notification emails. NAME is an IANA name such as America/Denver. fz checks the name, case included, against Go's list of zones before sending it, so the check is the same on every system.",
 		Example: examples("fz user timezone America/Denver"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userTimezone),
@@ -85,30 +82,18 @@ func addPeopleCommands(root *cobra.Command) {
 
 // userArgHelp says how user show and user edit read their USER argument.
 const userArgHelp = "USER is a user id, a name or an email, matched as card assign matches one. " +
-	"A name two users share exits 2. An id that matches no active user is still tried, so a deactivated user's id works."
+	"A name two users share, or a USER that matches nobody, exits 2. An id that matches no active user is still tried, so a deactivated user's id works."
 
 func userLine(u fizzy.User) string {
-	line := u.ID + "  " + u.Name
+	text := u.ID + "  " + u.Name
 	if u.EmailAddress != "" {
-		line += " <" + u.EmailAddress + ">"
+		text += " <" + u.EmailAddress + ">"
 	}
-	line += " " + u.Role
+	text += " " + u.Role
 	if !u.Active {
-		line += " (inactive)"
+		text += " (inactive)"
 	}
-	return line
-}
-
-// listText joins one line per item, or the empty text when there are none.
-func listText[T any](items []T, line func(T) string, empty string) string {
-	out := make([]string, len(items))
-	for i, it := range items {
-		out[i] = line(it)
-	}
-	if len(out) == 0 {
-		return empty
-	}
-	return strings.Join(out, "\n")
+	return line(text)
 }
 
 func tagList(c *cmdContext, _ []string) error {
@@ -120,7 +105,7 @@ func tagList(c *cmdContext, _ []string) error {
 	if err != nil {
 		return err
 	}
-	text := listText(tags, func(t fizzy.Tag) string { return t.ID + "  #" + t.Title }, "(no tags)")
+	text := listText(tags, func(t fizzy.Tag) string { return line(t.ID + "  #" + t.Title) }, "(no tags)")
 	return emit(c.cmd, rawList(tags), text)
 }
 
@@ -159,15 +144,18 @@ func userShow(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, u.Raw(), userLine(u)+"\nurl: "+u.URL)
+	return emit(c.cmd, u.Raw(), userLine(u)+"\nurl: "+line(u.URL))
 }
 
 func userEdit(c *cmdContext, a []string) error {
 	fl := c.cmd.Flags()
+	if !fl.Changed("name") {
+		return usagef("user edit needs --name")
+	}
 	name, _ := fl.GetString("name")
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return usagef("user edit needs --name")
+	if err := checkName("--name", name); err != nil {
+		return err
 	}
 	yes, _ := fl.GetBool("yes")
 	fz, err := c.api()
@@ -178,10 +166,13 @@ func userEdit(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", u.ID, u.Name, name)
+	if u.Name == name {
+		return emit(c.cmd, c.dry(obj{{"id", u.ID}, {"name", name}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("user %s is already named %s; no change needed", line(u.ID), name)))
+	}
+	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", line(u.ID), line(u.Name), name)
 	if !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	updated, err := fz.RenameUser(u.ID, name)
 	if err != nil {
@@ -191,7 +182,7 @@ func userEdit(c *cmdContext, a []string) error {
 	if updated.Raw() != nil {
 		data = updated.Raw()
 	}
-	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", u.ID, name), fmt.Sprintf("rename user %s to %s", u.ID, name)))
+	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", line(u.ID), name), fmt.Sprintf("rename user %s to %s", line(u.ID), name)))
 }
 
 func userTimezone(c *cmdContext, a []string) error {
@@ -213,16 +204,17 @@ func userTimezone(c *cmdContext, a []string) error {
 	return emit(c.cmd, c.dry(obj{{"timezone_name", name}}), c.wrote("timezone set to "+name, "set timezone to "+name))
 }
 
-// validTimezone reports whether time.LoadLocation knows name. It also
-// rejects "" (UTC to LoadLocation), "Local" and the posixrules and Factory
-// files, which the server would not know. Case is left to the server.
+// validTimezone reports whether name is a zone in tzNames, Go's embedded
+// zone list, matched with its exact case. The check reads no files, so it
+// gives the same answer on every system, including macOS, whose file system
+// ignores case. Factory is refused too: it is in the list but names no
+// place, so the server would not know it.
 func validTimezone(name string) bool {
-	switch name {
-	case "", "Local", "posixrules", "Factory":
+	if name == "Factory" {
 		return false
 	}
-	_, err := time.LoadLocation(name)
-	return err == nil
+	_, found := slices.BinarySearch(tzNames, name)
+	return found
 }
 
 func whoami(c *cmdContext, _ []string) error {
@@ -245,7 +237,7 @@ func whoami(c *cmdContext, _ []string) error {
 		if u.EmailAddress != "" {
 			who += " <" + u.EmailAddress + ">"
 		}
-		return fmt.Sprintf("%s %s  %s  %s %s", mark, slug, a.Name, who, u.Role)
+		return line(fmt.Sprintf("%s %s  %s  %s %s", mark, slug, a.Name, who, u.Role))
 	}, "(no accounts)")
 	return emit(c.cmd, id.Raw(), text)
 }

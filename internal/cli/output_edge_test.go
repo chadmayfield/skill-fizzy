@@ -43,21 +43,44 @@ func TestBoardShowWithoutUserIDs(t *testing.T) {
 	}
 }
 
-func TestCommentHelpMakesNoUncitedClaims(t *testing.T) {
+// The comment help states the permission rules the Fizzy API docs give,
+// and no others. The docs say only the comment creator can update or delete
+// a comment. For removing a comment reaction they say only "Removes your
+// reaction", with no rule about anyone else's.
+func TestCommentHelpPermissionRules(t *testing.T) {
 	root := NewRoot()
-	for _, path := range [][]string{{"comment", "delete"}, {"comment", "unreact"}} {
-		cmd, _, err := root.Find(path)
+	for _, tc := range []struct {
+		path []string
+		rule string // the sentence the help must hold, or "" for none
+	}{
+		{[]string{"comment", "edit"}, "Only the comment's author can."},
+		{[]string{"comment", "delete"}, "Only the comment's author can."},
+		{[]string{"comment", "unreact"}, ""},
+		{[]string{"comment", "react"}, ""},
+		{[]string{"comment", "add"}, ""},
+	} {
+		cmd, _, err := root.Find(tc.path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(cmd.Long, "Only its author can") || strings.Contains(cmd.Long, "Only the person who reacted can") {
-			t.Errorf("%s: %q", strings.Join(path, " "), cmd.Long)
+		name := strings.Join(tc.path, " ")
+		if tc.rule != "" {
+			if !strings.Contains(cmd.Long, tc.rule) {
+				t.Errorf("%s: help lacks the documented rule %q: %q", name, tc.rule, cmd.Long)
+			}
+			if strings.Count(cmd.Long, "Only ") != 1 {
+				t.Errorf("%s: help makes more than the one documented claim: %q", name, cmd.Long)
+			}
+			continue
+		}
+		if strings.Contains(cmd.Long, "Only ") || strings.Contains(cmd.Long, "only ") {
+			t.Errorf("%s: help claims a rule the API docs do not give: %q", name, cmd.Long)
 		}
 	}
 }
 
 // An empty or blank name exits 2 and sends nothing, for every command that
-// sets a name, as user edit and webhook edit already did.
+// sets a name.
 func TestEmptyNamesRefuse(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{
 		"GET /1/boards":             `[{"id":"B1","name":"Home"}]`,

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -13,15 +12,9 @@ import (
 // and records every call.
 func bxServer(t *testing.T, allAccess bool) (*httptest.Server, func() []seenCall) {
 	t.Helper()
-	var mu sync.Mutex
-	var calls []seenCall
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		calls = append(calls, seenCall{r.Method, r.URL.Path, string(b)})
-		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
+	var calls func() []seenCall
+	srv, calls = recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
 		access := "false"
 		if allAccess {
@@ -64,13 +57,8 @@ func bxServer(t *testing.T, allAccess bool) (*httptest.Server, func() []seenCall
 		default:
 			w.WriteHeader(204)
 		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv, func() []seenCall {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]seenCall(nil), calls...)
-	}
+	})
+	return srv, calls
 }
 
 func writes(cs []seenCall) []seenCall {
@@ -163,7 +151,10 @@ func TestBoardDeleteRefusesWithoutYes(t *testing.T) {
 	srv, calls := bxServer(t, false)
 	editEnv(t, srv)
 	r := runGo([]string{"board", "delete", "Home"})
-	if r.code != 2 || !strings.Contains(r.stderr, "Home") || !strings.Contains(r.stderr, "2 open, 1 closed, 3 not now cards") ||
+	// The API docs do not define the "all" filter, so its count is not
+	// called open.
+	want := "about to delete board Home (b1): cards by Fizzy's filters: all 2, closed 1, not now 3; custom columns: Next\n"
+	if r.code != 2 || !strings.HasPrefix(r.stderr, want) || strings.Contains(r.stderr, "open") ||
 		!strings.Contains(r.stderr, "Next") || !strings.Contains(r.stderr, "refusing without --yes") {
 		t.Fatalf("got %+v", r)
 	}

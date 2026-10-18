@@ -19,12 +19,14 @@ const (
 
 // acctServer answers "METHOD /path" routes with a JSON body and records
 // every call; the path in a recorded call includes the query. An empty body
-// answers 204 and a missing route 404.
+// answers 204 and a missing route 404. A body of "Location: /path" answers
+// 201 with that path on the server as its Location.
 func acctServer(t *testing.T, routes map[string]string) (*httptest.Server, func() []seenCall) {
 	t.Helper()
 	var mu sync.Mutex
 	var calls []seenCall
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		calls = append(calls, seenCall{r.Method, r.URL.RequestURI(), string(b)})
@@ -35,6 +37,9 @@ func acctServer(t *testing.T, routes map[string]string) (*httptest.Server, func(
 			w.WriteHeader(404)
 		case body == "":
 			w.WriteHeader(204)
+		case strings.HasPrefix(body, "Location: "):
+			w.Header().Set("Location", srv.URL+strings.TrimPrefix(body, "Location: "))
+			w.WriteHeader(201)
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			io.WriteString(w, body)

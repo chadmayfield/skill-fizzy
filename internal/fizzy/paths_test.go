@@ -20,6 +20,10 @@ func TestPlan2PathsEscapeIDs(t *testing.T) {
 			io.WriteString(w, "{}")
 			return
 		}
+		if r.Method == http.MethodPatch {
+			io.WriteString(w, `{"id":"c?2"}`)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 	const b, id, x = "b?1", "c?2", "r?3"

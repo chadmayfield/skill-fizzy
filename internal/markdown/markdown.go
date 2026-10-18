@@ -1,7 +1,7 @@
 // Package markdown converts card-draft Markdown to the HTML Fizzy stores.
 //
-// It is a port of the Python fz's markdown.py (removed in 562a4a9) and must
-// produce the same bytes.
+// It produces the same bytes as the earlier Python fz's converter, which the
+// golden files in testdata pin.
 // It supports what card drafts need and nothing more: ATX headings,
 // paragraphs, bullet and numbered lists (one level), task-list items, fenced
 // code blocks, blockquotes, links, bold, italic, inline code, horizontal
@@ -18,6 +18,7 @@
 package markdown
 
 import (
+	"html"
 	"strconv"
 	"strings"
 	"unicode"
@@ -25,7 +26,7 @@ import (
 
 // ToHTML converts a draft body to HTML.
 func ToHTML(md string) string {
-	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+	lines := lines(md)
 	var out, para []string
 	listTag := "" // "ul" or "ol"
 
@@ -145,6 +146,41 @@ func ToHTML(md string) string {
 	flushPara()
 	closeList()
 	return strings.Join(out, "\n")
+}
+
+// lines splits md into lines the way ToHTML does: \r\n becomes \n, and only
+// \n ends a line.
+func lines(md string) []string {
+	return strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+}
+
+// TextLines returns the lines of md that ToHTML does not treat as code: it
+// splits lines as ToHTML does and leaves out each fenced code block, fences
+// included.
+func TextLines(md string) []string {
+	ls := lines(md)
+	var out []string
+	for i := 0; i < len(ls); i++ {
+		if strings.HasPrefix(strip(ls[i]), "```") {
+			for i++; i < len(ls) && !strings.HasPrefix(strip(ls[i]), "```"); i++ {
+			}
+			continue
+		}
+		out = append(out, ls[i])
+	}
+	return out
+}
+
+// ImageTargets returns the target of each line that ToHTML turns into an
+// <!--attach:target--> placeholder, in order.
+func ImageTargets(md string) []string {
+	out := []string{}
+	for _, line := range TextLines(md) {
+		if _, target, ok := ImageLine(line); ok {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 // ImageLine reports whether line is only an image, ![alt](target), and
@@ -273,7 +309,7 @@ func Inline(text string) string {
 	text = stashCode(text, &codes)
 	text = escape(text, false)
 	text = links(text)
-	text = bareURLs(text)
+	text = bareURLs(text, &codes)
 	text = bold(text)
 	text = starEm(text)
 	text = underscoreEm(text)
@@ -341,11 +377,27 @@ func restoreCode(text string, codes []string) string {
 // \[([^\]]+)\]\((https?://[^)\s]+|mailto:[^)\s]+)\)
 func links(text string) string {
 	r := []rune(text)
+	// next[k] is the index of the first ] at or after k, and stop[k] the
+	// first ), space or NUL, or len(r). linkAt reads them instead of
+	// scanning ahead from every [, which made a line of brackets quadratic.
+	// A URL ends at a NUL, the start of a stashed code span, so the span's
+	// <code> tag cannot land inside the href.
+	next, stop := make([]int, len(r)+1), make([]int, len(r)+1)
+	next[len(r)], stop[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		next[k], stop[k] = next[k+1], stop[k+1]
+		if r[k] == ']' {
+			next[k] = k
+		}
+		if r[k] == ')' || r[k] == 0 || isSpace(r[k]) {
+			stop[k] = k
+		}
+	}
 	var b strings.Builder
 	for i := 0; i < len(r); {
 		if r[i] == '[' {
-			if end, label, url, ok := linkAt(r, i); ok {
-				b.WriteString(`<a href="` + escape(url, true) + `">` + label + "</a>")
+			if end, label, url, ok := linkAt(r, i, next, stop); ok {
+				b.WriteString(`<a href="` + hrefFrom(url, true) + `">` + label + "</a>")
 				i = end
 				continue
 			}
@@ -356,11 +408,8 @@ func links(text string) string {
 	return b.String()
 }
 
-func linkAt(r []rune, i int) (end int, label, url string, ok bool) {
-	j := i + 1
-	for j < len(r) && r[j] != ']' {
-		j++
-	}
+func linkAt(r []rune, i int, next, stop []int) (end int, label, url string, ok bool) {
+	j := next[i+1]
 	if j == i+1 || j+1 >= len(r) || r[j+1] != '(' {
 		return 0, "", "", false
 	}
@@ -369,10 +418,7 @@ func linkAt(r []rune, i int) (end int, label, url string, ok bool) {
 	if p < 0 {
 		return 0, "", "", false
 	}
-	q := p
-	for q < len(r) && r[q] != ')' && !isSpace(r[q]) {
-		q++
-	}
+	q := stop[p]
 	if q == p || q >= len(r) || r[q] != ')' {
 		return 0, "", "", false
 	}
@@ -403,16 +449,50 @@ func hasPrefix(r []rune, i int, prefix string) bool {
 	return true
 }
 
+// hrefFrom turns a URL taken from text that Inline already escaped into an
+// href value with each & escaped exactly once. It undoes Inline's escape to
+// get the draft's own text, reads a written &amp; as &, and escapes the
+// result once. quote also escapes quotes.
+func hrefFrom(escaped string, quote bool) string {
+	raw := html.UnescapeString(escaped)
+	raw = strings.ReplaceAll(raw, "&amp;", "&")
+	return escape(raw, quote)
+}
+
 // bareURLs links a URL that is not already inside an anchor. Python:
 // (?<!["=>])\b(https?://[^\s<]+[^\s<.,;:!?)])
-func bareURLs(text string) string {
+// The URL also ends at a quote and at an escaped < or >, so a " can never
+// close the href and add an attribute.
+//
+// It also stashes each anchor's opening tag, and each bare URL's whole
+// anchor, in codes the way stashCode does, so bold and emphasis never run
+// inside a URL. A link label stays in the text and still gets them.
+func bareURLs(text string, codes *[]string) string {
 	r := []rune(text)
 	var b strings.Builder
+	stash := func(s string) {
+		*codes = append(*codes, restoreCode(s, *codes))
+		b.WriteString("\x00" + strconv.Itoa(len(*codes)-1) + "\x00")
+	}
 	for i := 0; i < len(r); {
+		// Text is escaped by now, so a raw < is only ever a tag that links
+		// wrote, and its href holds no raw quote.
+		if hasPrefix(r, i, `<a href="`) {
+			if end := indexFrom(r, i, `">`); end >= 0 {
+				stash(string(r[i : end+2]))
+				i = end + 2
+				continue
+			}
+		}
 		if r[i] == 'h' && (i == 0 || (r[i-1] != '"' && r[i-1] != '=' && r[i-1] != '>' && !isWord(r[i-1]))) {
 			if p := schemeEnd(r, i, false); p >= 0 {
 				q := p
-				for q < len(r) && !isSpace(r[q]) && r[q] != '<' {
+				// A URL ends at whitespace, a quote, or a < or > (escaped by
+				// now, or a tag that links added), so it cannot close the
+				// href attribute. It also ends at a NUL, where a stashed
+				// code span starts, so no <code> tag lands in the href.
+				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'\x00", r[q]) &&
+					!hasPrefix(r, q, "&lt;") && !hasPrefix(r, q, "&gt;") {
 					q++
 				}
 				// The last character may not be trailing punctuation, and
@@ -423,7 +503,7 @@ func bareURLs(text string) string {
 				}
 				if e > p {
 					url := string(r[i : e+1])
-					b.WriteString(`<a href="` + url + `">` + url + "</a>")
+					stash(`<a href="` + hrefFrom(url, true) + `">` + url + "</a>")
 					i = e + 1
 					continue
 				}
@@ -433,6 +513,16 @@ func bareURLs(text string) string {
 		i++
 	}
 	return b.String()
+}
+
+// indexFrom returns the index of sub in r at or after i, or -1.
+func indexFrom(r []rune, i int, sub string) int {
+	for ; i < len(r); i++ {
+		if hasPrefix(r, i, sub) {
+			return i
+		}
+	}
+	return -1
 }
 
 // bold replaces \*\*(.+?)\*\* with <strong>.
@@ -472,17 +562,29 @@ func underscoreEm(text string) string {
 // not followed by a blocked character. The run may not cross a newline.
 func emphasis(text string, marker rune, blocked func(rune) bool) string {
 	r := []rune(text)
+	// closer[k] is the first index at or after k where a marker can close,
+	// and nl[k] the first newline at or after k, or len(r) for either. An
+	// opener reads them instead of scanning to the end of the line, which
+	// made a line of openers that never close quadratic.
+	closer, nl := make([]int, len(r)+1), make([]int, len(r)+1)
+	closer[len(r)], nl[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		closer[k], nl[k] = closer[k+1], nl[k+1]
+		if r[k] == marker && k > 0 && !isSpace(r[k-1]) && (k+1 >= len(r) || !blocked(r[k+1])) {
+			closer[k] = k
+		}
+		if r[k] == '\n' {
+			nl[k] = k
+		}
+	}
 	var b strings.Builder
-scan:
 	for i := 0; i < len(r); {
 		if r[i] == marker && (i == 0 || !blocked(r[i-1])) && i+1 < len(r) && !isSpace(r[i+1]) {
-			for k := i + 1; k < len(r) && r[k] != '\n'; k++ {
-				j := k + 1
-				if j < len(r) && r[j] == marker && !isSpace(r[k]) && (j+1 >= len(r) || !blocked(r[j+1])) {
-					b.WriteString("<em>" + string(r[i+1:j]) + "</em>")
-					i = j + 1
-					continue scan
-				}
+			// The run has at least one character and may not cross a newline.
+			if j := closer[i+2]; j < nl[i+1] {
+				b.WriteString("<em>" + string(r[i+1:j]) + "</em>")
+				i = j + 1
+				continue
 			}
 		}
 		b.WriteRune(r[i])

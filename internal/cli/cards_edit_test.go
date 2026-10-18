@@ -14,8 +14,10 @@ import (
 
 type seenCall struct{ method, path, body string }
 
-// editServer answers GET /1/cards/5 with card and records every call.
-func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall) {
+// recordingServer starts a test server that records each request's method,
+// path and body, sets a JSON content type, and then calls h. The function it
+// returns gives a copy of the calls so far.
+func recordingServer(t *testing.T, h func(w http.ResponseWriter, r *http.Request)) (*httptest.Server, func() []seenCall) {
 	t.Helper()
 	var mu sync.Mutex
 	var calls []seenCall
@@ -25,11 +27,7 @@ func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall)
 		calls = append(calls, seenCall{r.Method, r.URL.Path, string(b)})
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodGet {
-			io.WriteString(w, card)
-			return
-		}
-		io.WriteString(w, "{}")
+		h(w, r)
 	}))
 	t.Cleanup(srv.Close)
 	return srv, func() []seenCall {
@@ -37,6 +35,18 @@ func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall)
 		defer mu.Unlock()
 		return append([]seenCall(nil), calls...)
 	}
+}
+
+// editServer answers GET /1/cards/5 with card and records every call.
+func editServer(t *testing.T, card string) (*httptest.Server, func() []seenCall) {
+	t.Helper()
+	return recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			io.WriteString(w, card)
+			return
+		}
+		io.WriteString(w, "{}")
+	})
 }
 
 func editEnv(t *testing.T, srv *httptest.Server) {
@@ -143,7 +153,7 @@ func TestCardEditReplaceAmbiguousNeedsAll(t *testing.T) {
 	srv, calls := editServer(t, `{"description_html": "<p>H1 and H1S</p>"}`)
 	editEnv(t, srv)
 	r := runGo([]string{"card", "edit", "5", "--replace", "H1", "H1S"})
-	if r.code != 1 || !strings.Contains(r.stderr, "2 times") {
+	if r.code != 2 || !strings.Contains(r.stderr, "2 times") {
 		t.Fatalf("got %+v", r)
 	}
 	for _, c := range calls() {
@@ -177,18 +187,24 @@ func TestCardEditReplaceDryRun(t *testing.T) {
 func TestCardEditErrors(t *testing.T) {
 	srv, calls := editServer(t, `{"description_html": "<p>x</p>"}`)
 	editEnv(t, srv)
+	descFile := filepath.Join(t.TempDir(), "goal.md")
+	writeFile(t, descFile, "Fix the gate")
 	cases := []struct {
 		name     string
 		args     []string
 		wantCode int
 		wantErr  string
 	}{
-		{"nothing", []string{"card", "edit", "5"}, 1, "nothing to update"},
-		{"missing phrase", []string{"card", "edit", "5", "--replace", "y", "z"}, 1, "not found"},
+		{"nothing", []string{"card", "edit", "5"}, 2, "nothing to update"},
+		{"missing phrase", []string{"card", "edit", "5", "--replace", "y", "z"}, 2, "not found"},
 		{"replace needs both", []string{"card", "edit", "5", "--replace", "y"}, 2, "--replace needs OLD and NEW"},
 		{"extra args", []string{"card", "edit", "5", "y", "z"}, 2, "OLD and NEW only go with --replace"},
 		{"all alone", []string{"card", "edit", "5", "--all", "--title", "T"}, 2, "--all only goes with --replace"},
-		{"replace and description", []string{"card", "edit", "5", "--replace", "x", "y", "--description", "d"}, 1, "use --replace or a new description, not both"},
+		{"replace and description", []string{"card", "edit", "5", "--replace", "x", "y", "--description", "d"}, 2, "use --replace or a new description, not both"},
+		{"replace and description file", []string{"card", "edit", "5", "--replace", "x", "y", "--description-file", descFile}, 2, "use --replace or a new description, not both"},
+		{"missing description file", []string{"card", "edit", "5", "--description-file", filepath.Join(t.TempDir(), "nope.md")}, 2, "--description-file"},
+		{"blank title", []string{"card", "edit", "5", "--title", "   "}, 2, "the card title cannot be empty"},
+		{"empty title", []string{"card", "edit", "5", "--title", ""}, 2, "the card title cannot be empty"},
 		{"description and file", []string{"card", "edit", "5", "--description", "d", "--description-file", "f"}, 2, "not allowed with"},
 		{"bad status", []string{"card", "edit", "5", "--status", "gone"}, 2, "invalid choice"},
 		{"bad number", []string{"card", "edit", "abc", "--title", "T"}, 2, "invalid int value"},
@@ -281,5 +297,42 @@ func TestCardEditReplaceKeepsImageOnlyResult(t *testing.T) {
 	}
 	if got := putBody(t, calls())["card"]["description"]; !strings.Contains(got, "action-text-attachment") {
 		t.Errorf("description %q", got)
+	}
+}
+
+// A --replace that leaves only an image is not empty.
+func TestCardEditReplaceKeepsImgOnlyResult(t *testing.T) {
+	srv, calls := editServer(t, `{"description_html": "<p>Hinge</p><img src=\"hinge.jpg\">"}`)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "edit", "5", "--replace", "Hinge", ""})
+	if r.code != 0 {
+		t.Fatalf("got %+v", r)
+	}
+	if got := putBody(t, calls())["card"]["description"]; !strings.Contains(got, "<img") {
+		t.Errorf("description %q", got)
+	}
+}
+
+// card create and step edit refuse what they cannot use with exit 2.
+func TestCreateAndStepEditUsageErrors(t *testing.T) {
+	srv, calls := editServer(t, `{}`)
+	editEnv(t, srv)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"card", "create", "Home", "Fix the gate", "--description-file", filepath.Join(t.TempDir(), "nope.md")}, "--description-file"},
+		{[]string{"step", "edit", "87", "03abc123def456ghi789jkl0mn", ""}, "the step text cannot be empty"},
+		{[]string{"step", "edit", "87", "03abc123def456ghi789jkl0mn", "  "}, "the step text cannot be empty"},
+	} {
+		r := runGo(tc.args)
+		if r.code != 2 || !strings.Contains(r.stderr, tc.want) {
+			t.Errorf("fz %q: %+v, want exit 2 and %q", tc.args, r, tc.want)
+		}
+	}
+	for _, c := range calls() {
+		if c.method != http.MethodGet {
+			t.Errorf("wrote %+v", c)
+		}
 	}
 }

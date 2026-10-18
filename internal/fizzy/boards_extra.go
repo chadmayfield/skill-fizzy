@@ -2,10 +2,8 @@ package fizzy
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
@@ -70,8 +68,10 @@ func (f *Fizzy) UpdateBoard(boardID string, fields BoardFields) error {
 	if fields == (BoardFields{}) {
 		return refusef("nothing to update")
 	}
-	if fields.PostponeDays != nil && !slices.Contains(AutoPostponeDays, *fields.PostponeDays) {
-		return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
+	if fields.PostponeDays != nil {
+		if err := ValidPostponeDays(*fields.PostponeDays); err != nil {
+			return err
+		}
 	}
 	_, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(boardID), wrap("board", fields))
 	return err
@@ -110,7 +110,7 @@ func (f *Fizzy) PublishBoard(boardID string) (string, error) {
 	}
 	var b BoardInfo
 	if err := json.Unmarshal(raw, &b); err != nil {
-		return "", err
+		return "", client.ReplyError(http.MethodPost, f.C.RequestPath("/boards/"+url.PathEscape(boardID)+"/publication", true), err)
 	}
 	return b.PublicURL, nil
 }
@@ -173,28 +173,21 @@ func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
 		return BoardAccess{}, err
 	}
 	var out BoardAccess
-	next := f.C.URL("/boards/"+url.PathEscape(boardID)+"/accesses", true)
-	seen := map[string]bool{}
-	for next != "" {
-		if seen[next] {
-			return out, fmt.Errorf("pagination loop: %s linked again", next)
-		}
-		seen[next] = true
-		_, hdr, payload, err := f.C.Do(http.MethodGet, next, nil)
-		if err != nil {
-			return out, err
-		}
+	err := f.C.EachPage("/boards/"+url.PathEscape(boardID)+"/accesses", func(payload []byte) (bool, error) {
 		var page struct {
 			BoardID   string       `json:"board_id"`
 			AllAccess bool         `json:"all_access"`
 			Users     []AccessUser `json:"users"`
 		}
 		if err := json.Unmarshal(payload, &page); err != nil {
-			return out, err
+			return false, client.ReplyError(http.MethodGet, f.C.RequestPath("/boards/"+url.PathEscape(boardID)+"/accesses", true), err)
 		}
 		out.BoardID, out.AllAccess = page.BoardID, page.AllAccess
 		out.Users = append(out.Users, page.Users...)
-		next = client.NextLink(hdr.Get("Link"))
+		return false, nil
+	})
+	if err != nil {
+		return BoardAccess{}, err
 	}
 	return out, nil
 }
@@ -236,7 +229,7 @@ func ColumnColorValue(color string) (string, error) {
 		}
 	}
 	return "", refusef("unknown column color %s; use a name (%s), or default, 1 to 8, or one of their var(--color-card-...) values",
-		pyRepr(color), strings.Join(ColumnColorNames(), ", "))
+		PyRepr(color), strings.Join(ColumnColorNames(), ", "))
 }
 
 // GetColumn fetches one column by id.

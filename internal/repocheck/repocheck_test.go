@@ -9,7 +9,7 @@ import (
 )
 
 // private matches the paths of planning and agent files. None of them may be
-// tracked, because the repository is public.
+// tracked, because the repository will be public.
 var private = regexp.MustCompile(`(?i)superpowers|(^|/)plans/|(^|/)specs/|CLAUDE\.local\.md|\.claude/settings\.local\.json|\.claude/worktrees/`)
 
 func TestNoPlanningFilesTracked(t *testing.T) {

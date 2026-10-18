@@ -20,7 +20,7 @@ func addAccountCommands(root *cobra.Command) {
 	postpone := &cobra.Command{
 		Use:     "postpone DAYS",
 		Short:   "set the account's auto-postpone default (needs --yes)",
-		Long:    "Set how many days without activity move a card to Not now, for boards that do not set their own period. DAYS is one of 3, 7, 11, 30, 90 or 365. Prints the current and new period, and refuses without --yes. Needs the admin role.",
+		Long:    "Set how many days without activity move a card to Not now, for boards that do not set their own period. DAYS is one of 3, 7, 11, 30, 90 or 365. Prints the current and new period, and refuses without --yes. A period that is already DAYS needs no change, so fz sends nothing. Needs the admin role.",
 		Example: examples("fz account postpone 30 --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(accountPostpone),
@@ -85,7 +85,7 @@ func accountShow(c *cmdContext, _ []string) error {
 		return err
 	}
 	text := fmt.Sprintf("%s  %s\ncards: %d\nauto-postpone: %s\ncreated: %s",
-		a.Name, a.ID, a.CardsCount, postponeText(a.AutoPostponePeriodInDays), a.CreatedAt)
+		line(a.Name), line(a.ID), a.CardsCount, postponeText(a.AutoPostponePeriodInDays), line(a.CreatedAt))
 	return emit(c.cmd, a.Raw(), text)
 }
 
@@ -109,11 +109,14 @@ func accountPostpone(c *cmdContext, a []string) error {
 	from := "none"
 	if cur.AutoPostponePeriodInDays != nil {
 		from = strconv.Itoa(*cur.AutoPostponePeriodInDays)
+		if *cur.AutoPostponePeriodInDays == days {
+			return emit(c.cmd, c.dry(obj{{"auto_postpone_period_in_days", days}, {"changed", false}}),
+				noChange(c, fmt.Sprintf("the auto-postpone period of %s is already %d days; no change needed", line(cur.Name), days)))
+		}
 	}
-	fmt.Fprintf(c.errw(), "about to change the auto-postpone period of %s from %s to %d days\n", cur.Name, from, days)
+	fmt.Fprintf(c.errw(), "about to change the auto-postpone period of %s from %s to %d days\n", line(cur.Name), from, days)
 	if !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	updated, err := fz.PostponeAccount(days)
 	if err != nil {
@@ -127,14 +130,18 @@ func accountPostpone(c *cmdContext, a []string) error {
 }
 
 func exportLine(e fizzy.Export) string {
-	return strings.TrimSpace(strings.Join([]string{e.ID, e.Status, e.CreatedAt, e.DownloadURL}, " "))
+	return line(strings.TrimSpace(strings.Join([]string{e.ID, e.Status, e.CreatedAt, e.DownloadURL}, " ")))
 }
 
 // emitStarted prints a new export, or a dry-run note when none was made.
-// what names the export for that note.
+// what names the export for that note. A reply with no body has no id, so
+// fz says so instead of printing a null.
 func emitStarted(c *cmdContext, e fizzy.Export, what string) error {
+	if c.dryRun {
+		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("", "start "+what))
+	}
 	if e.Raw() == nil {
-		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("export started", "start "+what))
+		return emit(c.cmd, obj{{"started", true}}, "export started; the server sent no id")
 	}
 	return emit(c.cmd, e.Raw(), exportLine(e))
 }

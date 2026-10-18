@@ -50,7 +50,7 @@ const card90 = `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"
 type cardState struct {
 	title, desc, tags, column string
 	golden, measureDone       bool
-	postponed                 bool
+	postponed, closed         bool
 }
 
 func defaultCardState() cardState {
@@ -59,7 +59,7 @@ func defaultCardState() cardState {
 
 // syncCard is card n as the fake server returns it.
 func syncCard(n int, st cardState) string {
-	return `{"number":` + strconv.Itoa(n) + `,"title":` + strconv.Quote(st.title) + `,"board":{"id":"b1","name":"Home"},"closed":false,` +
+	return `{"number":` + strconv.Itoa(n) + `,"title":` + strconv.Quote(st.title) + `,"board":{"id":"b1","name":"Home"},"closed":` + strconv.FormatBool(st.closed) + `,` +
 		`"golden":` + strconv.FormatBool(st.golden) + `,"postponed":` + strconv.FormatBool(st.postponed) + `,"description_html":` + strconv.Quote(st.desc) + `,` +
 		`"tags":` + st.tags + `,"last_active_at":"2026-10-17T10:00:00Z","column":` + st.column + `,"steps":[` +
 		`{"id":"` + stepMeasure + `","content":"Measure the gap","completed":` + strconv.FormatBool(st.measureDone) + `},` +
@@ -67,20 +67,48 @@ func syncCard(n int, st cardState) string {
 		`{"id":"` + stepDone + `","content":"Done elsewhere","completed":true}]}`
 }
 
-// syncServer serves cards 87 and 88 (same content) and 90, and the boards
-// list, accepts every write, and records each request as "METHOD /path".
-// Writes do not change what it serves.
+// syncServer serves cards 87 and 88 (same content) and 90, the boards list
+// and the columns in columns, accepts every write, and records each request
+// as "METHOD /path". Writes do not change what it serves.
 type syncServer struct {
 	*httptest.Server
-	mu    sync.Mutex
-	calls []string
-	state cardState
+	mu      sync.Mutex
+	calls   []string
+	state   cardState
+	columns string
+	// fail maps "METHOD /path" to how many more times that request gets
+	// an HTTP 500 before it succeeds.
+	fail map[string]int
+	// noLocation makes the card create reply 201 with no Location header.
+	noLocation bool
+	// uploads makes the direct upload reply usable, so an image upload
+	// succeeds. Without it the reply is {}.
+	uploads bool
+	// afterWrite changes the served card after a write "METHOD /path"
+	// succeeds, the way the real server would.
+	afterWrite map[string]func(*cardState)
+}
+
+// failNext makes the next n requests "METHOD /path" fail with HTTP 500.
+func (s *syncServer) failNext(call string, n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fail == nil {
+		s.fail = map[string]int{}
+	}
+	s.fail[call] = n
 }
 
 func newSyncServer(t *testing.T) *syncServer {
 	t.Helper()
-	s := &syncServer{state: defaultCardState()}
+	s := &syncServer{state: defaultCardState(), columns: `[{"id":"c-now","name":"Now"}]`}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /1/boards/{id}/columns", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		cols := s.columns
+		s.mu.Unlock()
+		io.WriteString(w, cols)
+	})
 	mux.HandleFunc("GET /1/cards/{n}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("n") {
 		case "87", "88":
@@ -99,10 +127,22 @@ func newSyncServer(t *testing.T) *syncServer {
 		io.WriteString(w, `[{"id":"b1","name":"Home"},{"id":"b2","name":"Garage"}]`)
 	})
 	mux.HandleFunc("POST /1/rails/active_storage/direct_uploads", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		uploads := s.uploads
+		s.mu.Unlock()
+		if uploads {
+			io.WriteString(w, `{"signed_id":"B","attachable_sgid":"att-sgid","direct_upload":{"url":"`+s.URL+`/put","headers":{}}}`)
+			return
+		}
 		io.WriteString(w, `{}`)
 	})
 	mux.HandleFunc("POST /1/boards/{id}/cards", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Location", s.URL+"/1/cards/90.json")
+		s.mu.Lock()
+		noLocation := s.noLocation
+		s.mu.Unlock()
+		if !noLocation {
+			w.Header().Set("Location", s.URL+"/1/cards/90.json")
+		}
 		w.WriteHeader(http.StatusCreated)
 	})
 	mux.HandleFunc("POST /1/cards/{n}/steps", func(w http.ResponseWriter, r *http.Request) {
@@ -117,10 +157,24 @@ func newSyncServer(t *testing.T) *syncServer {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := r.Method + " " + r.URL.Path
 		s.mu.Lock()
-		s.calls = append(s.calls, r.Method+" "+r.URL.Path)
+		s.calls = append(s.calls, call)
+		failing := s.fail[call] > 0
+		if failing {
+			s.fail[call]--
+		}
 		s.mu.Unlock()
+		if failing {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
 		mux.ServeHTTP(w, r)
+		s.mu.Lock()
+		if f := s.afterWrite[call]; f != nil {
+			f(&s.state)
+		}
+		s.mu.Unlock()
 	}))
 	t.Cleanup(s.Close)
 	return s
@@ -213,7 +267,7 @@ func syncHas(list []string, s string) bool {
 
 func TestSyncAddsTicksAndKeepsExtras(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
-	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +287,7 @@ func TestSyncAddsTicksAndKeepsExtras(t *testing.T) {
 
 func TestSyncPruneDeletesOnlyUnticked(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
-	if _, err := syncDraft(fz, d, cfg.InboxPath(), true, false); err != nil {
+	if _, err := syncDraft(fz, d, cfg.InboxPath(), true, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	var deletes []string
@@ -252,7 +306,7 @@ func TestSyncRefusesFizzySideEdits(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv, fz, cfg, d := syncFixture(t, syncDraftText)
 			srv.edit(edit)
-			_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+			_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 			want := "gate.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force"
 			if err == nil || err.Error() != want {
 				t.Fatalf("err = %v, want %q", err, want)
@@ -267,7 +321,7 @@ func TestSyncRefusesFizzySideEdits(t *testing.T) {
 func TestSyncForceOverridesChangedCard(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
 	srv.edit(fizzyEdits["description"])
-	if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true); err != nil {
+	if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !syncHas(srv.writes(), "PUT /1/cards/87") {
@@ -278,7 +332,7 @@ func TestSyncForceOverridesChangedCard(t *testing.T) {
 func TestSyncMissingSyncedNeedsForce(t *testing.T) {
 	text := strings.Replace(syncDraftText, "synced: FINGERPRINT\n", "", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
-	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	want := "gate.md: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v, want %q", err, want)
@@ -297,14 +351,14 @@ func TestSyncUnknownSyncedNeedsForce(t *testing.T) {
 	} {
 		text := strings.Replace(syncDraftText, "FINGERPRINT", value, 1)
 		srv, fz, cfg, d := syncFixture(t, text)
-		_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+		_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 		if err == nil || err.Error() != want {
 			t.Errorf("%s: err = %v, want %q", value, err, want)
 		}
 		if w := srv.writes(); len(w) != 0 {
 			t.Errorf("%s: writes reached the server: %q", value, w)
 		}
-		if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true); err != nil {
+		if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true, nil); err != nil {
 			t.Errorf("%s: --force: %v", value, err)
 		}
 	}
@@ -313,7 +367,7 @@ func TestSyncUnknownSyncedNeedsForce(t *testing.T) {
 func TestSyncPruneRemovesMissingTags(t *testing.T) {
 	text := strings.Replace(syncDraftText, "tags: buy\n", "tags: hinge\n", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
-	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +387,7 @@ func TestSyncPruneRemovesMissingTags(t *testing.T) {
 func TestSyncMovesColumnAndGolden(t *testing.T) {
 	text := strings.Replace(syncDraftText, "column: Maybe?\n", "column: Not now\ngolden: true\n", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
-	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +426,7 @@ func TestSyncLaneTellsNotNowFromMaybe(t *testing.T) {
 				t.Fatal(err)
 			}
 			fz := &fizzy.Fizzy{C: client.New(cfg, false, io.Discard)}
-			report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+			report, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -447,7 +501,7 @@ func TestApplyUpdateRecordsSynced(t *testing.T) {
 	srv.edit(fizzyEdits["description"])
 	got = syncRun(t, srv, "draft", "apply", "--update", path)
 	want := "fz: gate.md: card #87 changed in Fizzy since the last sync (description); check it, then rerun with --force\n"
-	if got.code != 1 || got.stderr != want {
+	if got.code != 2 || got.stderr != want {
 		t.Errorf("after a Fizzy edit: code %d stderr %q", got.code, got.stderr)
 	}
 }
@@ -462,7 +516,7 @@ func TestApplyUpdatePreflightRefusesFizzySideEdits(t *testing.T) {
 			srv.edit(fizzyEdits[name])
 			got := syncRun(t, srv, "draft", "apply", "--update", path)
 			want := "fz: gate.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force\n"
-			if got.code != 1 || got.stderr != want || got.stdout != "" {
+			if got.code != 2 || got.stderr != want || got.stdout != "" {
 				t.Errorf("code %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 			}
 			if w := srv.writes(); len(w) != 0 {
@@ -535,8 +589,16 @@ func TestApplyNewCardRecordsCardAndSynced(t *testing.T) {
 	if err := json.Unmarshal([]byte(card90), &c90); err != nil {
 		t.Fatal(err)
 	}
+	d, err := draft.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dh, err := draftHash(d, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "---\nboard: Home\ncard: 90\nsynced: " + fingerprintOf(t, card90) + "\nsynced-fields: " + syncedFields(c90) +
-		"\n---\n# Oil the hinge\n\nOnce a year.\n"
+		"\nsynced-draft: " + dh + "\n---\n# Oil the hinge\n\nOnce a year.\n"
 	if text := syncReadDraft(t, path); text != want {
 		t.Errorf("draft after apply:\n%q\nwant\n%q", text, want)
 	}
@@ -585,7 +647,7 @@ func TestSyncPruneKeepsTagWrittenDifferently(t *testing.T) {
 	// "#Buy" normalizes to the same tag as "buy", so the fingerprint, and
 	// with it the guard, does not see a change.
 	srv.edit(func(c *cardState) { c.tags = `["#Buy"]` })
-	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -623,7 +685,7 @@ func TestApplyUpdateReportsEveryConflictAndWritesNothing(t *testing.T) {
 	got := syncRun(t, srv, "draft", "apply", "--update", dir)
 	want := "fz: a.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force\n" +
 		"fz: b.md: card #88 changed in Fizzy since the last sync; check it, then rerun with --force\n"
-	if got.code != 1 || got.stderr != want || got.stdout != "" {
+	if got.code != 2 || got.stderr != want || got.stdout != "" {
 		t.Errorf("code %d\nstdout %q\nstderr %q\nwant stderr %q", got.code, got.stdout, got.stderr, want)
 	}
 	if w := srv.writes(); len(w) != 0 {
@@ -639,7 +701,7 @@ func TestApplyUpdateConflictBlocksNewCards(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "b.md"), text)
 	got := syncRun(t, srv, "draft", "apply", "--update", dir)
 	want := "fz: b.md: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force\n"
-	if got.code != 1 || got.stderr != want {
+	if got.code != 2 || got.stderr != want {
 		t.Errorf("code %d stderr %q", got.code, got.stderr)
 	}
 	if w := srv.writes(); len(w) != 0 {
@@ -656,7 +718,7 @@ func TestApplyUpdateConflictDryRunWritesNothing(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n")
 	writeFile(t, filepath.Join(dir, "b.md"), conflictDraft(87))
 	got := syncRun(t, srv, "--dry-run", "draft", "apply", "--update", dir)
-	if got.code != 1 || strings.Contains(got.stderr, "[dry-run]") || got.stdout != "" {
+	if got.code != 2 || strings.Contains(got.stderr, "[dry-run]") || got.stdout != "" {
 		t.Errorf("code %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	if w := srv.writes(); len(w) != 0 {
@@ -704,7 +766,7 @@ func TestApplyUpdateNamesChangedFields(t *testing.T) {
 			srv.edit(fizzyEdits[edit])
 			got := syncRun(t, srv, "draft", "apply", "--update", path)
 			msg := "fz: gate.md: card #87 changed in Fizzy since the last sync (" + want + "); check it, then rerun with --force\n"
-			if got.code != 1 || got.stderr != msg {
+			if got.code != 2 || got.stderr != msg {
 				t.Errorf("code %d stderr %q\nwant %q", got.code, got.stderr, msg)
 			}
 		})
@@ -716,7 +778,7 @@ func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
 	text = strings.Replace(text, "Gate latches.\n", "Gate latches.\n\n![the gap](gap.png)\n", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
 	writeFile(t, filepath.Join(filepath.Dir(d.Path), "gap.png"), "png")
-	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err == nil {
 		t.Fatal("an incomplete upload reply did not fail the sync")
 	}
@@ -732,7 +794,7 @@ func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
 func TestSyncReportsExtraCardTagWithoutPrune(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
 	srv.edit(func(st *cardState) { st.tags = `["buy","extra"]` })
-	report, err := syncDraft(fz, d, cfg.InboxPath(), false, true)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -741,5 +803,32 @@ func TestSyncReportsExtraCardTagWithoutPrune(t *testing.T) {
 	}
 	if syncHas(report, "tag kept, not in draft: buy") {
 		t.Errorf("reported a draft tag as extra: %q", report)
+	}
+}
+
+// A card tag the server writes as "#Buy" is the draft's tag "buy" in every
+// comparison: --update neither toggles it nor prunes it. A draft tag "Buy"
+// matches the card's "buy" the same way.
+func TestApplyUpdateTagCompareIgnoresHashAndCase(t *testing.T) {
+	for _, tc := range []struct{ cardTags, draftTag string }{
+		{`["#Buy"]`, "buy"},
+		{`["buy"]`, "Buy"},
+		{`[" #buy "]`, "#BUY"},
+	} {
+		srv := newSyncServer(t)
+		srv.mu.Lock()
+		srv.state.tags = tc.cardTags
+		srv.mu.Unlock()
+		path := filepath.Join(t.TempDir(), "gate.md")
+		writeFile(t, path, srv.draft(t, strings.Replace(syncDraftText, "tags: buy\n", "tags: "+tc.draftTag+"\n", 1)))
+		got := syncRun(t, srv, "draft", "apply", "--update", "--prune", path)
+		if got.code != 0 {
+			t.Fatalf("%s: exit %d: %s", tc.cardTags, got.code, got.stderr)
+		}
+		for _, w := range srv.writes() {
+			if strings.Contains(w, "/taggings") {
+				t.Errorf("card %s, draft %s: the tag was toggled: %q", tc.cardTags, tc.draftTag, srv.writes())
+			}
+		}
 	}
 }

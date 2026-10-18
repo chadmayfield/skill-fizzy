@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 )
 
@@ -15,14 +14,7 @@ const testWebhook = `{"id":"H1","name":"Gate alerts","payload_url":"https://hook
 // records every call. Deliveries answer deliveriesStatus.
 func webhookServer(t *testing.T, hook string, deliveriesStatus int) (*httptest.Server, func() []seenCall) {
 	t.Helper()
-	var mu sync.Mutex
-	var calls []seenCall
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		calls = append(calls, seenCall{r.Method, r.URL.Path, string(b)})
-		mu.Unlock()
-		w.Header().Set("Content-Type", "application/json")
+	return recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/1/boards":
 			io.WriteString(w, `[{"id":"B1","name":"Gate"}]`)
@@ -42,13 +34,7 @@ func webhookServer(t *testing.T, hook string, deliveriesStatus int) (*httptest.S
 		default:
 			io.WriteString(w, hook)
 		}
-	}))
-	t.Cleanup(srv.Close)
-	return srv, func() []seenCall {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]seenCall(nil), calls...)
-	}
+	})
 }
 
 func TestWebhookCommandsRegistered(t *testing.T) {
@@ -110,7 +96,10 @@ func TestWebhookCreate(t *testing.T) {
 	srv, calls := webhookServer(t, testWebhook, 200)
 	parityEnv(t, srv)
 	r := runGo([]string{"webhook", "create", "B1", "--name", "Gate alerts", "--url", "https://hooks.example.com/gate", "--actions", "card_closed,comment_created", "--yes"})
-	if r.code != 0 || r.stdout != "webhook created: H1\nsigning secret: s3cret\n" || !strings.Contains(r.stderr, "save the signing secret now; fz hides it from list and show") {
+	// The secret goes to stderr with the warning, so stdout can be logged or
+	// piped without it.
+	if r.code != 0 || r.stdout != "webhook created: H1\n" ||
+		!strings.HasSuffix(r.stderr, "save the signing secret now; fz hides it from list and show\nsigning secret: s3cret\n") {
 		t.Fatalf("got %+v", r)
 	}
 	w := writes(calls())

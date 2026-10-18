@@ -143,7 +143,9 @@ func TestManNoPrivateText(t *testing.T) {
 	dir := t.TempDir()
 	runMan(t, dir)
 	home, _ := os.UserHomeDir()
-	bad := []string{"/Users/", "@", "github.com"}
+	// The tests run with a temporary HOME, so home below is not the real
+	// one. The fixed prefixes catch a real home path on macOS and Linux.
+	bad := []string{"/Users/", "/home/", "@", "github.com"}
 	if home != "" {
 		bad = append(bad, home)
 	}
@@ -213,5 +215,61 @@ func TestManFilesNoTokenKey(t *testing.T) {
 	}
 	if !strings.Contains(files, "token_cmd") {
 		t.Error("FILES should list token_cmd")
+	}
+}
+
+// fz man never writes through a symlink at a page path. It refuses before
+// it writes any page, and the link's target is left alone.
+func TestManRefusesSymlinkedPage(t *testing.T) {
+	dir := t.TempDir()
+	man1 := filepath.Join(dir, "man1")
+	if err := os.MkdirAll(man1, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "notes.txt")
+	writeFile(t, target, "keep me")
+	if err := os.Symlink(target, filepath.Join(man1, "fz-card.1")); err != nil {
+		t.Fatal(err)
+	}
+	var out, errw bytes.Buffer
+	code := run(NewRoot(), []string{"--config", "/nonexistent.json", "man", "--dir", dir}, &out, &errw)
+	if code == 0 || !strings.Contains(errw.String(), "symlink") {
+		t.Errorf("exit %d, stderr %q", code, errw.String())
+	}
+	if b, _ := os.ReadFile(target); string(b) != "keep me" {
+		t.Errorf("target now %q", b)
+	}
+	if pages, _ := filepath.Glob(filepath.Join(man1, "*.1")); len(pages) != 1 {
+		t.Errorf("pages written after the refusal: %q", pages)
+	}
+}
+
+// fz man removes the fz pages it did not write this time, prints each one,
+// and leaves every other file alone.
+func TestManRemovesStalePages(t *testing.T) {
+	dir := t.TempDir()
+	man1 := filepath.Join(dir, "man1")
+	if err := os.MkdirAll(man1, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"fz-oldcmd.1", "fz-card-oldsub.1", "fzf.1", "other.1", "fz-notes.txt"} {
+		writeFile(t, filepath.Join(man1, name), "old")
+	}
+	out := runMan(t, dir)
+	for _, name := range []string{"fz-oldcmd.1", "fz-card-oldsub.1"} {
+		if _, err := os.Lstat(filepath.Join(man1, name)); !os.IsNotExist(err) {
+			t.Errorf("%s still there (%v)", name, err)
+		}
+		if !strings.Contains(out, "removed "+filepath.Join(man1, name)+"\n") {
+			t.Errorf("output does not name %s:\n%s", name, out)
+		}
+	}
+	for _, name := range []string{"fzf.1", "other.1", "fz-notes.txt", "fz.1", "fz-card.1"} {
+		if _, err := os.Lstat(filepath.Join(man1, name)); err != nil {
+			t.Errorf("%s gone: %v", name, err)
+		}
+	}
+	if strings.Count(out, "removed ") != 2 {
+		t.Errorf("output:\n%s", out)
 	}
 }

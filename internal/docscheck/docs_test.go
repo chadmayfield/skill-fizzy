@@ -2,7 +2,9 @@
 package docscheck
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -45,12 +47,49 @@ func TestSkillDoesNotNeedTheRepo(t *testing.T) {
 	}
 }
 
+// emDash is U+2014, written as an escape so this file passes its own check.
+const emDash = '\u2014'
+
+// Every tracked text file is free of em dashes. A file with a NUL byte is
+// binary and skipped.
 func TestNoEmDashes(t *testing.T) {
-	for _, rel := range []string{"README.md", "skill/SKILL.md", "SECURITY.md", "CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md", "docs/USERGUIDE.md"} {
-		if strings.ContainsRune(read(t, rel), '—') {
+	files := trackedFiles(t)
+	if len(files) == 0 {
+		t.Fatal("git ls-files listed nothing")
+	}
+	for _, rel := range files {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			continue // deleted in the work tree
+		}
+		if bytes.IndexByte(b, 0) >= 0 {
+			continue
+		}
+		if bytes.ContainsRune(b, emDash) {
 			t.Errorf("%s contains an em dash (U+2014)", rel)
 		}
 	}
+}
+
+// trackedFiles lists the files git tracks, relative to the repo root.
+func trackedFiles(t *testing.T) []string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+	cmd := exec.Command("git", "ls-files", "-z")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		t.Skipf("git ls-files: %v", err)
+	}
+	var files []string
+	for _, f := range strings.Split(string(out), "\x00") {
+		if f != "" {
+			files = append(files, f)
+		}
+	}
+	return files
 }
 
 // CLAUDE.md only imports AGENTS.md, so the two can never drift apart.

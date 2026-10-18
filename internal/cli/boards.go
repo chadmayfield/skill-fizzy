@@ -14,7 +14,7 @@ func init() { register(addBoardCommands) }
 func addBoardCommands(root *cobra.Command) {
 	g := &cobra.Command{
 		Use:   "board",
-		Short: "list and create boards",
+		Short: "list, show, create, edit, publish and delete boards, and set access",
 		Long:  "Work with boards. A board is named or given by id.",
 	}
 	root.AddCommand(g)
@@ -29,7 +29,7 @@ func addBoardCommands(root *cobra.Command) {
 	create := &cobra.Command{
 		Use:     "create NAME",
 		Short:   "create a board",
-		Long:    "Create a board, then set its auto-postpone period and custom columns.",
+		Long:    "Create a board, then set its auto-postpone period and custom columns. An empty or blank name exits 2 and sends nothing. If a step after the create fails, the error gives the new board's id and the commands that finish the rest, and fz exits 1.",
 		Example: examples("fz board create Garden --postpone 365 --columns Later,Next,Now"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardCreate),
@@ -40,7 +40,7 @@ func addBoardCommands(root *cobra.Command) {
 
 	cg := &cobra.Command{
 		Use:   "column",
-		Short: "list a board's columns",
+		Short: "list, show, create, edit and delete columns, and list their cards",
 		Long:  "Work with columns. Not now, Maybe? and Done are fixed; only custom columns change.",
 	}
 	root.AddCommand(cg)
@@ -69,7 +69,7 @@ func boardList(c *cmdContext, _ []string) error {
 		if b.AutoPostponePeriodInDays != nil {
 			days = strconv.Itoa(*b.AutoPostponePeriodInDays)
 		}
-		lines[i] = fmt.Sprintf("%s  %s  (postpone %sd)", b.ID, b.Name, days)
+		lines[i] = fmt.Sprintf("%s  %s  (postpone %sd)", line(b.ID), line(b.Name), days)
 	}
 	return emit(c.cmd, rawList(boards), strings.Join(lines, "\n"))
 }
@@ -82,26 +82,27 @@ func postponeDays(c *cmdContext) (int, error) {
 		return 0, nil
 	}
 	n, _ := fl.GetInt("postpone")
+	if fizzy.ValidPostponeDays(n) == nil {
+		return n, nil
+	}
+	// The usage text matches the Python fz's argparse error.
 	allowed := make([]string, len(fizzy.AutoPostponeDays))
 	for i, d := range fizzy.AutoPostponeDays {
 		allowed[i] = strconv.Itoa(d)
-		if d == n {
-			return n, nil
-		}
 	}
 	return 0, usagef("argument --postpone: invalid choice: %d (choose from %s)", n, strings.Join(allowed, ", "))
 }
 
 func boardCreate(c *cmdContext, a []string) error {
+	name := strings.TrimSpace(a[0])
+	if err := checkName("the board name", name); err != nil {
+		return err
+	}
 	days, err := postponeDays(c)
 	if err != nil {
 		return err
 	}
 	fz, err := c.api()
-	if err != nil {
-		return err
-	}
-	id, err := fz.CreateBoard(a[0], days)
 	if err != nil {
 		return err
 	}
@@ -112,15 +113,12 @@ func boardCreate(c *cmdContext, a []string) error {
 			cols = append(cols, name)
 		}
 	}
-	if id != "" {
-		for _, name := range cols {
-			if _, err := fz.CreateColumn(id, name, ""); err != nil {
-				return err
-			}
-		}
+	id, err := fz.CreateBoard(name, days, cols)
+	if err != nil {
+		return err
 	}
 	return emit(c.cmd, obj{{"id", orNull(id)}, {"columns", cols}},
-		fmt.Sprintf("board %s created: %s", pyRepr(a[0]), orNone(id)))
+		fmt.Sprintf("board %s created: %s", pyRepr(name), line(orNone(id))))
 }
 
 func columnList(c *cmdContext, a []string) error {
@@ -138,7 +136,7 @@ func columnList(c *cmdContext, a []string) error {
 	}
 	names := make([]string, len(cols))
 	for i, col := range cols {
-		names[i] = col.Name
+		names[i] = line(col.Name)
 	}
 	return emit(c.cmd, rawList(cols), "Not now → Maybe? → "+strings.Join(names, " → ")+" → Done")
 }

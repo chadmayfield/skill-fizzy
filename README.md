@@ -8,14 +8,21 @@ when you say so.
 
 ## Install
 
-Download an archive from the [latest release](https://github.com/chadmayfield/skill-fizzy/releases/latest), or use Go:
+Each release on the [releases page](https://github.com/chadmayfield/skill-fizzy/releases)
+holds one archive per system, with `checksums.txt`. An archive holds the
+`fz` binary, this README, the license and the user guide. Put `fz` on your
+PATH, for example in `~/.local/bin`. The user guide's Install section shows
+how to check the archive first.
+
+To build from source instead, you need Go 1.27.2 or later. From a checkout
+of this repo:
 
 ```sh
-go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
+make install
 ```
 
-From a checkout, `make install` builds `fz` and copies it to `~/.local/bin`.
-Building needs Go 1.27 or later.
+That builds `fz` and copies it to `~/.local/bin`, creating the folder if it
+is missing. Put `~/.local/bin` on your PATH if it is not there already.
 
 ## Configure
 
@@ -45,11 +52,17 @@ them. `fz help` lists the commands.
 
 ## More
 
+These two come with every release archive:
+
 - [User guide](docs/USERGUIDE.md): setup, every command, drafts, the skill
   and the session hook.
-- [Security](SECURITY.md): how `fz` handles your token, and how to report a
-  problem.
-- [AGENTS.md](AGENTS.md): how to build, test and change this repo, for people
-  and coding agents.
-- [Contributing](CONTRIBUTING.md): build, test and pull requests, for human contributors.
 - [License](LICENSE): MIT.
+
+These are in the [repo](https://github.com/chadmayfield/skill-fizzy):
+
+- [Security](https://github.com/chadmayfield/skill-fizzy/blob/main/SECURITY.md):
+  how `fz` handles your token, and how to report a problem.
+- [AGENTS.md](https://github.com/chadmayfield/skill-fizzy/blob/main/AGENTS.md):
+  how to build, test and change this repo, for people and coding agents.
+- [Contributing](https://github.com/chadmayfield/skill-fizzy/blob/main/CONTRIBUTING.md):
+  build, test and pull requests, for human contributors.

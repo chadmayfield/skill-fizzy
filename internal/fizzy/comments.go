@@ -30,8 +30,8 @@ type Comment struct {
 	raw json.RawMessage
 }
 
-// Reaction is a reaction on a comment. Its shape comes from Fizzy's API
-// docs; the live server had none to read on 2026-10-17.
+// Reaction is a reaction on a comment, and, as Boost, on a card. Fizzy's
+// API docs give both the same fields.
 type Reaction struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
@@ -126,13 +126,13 @@ func (f *Fizzy) CommentReactions(n int, id string) ([]Reaction, error) {
 
 // ReactToComment adds a reaction and returns its id, empty in dry-run mode
 // or when the server sends no Location. The content follows the boost rule
-// in CheckBoost, and a Refusal stops anything else before it is sent.
+// in CheckReaction, and a Refusal stops anything else before it is sent.
 func (f *Fizzy) ReactToComment(n int, id, content string) (string, error) {
 	p, err := commentPath(n, id)
 	if err != nil {
 		return "", err
 	}
-	if err := CheckBoost(content); err != nil {
+	if err := CheckReaction(content); err != nil {
 		return "", err
 	}
 	return f.C.Create(p+"/reactions", wrap("reaction", struct {

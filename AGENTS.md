@@ -42,7 +42,7 @@ change the guide and the command's help text in the same commit.
 | `internal/markdown/` | Converting draft Markdown to the HTML Fizzy stores. |
 | `internal/richtext/` | Small edits to Fizzy rich text, used by `card edit --replace`. |
 | `internal/review/` | Gathering and formatting `fz review`. |
-| `internal/testenv/` | `Main`, which every test package that builds a client or runs commands calls from its `TestMain`. It gives the tests a temporary HOME, a missing config file and no `FIZZY_*` variables, so no test reads the real config or reaches a real server. A test that needs a variable sets it with `t.Setenv`. |
+| `internal/testenv/` | `Main`, which every test package that builds a client or runs commands calls from its `TestMain`. It gives the tests a temporary HOME, a missing config file and no `FIZZY_*` variables, so no test reads the real config or reaches a real server. It also replaces `http.DefaultTransport` with one that dials only a literal loopback IP or `localhost`, so an API request from a test cannot reach a real host. That guard covers only requests through `http.DefaultTransport`, which fz's API client uses. It does not cover the `--links` checker, which has its own transport, or a subprocess that a test starts, such as the Python hook in the hook tests. A test that needs a variable sets it with `t.Setenv`. The Go caches and the go env file keep their real places. A test fails if a package that can reach `internal/config` has tests but no `testenv.Main`. |
 | `internal/docscheck/` | Tests that keep the Markdown docs honest. |
 | `internal/repocheck/` | A test that fails if git tracks a private planning or agent file. |
 | `internal/releasecheck/` | Tests for the release build and the tag guard script. |
@@ -62,9 +62,16 @@ change the guide and the command's help text in the same commit.
 - `make vuln` runs `govulncheck ./...`, if you have it installed.
 - `make tidy` runs `go mod tidy`.
 - Releases: push a tag named `vMAJOR.MINOR.PATCH`, with an optional `-suffix`, on a commit that is already on `main`.
-  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name (no leading zeros, no line breaks) or a commit not on `origin/main`, and records the kind in `GITHUB_OUTPUT`.
-  It then runs the tests, runs `make dist`, attests the archives and publishes the GitHub release. A tag with a suffix is published as a prerelease.
-- CI runs the gofmt check, `go vet`, the race tests and a build, plus `govulncheck` as advisory only.
+  `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name or a commit not on `origin/main`, and records the kind in `GITHUB_OUTPUT`.
+  The guard rejects leading zeros, line breaks, and a suffix with an empty or zero-padded numeric part, such as `-rc.01` or `-a..b`.
+  It then runs the tests, runs `make dist` and publishes the GitHub release. A tag with a suffix is published as a prerelease.
+  The workflow has two jobs. `build` runs the guard, the tests and `make dist` with read-only contents, and uploads the archives.
+  `publish` runs no repo code: it downloads those archives, attests them and creates the release, and only it has the write, id-token and attestation scopes.
+  The build job turns off setup-go's cache, so it builds with empty Go caches.
+  The archives are attested only while the repository is public. On the private repository that step is skipped.
+- `make dist` is reproducible. The build date is `SOURCE_DATE_EPOCH` if set, else the commit time, never the clock. The archives carry that time, owner 0 and sorted names.
+- CI runs the gofmt check, `go vet`, the race tests, the release build test with `FZ_TEST_DIST=1`, a build and `govulncheck` v1.9.0. A govulncheck finding fails the build.
+- The actions are pinned to commit SHAs, with the version in a comment. Dependabot proposes minor and patch updates to them, and to the Go modules, weekly.
 
 ## Adding a command
 
@@ -83,9 +90,11 @@ and print results with `emit()` so `--json` works.
 - No help text, flag help or usage line contains an em dash.
 - `wantCommands` lists the commands that must exist. Add a new command to it.
 
-`internal/docscheck` also parses every `fz` line in the code blocks of
-`README.md`, `docs/USERGUIDE.md` and `AGENTS.md`, so a renamed command or flag
-fails the build until the docs catch up.
+`internal/docscheck` also parses every `fz` line in the code blocks, and
+every inline code span that starts with `fz`, of `README.md`, `docs/USERGUIDE.md`,
+`AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `skill/SKILL.md` and
+`examples/hooks/README.md`. A renamed command or flag fails the build until
+the docs catch up. `fz help <noun>` must name a real command.
 
 ## Tests that pin behavior
 
@@ -96,18 +105,25 @@ fails the build until the docs catch up.
 - **Markdown and draft goldens.** The files in `internal/markdown/testdata/`
   and `internal/draft/testdata/` were written by the Python converter and
   draft parser. The same rule applies: fix the Go code.
+- **Changing a golden.** A golden file may change only to fix a confirmed
+  bug, by hand, never by regenerating it, and the commit names the bug.
 - **Live shapes.** `internal/fizzy/shapes_test.go` decodes JSON with the key
   names and value types a real Fizzy server sends, filled with invented
   gate and hinge values.
-- **Docs checks.** `internal/docscheck` checks the skill's template paths, the
-  em dash rule, the `fz` lines in the docs, and that `CLAUDE.md` is exactly
-  `@AGENTS.md`.
+- **Docs checks.** `internal/docscheck` checks the skill's template paths,
+  the `fz` commands in the docs, and that `CLAUDE.md` is exactly
+  `@AGENTS.md`. It also checks that no file git tracks holds an em dash.
 - **Tracked private files.** `internal/repocheck` fails if `git ls-files`
   lists a path from the never-commit list under Git.
-- **Release checks.** `internal/releasecheck` checks the `make dist` output
-  and, in a temporary git repo, the tag guard in `scripts/release-guard.sh`.
+- **Release checks.** `internal/releasecheck` checks the `make dist` output,
+  including that two builds of one commit give the same checksums, and, in
+  a temporary git repo, the tag guard in `scripts/release-guard.sh`. The
+  `make dist` test is slow and runs only with `FZ_TEST_DIST=1`, which CI
+  sets.
 - **Private text in man pages.** `TestManNoPrivateText` fails if a man page
-  holds a home directory, an `@` or `github.com`. Set `FZ_PRIVATE_PATTERNS`
+  holds `/Users/`, `/home/`, the home directory the test runs with, an `@`
+  or `github.com`. The tests run with a temporary HOME, so your own home
+  directory is not checked unless you add it to `FZ_PRIVATE_PATTERNS`. Set `FZ_PRIVATE_PATTERNS`
   to a comma-separated list to check more strings. Keep that list in your
   environment, never in the repo.
 
@@ -135,12 +151,22 @@ fails the build until the docs catch up.
   `card image --remove`, `comment delete`, `board delete`, `board publish`,
   `board access --all` and `--users`, `column delete`, `account postpone`,
   `user edit`, and `webhook create`, `edit` and `delete`. Without it they
-  print what they would do and exit 2.
+  print what they would do and exit 2. When the change is already in place,
+  as with `user edit` to the current name, they print that no change is
+  needed, send nothing and exit 0.
 - These send a DELETE and need no `--yes`: `card unboost`, `card unwatch`,
-  `card unpin`, `comment unreact`, `notification unread` and
-  `board unpublish`. Each one removes a mark or closes access, and can be
-  redone. Changing a card's drafted or published status with
-  `card edit --status` needs no `--yes` either.
+  `card unpin`, `card reopen`, `card golden --off`, `card move --to maybe`
+  (or `--to "Maybe?"`), `comment unreact`, `notification unread` and
+  `board unpublish`, plus the fz 0.1 forms `reopen`, `golden --off` and
+  `move --to maybe`. Each one removes a mark, reopens a card, returns it to
+  Maybe? or closes access, and can be redone. Changing a card's drafted or
+  published status with `card edit --status` needs no `--yes` either.
+- `card close` and `card move --to done` send a POST and need no `--yes`.
+  `card reopen` undoes them. `card close` on a closed card says so, sends
+  nothing and exits 0.
+- `draft apply --update` needs no `--yes`. It can send the same DELETEs, for
+  golden off and a move to Maybe?. With `--prune` it also deletes unticked
+  steps and removes tags that the draft no longer has.
 - Old command forms keep working.
 - Dependencies: cobra and cobra/doc only. Ask Chad before adding any other.
 
@@ -150,9 +176,19 @@ fails the build until the docs catch up.
 - The same rules cover `docs/USERGUIDE.md`, this file and code comments. One
   idea per sentence.
 
+### Comments
+
+- Every exported name has a doc comment that starts with its name.
+- A comment states what the code does, plus any gotcha or pitfall a developer must know: a server quirk, a limit, a security reason, an order that matters. Keep it to a line or two.
+- Comments describe the code as it is, never its history. Never restate the code, and never say how it came to be: no "used to", no review ids, finding or ruling numbers, plans, batches, model names or dates. History lives in git.
+- `internal/repocheck` fails on comments that do.
+
 ### Git
 
 - Feature work happens on a branch and merges to `main` by pull request. Never commit to `main` directly.
+  This rule, and the trailer rule under [Commits](#commits), apply from the Go port onward.
+  The first four commits on `main` and the GitHub merge of the Go port predate them.
+  Since then, one merge went to `main` without a pull request: `cc90bdb`, the plan-2 merge.
 - Never commit these paths: `.superpowers/`, any `superpowers/` folder,
   `docs/plans/`, `docs/specs/`, `CLAUDE.local.md`,
   `.claude/settings.local.json` and `.claude/worktrees/`. They hold private
@@ -161,7 +197,8 @@ fails the build until the docs catch up.
 
 ## Commits
 
-Every commit ends with a co-author trailer for the model that wrote it.
+From the Go port onward, every commit ends with a co-author trailer for
+the model that wrote it.
 
     Co-Authored-By: <the model that wrote the commit> <noreply@anthropic.com or the vendor's address>
 

@@ -10,7 +10,7 @@ func init() { register(addCommentCommands) }
 func addCommentCommands(root *cobra.Command) {
 	g := &cobra.Command{
 		Use:   "comment",
-		Short: "comment on a card",
+		Short: "add, list, show, edit and delete comments, and react to them",
 		Long:  "Work with a card's comments. Text is Markdown.",
 	}
 	root.AddCommand(g)
@@ -29,6 +29,9 @@ func commentAdd(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkName("the comment text", a[1]); err != nil {
+		return err
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
@@ -37,5 +40,5 @@ func commentAdd(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", orNull(id)}}, "comment added: "+orNone(id))
+	return emit(c.cmd, obj{{"id", orNull(id)}}, "comment added: "+line(orNone(id)))
 }

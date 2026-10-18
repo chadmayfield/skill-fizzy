@@ -10,10 +10,14 @@ import (
 // Refusal, as it does for a usage error.
 type Refusal struct{ msg string }
 
+// Error returns the refusal message.
 func (e Refusal) Error() string { return e.msg }
 
 // refusef returns a Refusal with a formatted message.
 func refusef(format string, a ...any) error { return Refusal{fmt.Sprintf(format, a...)} }
+
+// Refuse returns a Refusal with msg, for a check made outside this package.
+func Refuse(msg string) error { return Refusal{msg} }
 
 // IsRefusal reports whether err is or wraps a Refusal.
 func IsRefusal(err error) bool {

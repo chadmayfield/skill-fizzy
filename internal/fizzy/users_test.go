@@ -114,7 +114,7 @@ func TestMatchUserAmbiguousRefuses(t *testing.T) {
 func TestMatchUserUnknown(t *testing.T) {
 	f, _, _, _ := newFizzy(t, false, cardServer("{}"))
 	_, err := f.MatchUser("Nobody", false)
-	if err == nil || IsRefusal(err) || err.Error() != "no user 'Nobody' (have: Gate Keeper, Hinge Smith, Twin, Twin)" {
+	if !IsRefusal(err) || err.Error() != "no user 'Nobody' (have: Gate Keeper, Hinge Smith, Twin, Twin)" {
 		t.Errorf("unknown: %v", err)
 	}
 	// An id-like value that matches nobody is an error unless passthrough is on.

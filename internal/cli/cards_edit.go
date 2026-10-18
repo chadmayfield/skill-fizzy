@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,12 +20,12 @@ func addCardEditCommand(root *cobra.Command) {
 	edit := &cobra.Command{
 		Use:   "edit NUMBER [OLD NEW]",
 		Short: "change a card's title, description or status",
-		Long: "Change a card. A new description replaces the whole thing, including embedded images. " +
+		Long: "Change a card. An empty or blank --title exits 2 and sends nothing. A new description replaces the whole thing, including embedded images. " +
 			"fz refuses a new description that is empty or only whitespace, or a --replace that leaves it so, unless --allow-empty is given. " +
 			"--replace swaps one phrase in the current description and leaves the rest alone. " +
 			"Give the phrase and its replacement after the number. The phrase must not be empty. " +
 			"It matches only text, never tag names or attributes such as a link's address, " +
-			"and a match cannot cross formatting.",
+			"and a match cannot cross formatting. A phrase that is not found, or that matches more than once without --all, exits 2 and sends nothing.",
 		Example: examples(
 			`fz card edit 87 --title "Fix the gate hinge"`,
 			`fz card edit 87 --replace "50% off" "up to 50% off"`,
@@ -39,7 +37,7 @@ func addCardEditCommand(root *cobra.Command) {
 	}
 	edit.Flags().String("title", "", "new title")
 	edit.Flags().String("description", "", "new description as Markdown")
-	edit.Flags().String("description-file", "", "read the new Markdown description from a file")
+	edit.Flags().String("description-file", "", "read the new Markdown description from a file of at most 4 MiB")
 	// --replace takes OLD and NEW, which cobra cannot read as two values of
 	// one flag. The flag takes none, and the two words follow the number.
 	edit.Flags().Bool("replace", false, "swap one phrase in the description; give OLD and NEW after the number")
@@ -47,10 +45,8 @@ func addCardEditCommand(root *cobra.Command) {
 	edit.Flags().Bool("allow-empty", false, "allow a new description that is empty, which clears it")
 	edit.Flags().String("status", "", "card status, drafted or published")
 
-	for _, c := range root.Commands() {
-		if c.Name() == "card" {
-			c.AddCommand(edit)
-		}
+	if g := subgroup(root, "card"); g != nil {
+		g.AddCommand(edit)
 	}
 }
 
@@ -83,7 +79,11 @@ func cardEdit(c *cmdContext, a []string) error {
 
 	var fields fizzy.CardFields
 	var changed []string
-	if title, _ := fl.GetString("title"); title != "" {
+	if fl.Changed("title") {
+		title, _ := fl.GetString("title")
+		if err := checkName("the card title", title); err != nil {
+			return err
+		}
 		fields.Title = &title
 		changed = append(changed, "title")
 	}
@@ -93,11 +93,10 @@ func cardEdit(c *cmdContext, a []string) error {
 		md = &d
 	}
 	if file, _ := fl.GetString("description-file"); file != "" {
-		raw, err := os.ReadFile(file)
+		d, err := readDescriptionFile(file)
 		if err != nil {
 			return err
 		}
-		d := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n")
 		md = &d
 	}
 	allowEmpty, _ := fl.GetBool("allow-empty")
@@ -106,6 +105,8 @@ func cardEdit(c *cmdContext, a []string) error {
 		return usagef("--allow-empty only goes with --description, --description-file or --replace")
 	case md != nil && strings.TrimSpace(*md) == "" && !allowEmpty:
 		return usagef("the new description is empty; add --allow-empty to clear it")
+	case md != nil && replace:
+		return usagef("use --replace or a new description, not both")
 	}
 	if md != nil {
 		html := markdown.ToHTML(*md)
@@ -117,16 +118,17 @@ func cardEdit(c *cmdContext, a []string) error {
 		return err
 	}
 	if replace {
-		if fields.Description != nil {
-			return errors.New("use --replace or a new description, not both")
-		}
 		card, err := fz.Card(number)
 		if err != nil {
 			return err
 		}
-		html, err := richtext.ReplaceText(richtext.UnwrapActionText(card.DescriptionHTML), a[1], a[2], all)
+		src := richtext.UnwrapActionText(card.DescriptionHTML)
+		html, err := richtext.ReplaceText(src, a[1], a[2], all)
 		if err != nil {
-			return err
+			// Every ReplaceText error stops the edit before anything is
+			// sent, such as a phrase that is not found or that matches
+			// more than once, so each is a refusal and exits 2.
+			return fizzy.Refuse(err.Error())
 		}
 		if emptyDescription(html) && !allowEmpty {
 			return usagef("the new description is empty; add --allow-empty to clear it")

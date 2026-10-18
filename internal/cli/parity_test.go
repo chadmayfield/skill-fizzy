@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,12 +133,10 @@ func writeFile(t *testing.T, path, text string) {
 	}
 }
 
-// pythonGolden holds what the Python fz printed for each parity case. It was
-// captured once from the Python fz (bin/fz, Python 3.9) on 2026-10-17, while
-// that code still existed, by parity_capture_test.go, added in commit af6689c
-// and removed with the Python code. It is the reference the Go fz must match. Nothing regenerates it, since
-// writing this file from Go output would turn the test into Go checking
-// itself. Fix Go, not the file.
+// pythonGolden holds what the earlier Python fz printed for each parity
+// case. It is the reference the Go fz must match. Never regenerate it from Go
+// output, which would turn the test into Go checking itself. Fix Go, not the
+// file.
 const pythonGolden = "testdata/parity/python-fz.json"
 
 // URL, DIR and HOME placeholders stand for the per-run fake server URL, the
@@ -226,6 +225,13 @@ func readParityFile(t *testing.T) parityFile {
 // printed.
 func TestParityWithPython(t *testing.T) {
 	f := newParityFixture(t)
+	// The link cases fetch from the fake server, which is on loopback, so
+	// the link check may reach its port. Python fz had no local-address
+	// guard; that guard has its own tests in links_test.go.
+	port := netip.MustParseAddrPort(strings.TrimPrefix(f.srv.URL, "http://")).Port()
+	oldBlocked := linkDialBlocked
+	linkDialBlocked = func(a netip.AddrPort) bool { return a.Port() != port && oldBlocked(a) }
+	t.Cleanup(func() { linkDialBlocked = oldBlocked })
 	p := readParityFile(t)
 	for _, c := range p.Cases {
 		args := f.unmarkAll(c.Args)
@@ -266,7 +272,8 @@ func TestNewStepCommands(t *testing.T) {
 			"[dry-run] PUT " + srv.URL + "/1/cards/87/steps/" + stepA + ` {"step": {"content": "Order two hinges"}}` + "\n", 0}},
 		{[]string{"--dry-run", "--json", "step", "edit", "87", stepA, "x"}, result{"{\n  \"id\": \"" + stepA + "\"\n}\n",
 			"[dry-run] PUT " + srv.URL + "/1/cards/87/steps/" + stepA + ` {"step": {"content": "x"}}` + "\n", 0}},
-		{[]string{"--dry-run", "step", "delete", "87", stepA}, result{"", "refusing without --yes\n", 2}},
+		{[]string{"--dry-run", "step", "delete", "87", stepA}, result{"", "about to delete step: [ ] " + stepA + "  Order the hinge (card #87)\nrefusing without --yes\n", 2}},
+		{[]string{"step", "delete", "87", "03nop000qqq111rrr222sss3tt"}, result{"", "about to delete step 03nop000qqq111rrr222sss3tt, which card #87 does not list\nrefusing without --yes\n", 2}},
 		{[]string{"--dry-run", "step", "delete", "87", stepA, "--yes"}, result{"step deleted\n",
 			"[dry-run] DELETE " + srv.URL + "/1/cards/87/steps/" + stepA + " \n", 0}},
 		{[]string{"--dry-run", "--json", "step", "delete", "87", stepA, "--yes"}, result{"{\n  \"deleted\": \"" + stepA + "\"\n}\n",

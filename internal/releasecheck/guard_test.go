@@ -49,7 +49,8 @@ func TestReleaseGuard(t *testing.T) {
 	gitIn(t, repo, "push", "-q", "origin", "main")
 	gitIn(t, repo, "checkout", "-q", "-b", "side")
 	onSide := commit("on a side branch")
-	// The same fetch the workflow runs.
+	// release.yml gets origin/main from fetch-depth 0; this fetch gives the
+	// test the same ref.
 	gitIn(t, repo, "fetch", "-q", "origin", "main")
 
 	cases := []struct {
@@ -71,6 +72,18 @@ func TestReleaseGuard(t *testing.T) {
 		{"v1.2.3.4", onMain, ""},
 		{"v1.2.3-", onMain, ""},
 		{"v1.2.3 ", onMain, ""},
+		// SemVer pre-release identifiers: none may be empty, and a numeric
+		// one may not have a leading zero. An alphanumeric one may.
+		{"v1.2.3-rc.1", onMain, "prerelease"},
+		{"v1.2.3-rc.0", onMain, "prerelease"},
+		{"v1.2.3-0", onMain, "prerelease"},
+		{"v1.2.3-0a.01a", onMain, "prerelease"},
+		{"v1.2.3-x-y", onMain, "prerelease"},
+		{"v1.2.3-rc.01", onMain, ""},
+		{"v1.2.3-01", onMain, ""},
+		{"v1.2.3-a..b", onMain, ""},
+		{"v1.2.3-.a", onMain, ""},
+		{"v1.2.3-a.", onMain, ""},
 	}
 	for i, c := range cases {
 		t.Run(strconv.Itoa(i)+"/"+strings.NewReplacer("\n", "NL", "\r", "CR", " ", "_").Replace(c.tag), func(t *testing.T) {

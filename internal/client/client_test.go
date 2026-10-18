@@ -43,8 +43,8 @@ func TestIDFromLocation(t *testing.T) {
 		"":                            "",
 	}
 	for in, want := range cases {
-		if got := IDFromLocation(in); got != want {
-			t.Errorf("IDFromLocation(%q) = %q, want %q", in, got, want)
+		if got, err := IDFromLocation(in); got != want || err != nil {
+			t.Errorf("IDFromLocation(%q) = %q, %v, want %q", in, got, err, want)
 		}
 	}
 }
@@ -340,14 +340,33 @@ func TestRedirectRules(t *testing.T) {
 		t.Errorf("GET 302 not followed: err=%v v=%v", err, v)
 	}
 	methods = nil
-	if _, err := c.Write("POST", "/old", map[string]int{"a": 1}); err != nil {
-		t.Errorf("POST 302 should follow as GET: %v", err)
+	if _, err := c.Write("POST", "/old", map[string]int{"a": 1}); err == nil {
+		t.Error("POST 302 must be an error, not a GET")
 	}
-	if len(methods) != 2 || methods[1] != "GET /1/new" {
+	if len(methods) != 1 || methods[0] != "POST /1/old" {
 		t.Errorf("POST redirect requests = %v", methods)
 	}
 	methods = nil
 	if err := c.Get("/perm", &v); err == nil || len(methods) != 1 {
 		t.Errorf("308 must not be followed: err=%v requests=%v", err, methods)
+	}
+}
+
+// An id with whitespace or a control character is refused, so it can never
+// reach a URL path or a printed line.
+func TestIDFromLocationRefusesUnsafeID(t *testing.T) {
+	for _, loc := range []string{
+		"/1/boards/x9%0Aevil.json",
+		"/1/boards/x9%0Devil",
+		"/1/boards/x9%20evil",
+		"/1/boards/x9%09evil",
+		"/1/boards/x9%1B%5B31m",
+		"/1/boards/x9%C2%85evil",
+		"/1/boards/x9%E2%80%A8evil",
+		"/1/boards/x9%E2%80%AEevil",
+	} {
+		if id, err := IDFromLocation(loc); err == nil || id != "" {
+			t.Errorf("IDFromLocation(%q) = %q, %v; want a refusal", loc, id, err)
+		}
 	}
 }

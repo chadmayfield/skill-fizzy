@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
@@ -63,7 +64,7 @@ func TestCreateBoardThenPostpone(t *testing.T) {
 		}
 		jsonOK(w, map[string]any{})
 	})
-	id, err := f.CreateBoard("Home", 365)
+	id, err := f.CreateBoard("Home", 365, nil)
 	if err != nil || id != "B1" {
 		t.Fatalf("id=%q err=%v", id, err)
 	}
@@ -81,7 +82,7 @@ func TestCreateBoardThenPostpone(t *testing.T) {
 
 func TestCreateBoardBadPostpone(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, nil)
-	if _, err := f.CreateBoard("Home", 5); err == nil {
+	if _, err := f.CreateBoard("Home", 5, nil); err == nil {
 		t.Error("expected error")
 	}
 	if len(s.calls) != 0 {
@@ -94,7 +95,7 @@ func TestCreateBoardNoPostpone(t *testing.T) {
 		w.Header().Set("Location", "/1/boards/B1.json")
 		w.WriteHeader(201)
 	})
-	if _, err := f.CreateBoard("Home", 0); err != nil {
+	if _, err := f.CreateBoard("Home", 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.calls) != 1 {
@@ -167,11 +168,28 @@ func TestMoveSpecialTargets(t *testing.T) {
 		{"done", "POST", "/1/cards/5/closure"},
 	}
 	for _, c := range cases {
-		f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) { w.WriteHeader(204) })
+		f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+			switch {
+			case r.Method != http.MethodGet:
+				w.WriteHeader(204)
+			case strings.HasSuffix(r.URL.Path, "/columns"):
+				jsonOK(w, []map[string]any{{"id": "C1", "name": "Now"}})
+			default:
+				jsonOK(w, map[string]any{"number": 5, "board": map[string]any{"id": "B1"}})
+			}
+		})
 		if err := f.MoveCard(5, c.target, ""); err != nil {
 			t.Fatal(err)
 		}
-		if len(s.calls) != 1 || s.calls[0].Method != c.method || s.calls[0].Path != c.path {
+		// The GETs read the board's columns, to refuse a column named like
+		// the keyword. The one write is the keyword's.
+		var writes []call
+		for _, x := range s.calls {
+			if x.Method != http.MethodGet {
+				writes = append(writes, x)
+			}
+		}
+		if len(writes) != 1 || writes[0].Method != c.method || writes[0].Path != c.path {
 			t.Errorf("%s: %+v", c.target, s.calls)
 		}
 	}
@@ -258,7 +276,13 @@ func TestBoardLookup(t *testing.T) {
 	if b, err := f.Board("HOME"); err != nil || b.ID != "B1" {
 		t.Errorf("by name: %+v %v", b, err)
 	}
-	if _, err := f.Board("shop"); err == nil || !strings.Contains(err.Error(), "2 boards are named") {
+	// An exact name wins over one that matches only ignoring case.
+	if b, err := f.Board("shop"); err != nil || b.ID != "B3" {
+		t.Errorf("exact: %+v %v", b, err)
+	}
+	// A name that matches two only ignoring case is a Refusal, so it
+	// exits 2 like an ambiguous column, tag or user.
+	if _, err := f.Board("SHOP"); !IsRefusal(err) || !strings.Contains(err.Error(), "2 boards are named") {
 		t.Errorf("ambiguous: %v", err)
 	}
 	_, err := f.Board("zzz")
@@ -336,7 +360,7 @@ func TestCreateCardBodyAndDryRun(t *testing.T) {
 
 func TestUpdateCard(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) { w.WriteHeader(204) })
-	if err := f.UpdateCard(5, CardFields{}); err == nil || err.Error() != "nothing to update" {
+	if err := f.UpdateCard(5, CardFields{}); !IsRefusal(err) || err.Error() != "nothing to update" {
 		t.Errorf("err=%v", err)
 	}
 	if len(s.calls) != 0 {
@@ -426,8 +450,8 @@ func TestUpdateStepSendsOnlyGivenFields(t *testing.T) {
 			t.Errorf("%d: %+v", i, s.calls[i])
 		}
 	}
-	if err := f.UpdateStep(5, "S1", nil, nil); err == nil {
-		t.Error("expected nothing to update")
+	if err := f.UpdateStep(5, "S1", nil, nil); !IsRefusal(err) || err.Error() != "nothing to update" {
+		t.Errorf("expected the nothing to update refusal, got %v", err)
 	}
 }
 
@@ -615,5 +639,28 @@ func TestUploadIncompleteReply(t *testing.T) {
 				t.Errorf("calls %+v", s.calls)
 			}
 		})
+	}
+}
+
+// The storage PUT carries the file, so it gets client.UploadTimeout. The
+// direct-upload POST is small and keeps client.RequestTimeout.
+func TestUploadPutGetsTheUploadTimeout(t *testing.T) {
+	oldReq, oldUp := client.RequestTimeout, client.UploadTimeout
+	client.RequestTimeout, client.UploadTimeout = 150*time.Millisecond, 5*time.Second
+	t.Cleanup(func() { client.RequestTimeout, client.UploadTimeout = oldReq, oldUp })
+	var srvURL string
+	f, _, _, srv := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+		if r.URL.Path == "/1/rails/active_storage/direct_uploads" {
+			jsonOK(w, map[string]any{"signed_id": "BLOB", "attachable_sgid": "ATTACH", "direct_upload": map[string]any{"url": srvURL + "/put"}})
+			return
+		}
+		time.Sleep(400 * time.Millisecond)
+		w.WriteHeader(204)
+	})
+	srvURL = srv.URL
+	p := filepath.Join(t.TempDir(), "hinge.png")
+	os.WriteFile(p, []byte("png"), 0o644)
+	if sgid, err := f.Upload(p); err != nil || sgid != "ATTACH" {
+		t.Errorf("sgid=%q err=%v", sgid, err)
 	}
 }

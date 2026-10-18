@@ -22,8 +22,14 @@ gofmt -l .
 
 ## Branches and pull requests
 
-Work on a branch and open a pull request into `main`. Nobody commits to
-`main` directly. Stage files by name, not with `git add .`.
+The project uses GitHub flow. `main` is always releasable. Work on a short
+branch and open a pull request into `main`; it merges once the `build-test`
+check passes. Nobody commits to `main` directly. Stage files by name, not
+with `git add .`.
+
+There are no other long-lived branches. Releases come only from `main`:
+the release guard refuses a tag that is not on `main`, so an older version
+gets fixes by releasing a newer one.
 
 ## Adding a command
 
@@ -38,6 +44,13 @@ update `docs/USERGUIDE.md` in the same commit.
 `internal/cli/testdata/parity/python-fz.json` was captured from the Python
 fz, which is no longer in the repo. It can never be regenerated. When a
 parity test fails, fix the Go code, not the golden file.
+
+The same rule covers the Markdown goldens in `internal/markdown/testdata/`
+and the draft goldens in `internal/draft/testdata/`. The Python converter
+and draft parser wrote them, and they are gone too.
+
+A golden file may change only to fix a confirmed bug. Edit it by hand,
+never by regenerating it, and name the bug in the commit message.
 
 ## Private files and test data
 
@@ -57,7 +70,17 @@ commit that is already on `main`. The release workflow checks the tag with
 `scripts/release-guard.sh`, runs the tests, builds the archives and
 publishes the release. A tag with a suffix becomes a prerelease.
 
+The workflow attests the archives only while the repository is public. It
+is not confirmed that attestations work on a private repository, so the
+step is skipped there, and a test tag on the private repository still
+releases, without attestations.
+
+`make dist` is reproducible. The build date is the commit time, or
+`SOURCE_DATE_EPOCH` when it is set, so two builds of one commit with the
+same Go, tar and gzip give the same checksums.
+
 ## Security
 
-Report a security problem through GitHub's private vulnerability reporting,
-not a public issue. See [SECURITY.md](SECURITY.md).
+Report a security problem privately, not in a public issue.
+[SECURITY.md](SECURITY.md) says how, both while the repository is private
+and once it is public.

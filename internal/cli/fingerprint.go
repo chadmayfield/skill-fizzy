@@ -4,13 +4,91 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
+
+// openImage is os.Open. A test replaces it to count the image reads.
+var openImage = os.Open
+
+// syncedDraftKey is the front matter key for draftHash.
+const syncedDraftKey = "synced-draft"
+
+// draftHash returns "sha256:" and the first 16 hex characters of the
+// SHA-256 of what the draft sends as the title and description: the title,
+// the body Markdown and the SHA-256 of each image file's bytes, in image
+// order. fz stores it as synced-draft: after a sync, so the next --update
+// can skip the uploads and the description when none of them changed.
+func draftHash(d *draft.Draft, inbox string) (string, error) {
+	images := []string{}
+	for _, img := range d.Images() {
+		path, err := d.ResolveImage(img, inbox)
+		if err != nil {
+			return "", err
+		}
+		h, err := imageHash(path)
+		if err != nil {
+			return "", err
+		}
+		images = append(images, h)
+	}
+	b, _ := json.Marshal(struct {
+		Title  string   `json:"title"`
+		Body   string   `json:"body"`
+		Images []string `json:"images"`
+	}{d.Title, d.BodyMD, images})
+	sum := sha256.Sum256(b)
+	return fingerprintPrefix + hex.EncodeToString(sum[:])[:16], nil
+}
+
+// imageHash returns the hex SHA-256 of the file at path. It first refuses
+// what Upload refuses, a file that is not regular or is over
+// fizzy.MaxUploadSize, with the same Refusal, and then streams the file, so
+// memory stays small whatever its size.
+func imageHash(path string) (string, error) {
+	fi, err := fizzy.CheckUpload(path)
+	if err != nil {
+		return "", err
+	}
+	f, err := openImage(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(f, fizzy.MaxUploadSize+1))
+	if err != nil {
+		return "", err
+	}
+	if n != fi.Size() {
+		return "", fmt.Errorf("%s changed size while fz read it", fizzy.PyRepr(path))
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// textSynced reports whether the card's title and description hash to the
+// values in stored, a synced-fields: value. A missing or malformed value is
+// false, so fz sends them, and so is a title or description hash in the
+// 8-hex form an older fz wrote.
+func textSynced(stored string, card fizzy.Card) bool {
+	have := map[string]string{}
+	for _, p := range strings.Fields(stored) {
+		if name, hash, ok := strings.Cut(p, "="); ok && fieldHashRE.MatchString(hash) {
+			have[name] = hash
+		}
+	}
+	st := newFingerprintState(card)
+	return len(have["title"]) == 16 && have["title"] == fieldHash("title", st.Title) &&
+		len(have["description"]) == 16 && have["description"] == fieldHash("description", st.DescriptionHTML)
+}
 
 const fingerprintPrefix = "sha256:"
 
@@ -53,7 +131,7 @@ func newFingerprintState(c fizzy.Card) fingerprintState {
 		st.Steps = append(st.Steps, fingerprintStep{ID: s.ID, Content: s.Content, Completed: s.Completed})
 	}
 	for _, t := range c.Tags {
-		st.Tags = append(st.Tags, tagKey(t))
+		st.Tags = append(st.Tags, fizzy.TagTitle(t))
 	}
 	sort.Strings(st.Tags)
 	if c.Column != nil {
@@ -95,13 +173,24 @@ var fingerprintFields = []fingerprintField{
 	{"postponed", func(s fingerprintState) any { return s.Postponed }},
 }
 
-var fieldHashRE = regexp.MustCompile(`^[0-9a-f]{8}$`)
+// fieldHashRE matches a synced-fields: hash: 8 hex characters, or 16 for
+// the title and description since fz wrote them longer.
+var fieldHashRE = regexp.MustCompile(`^[0-9a-f]{8}([0-9a-f]{8})?$`)
 
-// fieldHash is the first 8 hex characters of the SHA-256 of v's JSON.
-func fieldHash(v any) string {
+// longFields are the fields whose synced-fields: hash has 16 hex
+// characters, because the --update skip trusts them alone. 8 would let
+// someone who can edit the card find a matching text in about 2^32 tries.
+var longFields = map[string]bool{"title": true, "description": true}
+
+// fieldHash is the first 8 hex characters of the SHA-256 of v's JSON, or
+// the first 16 for a field in longFields.
+func fieldHash(name string, v any) string {
 	// Marshal cannot fail: v is a string, bool or slice of them.
 	b, _ := json.Marshal(v)
 	sum := sha256.Sum256(b)
+	if longFields[name] {
+		return hex.EncodeToString(sum[:])[:16]
+	}
 	return hex.EncodeToString(sum[:])[:8]
 }
 
@@ -112,7 +201,7 @@ func syncedFields(c fizzy.Card) string {
 	st := newFingerprintState(c)
 	parts := make([]string, len(fingerprintFields))
 	for i, f := range fingerprintFields {
-		parts[i] = f.name + "=" + fieldHash(f.value(st))
+		parts[i] = f.name + "=" + fieldHash(f.name, f.value(st))
 	}
 	return strings.Join(parts, " ")
 }
@@ -137,7 +226,14 @@ func changedFields(stored string, card fizzy.Card) []string {
 		if !ok {
 			return nil
 		}
-		if h != fieldHash(f.value(st)) {
+		// An 8-hex hash from an older fz is compared with the first 8
+		// characters. A hash longer than fz writes for the field cannot
+		// be told.
+		want := fieldHash(f.name, f.value(st))
+		if len(h) > len(want) {
+			return nil
+		}
+		if h != want[:len(h)] {
 			changed = append(changed, f.name)
 		}
 	}

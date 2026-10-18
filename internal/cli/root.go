@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +23,19 @@ var registrations []func(root *cobra.Command)
 // register adds a function that NewRoot calls to attach commands to the root.
 func register(f func(root *cobra.Command)) {
 	registrations = append(registrations, f)
+}
+
+// subgroup returns the command group named name, or nil. Go runs a
+// package's init functions in file name order, so a file that adds to a
+// group must sort after the file that registers it, as cards_edit.go sorts
+// after cards.go.
+func subgroup(root *cobra.Command, name string) *cobra.Command {
+	for _, c := range root.Commands() {
+		if c.Name() == name {
+			return c
+		}
+	}
+	return nil
 }
 
 // usageError marks an error caused by bad flags or an unknown command.
@@ -51,7 +65,28 @@ func NewRoot() *cobra.Command {
 	for _, f := range registrations {
 		f(root)
 	}
+	root.SetHelpCommand(helpCommand())
 	return root
+}
+
+// helpCommand is cobra's help command, except that a topic that names no
+// command is a usage error, so fz help nope exits 2 as fz nope does.
+func helpCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "help [command]",
+		Short: "Help about any command",
+		Long:  "Help prints the help for any command. Run fz help followed by the command's words, such as fz help card list.",
+		Args:  args(cobra.ArbitraryArgs),
+		RunE: func(c *cobra.Command, a []string) error {
+			cmd, rest, err := c.Root().Find(a)
+			if cmd == nil || err != nil || len(rest) > 0 {
+				return usagef("unknown help topic %s; fz help lists the commands", pyRepr(strings.Join(a, " ")))
+			}
+			cmd.InitDefaultHelpFlag()
+			cmd.InitDefaultVersionFlag()
+			return cmd.Help()
+		},
+	}
 }
 
 // run rewrites old command forms, executes root with args and returns the
@@ -60,8 +95,8 @@ func NewRoot() *cobra.Command {
 func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 	args = Rewrite(args)
 	root.SetArgs(args)
-	root.SetOut(out)
-	root.SetErr(errw)
+	root.SetOut(terminalWriter{out})
+	root.SetErr(terminalWriter{errw})
 	err := unknownSubcommand(root, args)
 	if err == nil {
 		err = root.Execute()
@@ -73,11 +108,27 @@ func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 	if errors.As(err, &code) {
 		return int(code)
 	}
-	fmt.Fprintf(errw, "fz: %s\n", errorText(err))
+	// The error can hold server text, such as a user or tag name, so it
+	// goes through the terminal cleaner like everything else fz prints.
+	fmt.Fprintf(terminalWriter{errw}, "fz: %s\n", errorText(err))
 	if _, ok := err.(usageError); ok || fizzy.IsRefusal(err) || strings.HasPrefix(err.Error(), "unknown command") {
 		return 2
 	}
 	return 1
+}
+
+// terminalWriter passes everything fz prints through config.TerminalText,
+// so no text from the server can send a terminal escape or overwrite a
+// line. JSON output passes unchanged: it holds only escaped ASCII. Each
+// write is cleaned on its own; fz writes each line, or each whole output,
+// in one call.
+type terminalWriter struct{ w io.Writer }
+
+func (t terminalWriter) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(t.w, config.TerminalText(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // unknownSubcommand reports "fz card nope" as a usage error. Cobra only
@@ -105,8 +156,7 @@ func unknownSubcommand(root *cobra.Command, args []string) error {
 
 // Execute runs fz with the process arguments and returns the exit code.
 func Execute(version, commit, date string) int {
-	_, _ = commit, date
 	root := NewRoot()
-	root.Version = resolveVersion(version, debug.ReadBuildInfo)
+	setVersion(root, resolveVersion(version, debug.ReadBuildInfo), commit, date)
 	return run(root, os.Args[1:], os.Stdout, os.Stderr)
 }

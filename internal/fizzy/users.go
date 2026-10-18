@@ -2,10 +2,11 @@ package fizzy
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
 // User is a person on the account.
@@ -56,11 +57,12 @@ func (f *Fizzy) RenameUser(id, name string) (User, error) {
 	if err := CheckIDs(id); err != nil {
 		return User{}, err
 	}
-	raw, err := f.C.Write(http.MethodPut, "/users/"+url.PathEscape(id), wrap("user", struct {
+	path := "/users/" + url.PathEscape(id)
+	raw, err := f.C.Write(http.MethodPut, path, wrap("user", struct {
 		Name string `json:"name"`
 	}{name}))
 	var u User
-	err = decodeWrite(raw, err, &u)
+	err = decodeWrite(f.C, http.MethodPut, path, raw, err, &u)
 	return u, err
 }
 
@@ -70,10 +72,18 @@ type UserMatch struct {
 	ID, Name, By string
 }
 
+// Label is the user's name, or the id when the match has no name.
+func (m UserMatch) Label() string {
+	if m.Name != "" {
+		return m.Name
+	}
+	return m.ID
+}
+
 // MatchUser resolves s against the account's active users. It tries, in
 // order: an exact id, an exact name, a name ignoring case when only one user
 // has it, and an email ignoring case. More than one user with the name is a
-// Refusal. With idPassthrough, a value that matches nobody but has the form
+// Refusal, and so is a value that matches nobody. With idPassthrough, a value that matches nobody but has the form
 // of an id is returned as it is, so a deactivated user's id still works.
 func (f *Fizzy) MatchUser(s string, idPassthrough bool) (UserMatch, error) {
 	users, err := f.Users()
@@ -83,22 +93,16 @@ func (f *Fizzy) MatchUser(s string, idPassthrough bool) (UserMatch, error) {
 	return matchUser(users, s, idPassthrough)
 }
 
-// MatchUsers resolves each spec with the MatchUser rules, reading the user
-// list once. It drops a user named twice and keeps the first order. A spec
-// that matches nobody, or more than one user, is a Refusal.
-func (f *Fizzy) MatchUsers(specs []string) ([]UserMatch, error) {
-	users, err := f.Users()
-	if err != nil {
-		return nil, err
-	}
+// MatchUsersIn resolves each spec with the MatchUser rules, over a user
+// list the caller already holds. It drops a user named twice and keeps the
+// first order. A spec that matches nobody, or more than one user, is a
+// Refusal.
+func MatchUsersIn(users []User, specs []string) ([]UserMatch, error) {
 	var out []UserMatch
 	seen := map[string]bool{}
 	for _, s := range specs {
 		u, err := matchUser(users, s, false)
 		if err != nil {
-			if !IsRefusal(err) {
-				err = Refusal{err.Error()}
-			}
 			return nil, err
 		}
 		if !seen[u.ID] {
@@ -130,7 +134,7 @@ func matchUser(users []User, s string, idPassthrough bool) (UserMatch, error) {
 		case 1:
 			return UserMatch{named[0].ID, named[0].Name, "name"}, nil
 		default:
-			return UserMatch{}, refusef("%d users are named %s; use the user id or email", len(named), pyRepr(s))
+			return UserMatch{}, refusef("%d users are named %s; use the user id or email", len(named), PyRepr(s))
 		}
 	}
 	for _, u := range users {
@@ -143,9 +147,9 @@ func matchUser(users []User, s string, idPassthrough bool) (UserMatch, error) {
 	}
 	names := make([]string, len(users))
 	for i, u := range users {
-		names[i] = u.Name
+		names[i] = config.TerminalLine(u.Name)
 	}
-	return UserMatch{}, fmt.Errorf("no user %s (have: %s)", pyRepr(s), strings.Join(names, ", "))
+	return UserMatch{}, refusef("no user %s (have: %s)", PyRepr(s), strings.Join(names, ", "))
 }
 
 // looksLikeID reports whether s has the form of a Fizzy id: 20 to 32

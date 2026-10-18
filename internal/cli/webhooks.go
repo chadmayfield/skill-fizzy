@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
@@ -21,7 +22,7 @@ func addWebhookCommands(root *cobra.Command) {
 		Short: "manage a board's webhooks (account admins only)",
 		Long: "Work with a board's webhooks. A webhook sends card data to an outside URL, so create, edit and delete need --yes and print the URL and actions first.\n\n" +
 			"Only account admins can use these commands. The server answers 403 to anyone else.\n\n" +
-			"The signing secret is shown once, when you create a webhook. List and show hide it, also with --json. Use show --reveal-secret to print it again.\n\n" +
+			"The signing secret is shown once, when you create a webhook. List and show hide it, also with --json. Use show --json --reveal-secret to print it again; text output never includes it.\n\n" +
 			"Actions: " + strings.Join(fizzy.WebhookActions, ", ") + ".",
 	}
 	root.AddCommand(g)
@@ -47,8 +48,8 @@ func addWebhookCommands(root *cobra.Command) {
 		Use:   "create BOARD",
 		Short: "create a webhook (needs --yes)",
 		Long: "Create a webhook that sends the listed actions to a URL. The URL must be https, or http for localhost. " +
-			"It cannot change after creation. An empty or blank name exits 2 and sends nothing. Prints the URL and actions and refuses without --yes. " +
-			"The reply includes the signing secret. Create prints it once, in text and with --json, and list and show hide it afterwards.",
+			"It cannot change after creation. An empty or blank name exits 2 and sends nothing. A repeated action is sent once. Prints the board, the URL and the actions and refuses without --yes. " +
+			"The reply includes the signing secret. Create prints it once, to stderr next to the warning to save it, so stdout stays free of it. With --json it is in the JSON on stdout, because a script needs it, and the warning goes to stderr. List and show hide it afterwards.",
 		Example: examples(`fz webhook create Gate --name "Hinge alerts" --url https://fizzy.example.com/hook --actions card_closed,comment_created --yes`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(webhookCreate),
@@ -62,7 +63,8 @@ func addWebhookCommands(root *cobra.Command) {
 		Use:   "edit BOARD ID",
 		Short: "change a webhook's name or actions (needs --yes)",
 		Long: "Change a webhook's name or the actions it sends. The URL cannot change. " +
-			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes.",
+			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes. " +
+			"When the webhook already has the name and actions given, it says no change is needed, sends nothing and exits 0.",
 		Example: examples("fz webhook edit Gate 03abc123def456ghi789jkl0mn --actions card_closed --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(webhookEdit),
@@ -110,11 +112,15 @@ func adminOnly(err error) error {
 
 // webhookBoard returns the id of the board named by arg.
 func webhookBoard(fz *fizzy.Fizzy, arg string) (string, error) {
-	b, err := fz.Board(arg)
-	if err != nil {
-		return "", adminOnly(err)
-	}
-	return b.ID, nil
+	b, err := findWebhookBoard(fz, arg)
+	return b.ID, err
+}
+
+// findWebhookBoard returns the board named by arg. A 403 here comes from
+// the board list, not from a webhook call, so it is not blamed on the admin
+// role.
+func findWebhookBoard(fz *fizzy.Fizzy, arg string) (fizzy.Board, error) {
+	return fz.Board(arg)
 }
 
 func webhookLine(w fizzy.Webhook) string {
@@ -122,7 +128,7 @@ func webhookLine(w fizzy.Webhook) string {
 	if !w.Active {
 		state = "inactive"
 	}
-	return fmt.Sprintf("%s  [%s] %s -> %s  %s", w.ID, state, w.Name, w.PayloadURL, strings.Join(w.SubscribedActions, ","))
+	return line(fmt.Sprintf("%s  [%s] %s -> %s  %s", w.ID, state, w.Name, w.PayloadURL, strings.Join(w.SubscribedActions, ",")))
 }
 
 func deliveryLine(d fizzy.WebhookDelivery) string {
@@ -133,7 +139,7 @@ func deliveryLine(d fizzy.WebhookDelivery) string {
 			result += ": " + *d.Response.Error
 		}
 	}
-	return fmt.Sprintf("%s  %s  %s  %s", d.ID, d.State, d.Event.Action, result)
+	return line(fmt.Sprintf("%s  %s  %s  %s", d.ID, d.State, d.Event.Action, result))
 }
 
 // stripSecret drops signing_secret from a webhook's raw JSON and keeps every
@@ -165,11 +171,11 @@ func stripSecret(raw json.RawMessage) json.RawMessage {
 	return b
 }
 
-// splitActions splits a comma-separated flag, dropping blanks.
+// splitActions splits a comma-separated flag, dropping blanks and repeats.
 func splitActions(s string) []string {
 	var out []string
 	for _, a := range strings.Split(s, ",") {
-		if a = strings.TrimSpace(a); a != "" {
+		if a = strings.TrimSpace(a); a != "" && !slices.Contains(out, a) {
 			out = append(out, a)
 		}
 	}
@@ -219,22 +225,22 @@ func webhookShow(c *cmdContext, a []string) error {
 // refuseWithoutYes prints what would be sent and where, then refuses unless
 // --yes is set.
 func refuseWithoutYes(c *cmdContext, summary string) error {
-	fmt.Fprintln(c.errw(), summary)
+	fmt.Fprintln(c.errw(), line(summary))
 	if yes, _ := c.cmd.Flags().GetBool("yes"); !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	return nil
 }
 
 func webhookCreate(c *cmdContext, a []string) error {
 	name, _ := c.cmd.Flags().GetString("name")
+	name = strings.TrimSpace(name)
 	hookURL, _ := c.cmd.Flags().GetString("url")
 	actions := splitActions(flagValue(c.cmd, "actions"))
 	switch {
-	case name == "":
+	case !c.cmd.Flags().Changed("name"):
 		return usagef("--name is required")
-	case strings.TrimSpace(name) == "":
+	case name == "":
 		return checkName("--name", name)
 	case hookURL == "":
 		return usagef("--url is required")
@@ -251,25 +257,29 @@ func webhookCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	board, err := webhookBoard(fz, a[0])
+	b, err := findWebhookBoard(fz, a[0])
 	if err != nil {
 		return err
 	}
-	if err := refuseWithoutYes(c, fmt.Sprintf("about to create webhook %s: card data on board %s goes to %s for %s",
-		pyRepr(name), a[0], hookURL, strings.Join(actions, ","))); err != nil {
+	if err := refuseWithoutYes(c, fmt.Sprintf("about to create webhook %s: card data on board %s (%s) goes to %s for %s",
+		pyRepr(name), b.Name, b.ID, hookURL, strings.Join(actions, ","))); err != nil {
 		return err
 	}
-	h, err := fz.CreateWebhook(board, name, hookURL, actions)
+	h, err := fz.CreateWebhook(b.ID, name, hookURL, actions)
 	if err != nil {
 		return adminOnly(err)
 	}
 	if c.dryRun {
 		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("", "create webhook "+pyRepr(name)))
 	}
-	text := "webhook created: " + orNone(h.ID)
+	text := "webhook created: " + line(orNone(h.ID))
 	if h.SigningSecret != "" {
+		// The secret goes to stderr, so stdout can be logged without it.
+		// With --json it stays in the JSON, because a script needs it.
 		fmt.Fprintln(c.errw(), "save the signing secret now; fz hides it from list and show")
-		text += "\nsigning secret: " + h.SigningSecret
+		if flagValue(c.cmd, "json") != "true" {
+			fmt.Fprintln(c.errw(), "signing secret: "+line(h.SigningSecret))
+		}
 	}
 	if h.Raw() != nil {
 		return emit(c.cmd, h.Raw(), text)
@@ -281,6 +291,7 @@ func webhookEdit(c *cmdContext, a []string) error {
 	var name *string
 	if c.cmd.Flags().Changed("name") {
 		n, _ := c.cmd.Flags().GetString("name")
+		n = strings.TrimSpace(n)
 		if err := checkName("--name", n); err != nil {
 			return err
 		}
@@ -311,6 +322,10 @@ func webhookEdit(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
+	if (name == nil || *name == h.Name) && (actions == nil || sameIDs(actions, h.SubscribedActions)) {
+		return emit(c.cmd, c.dry(obj{{"id", h.ID}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("webhook %s already has these values; no change needed", line(h.ID))))
+	}
 	var changes []string
 	if name != nil {
 		changes = append(changes, "name "+pyRepr(*name))
@@ -318,7 +333,7 @@ func webhookEdit(c *cmdContext, a []string) error {
 	if actions != nil {
 		changes = append(changes, "actions "+strings.Join(actions, ","))
 	}
-	if err := refuseWithoutYes(c, fmt.Sprintf("about to change webhook %s sending to %s: %s", h.ID, h.PayloadURL, strings.Join(changes, "; "))); err != nil {
+	if err := refuseWithoutYes(c, fmt.Sprintf("about to change webhook %s sending to %s: %s", line(h.ID), line(h.PayloadURL), strings.Join(changes, "; "))); err != nil {
 		return err
 	}
 	upd, err := fz.UpdateWebhook(board, a[1], name, actions)
@@ -353,7 +368,7 @@ func webhookDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
-	if err := refuseWithoutYes(c, fmt.Sprintf("about to delete webhook %s: %s sending %s", h.ID, h.PayloadURL, strings.Join(h.SubscribedActions, ","))); err != nil {
+	if err := refuseWithoutYes(c, line(fmt.Sprintf("about to delete webhook %s %s: %s sending %s", h.ID, pyRepr(h.Name), h.PayloadURL, strings.Join(h.SubscribedActions, ",")))); err != nil {
 		return err
 	}
 	if err := fz.DeleteWebhook(board, a[1]); err != nil {
@@ -378,7 +393,7 @@ func webhookActivate(c *cmdContext, a []string) error {
 	text := "webhook " + a[1] + " activated"
 	switch {
 	case !changed:
-		text = "webhook " + a[1] + " already active"
+		text = noChange(c, "webhook "+a[1]+" already active")
 	case c.dryRun:
 		text = c.wrote("", "activate webhook "+a[1])
 	}

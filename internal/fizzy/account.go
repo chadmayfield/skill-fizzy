@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
@@ -192,11 +193,11 @@ func (e *Export) UnmarshalJSON(data []byte) error {
 
 // decodeWrite decodes a write's reply into v. A nil reply (dry run or an
 // empty body) leaves v as it is.
-func decodeWrite(raw json.RawMessage, err error, v any) error {
+func decodeWrite(c *client.Client, method, path string, raw json.RawMessage, err error, v any) error {
 	if err != nil || raw == nil {
 		return err
 	}
-	return json.Unmarshal(raw, v)
+	return client.ReplyError(method, c.RequestPath(path, true), json.Unmarshal(raw, v))
 }
 
 // -- account --------------------------------------------------------------
@@ -211,10 +212,8 @@ func (f *Fizzy) AccountSettings() (Account, error) {
 // ValidPostponeDays checks days against AutoPostponeDays. Fizzy's Entropy
 // model uses the same list for accounts and boards.
 func ValidPostponeDays(days int) error {
-	for _, d := range AutoPostponeDays {
-		if d == days {
-			return nil
-		}
+	if slices.Contains(AutoPostponeDays, days) {
+		return nil
 	}
 	return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
 }
@@ -230,7 +229,7 @@ func (f *Fizzy) PostponeAccount(days int) (Account, error) {
 	raw, err := f.C.Write(http.MethodPut, "/account/entropy", wrap("entropy", struct {
 		Days int `json:"auto_postpone_period_in_days"`
 	}{days}))
-	return a, decodeWrite(raw, err, &a)
+	return a, decodeWrite(f.C, http.MethodPut, "/account/entropy", raw, err, &a)
 }
 
 // -- identity -------------------------------------------------------------
@@ -242,7 +241,7 @@ func (f *Fizzy) Identity() (Identity, error) {
 	if err != nil {
 		return id, err
 	}
-	err = json.Unmarshal(payload, &id)
+	err = client.ReplyError(http.MethodGet, f.C.RequestPath("/my/identity", false), json.Unmarshal(payload, &id))
 	return id, err
 }
 
@@ -351,25 +350,16 @@ func (f *Fizzy) Activities(boardID, creatorID string, limit int) ([]Activity, er
 // every page, as list does.
 func listUpTo[T any](c *client.Client, path string, limit int) ([]T, error) {
 	var out []T
-	next := c.URL(path, true)
-	seen := map[string]bool{}
-	for next != "" && (limit == 0 || len(out) < limit) {
-		if seen[next] {
-			return nil, fmt.Errorf("pagination loop: %s linked again", next)
+	err := c.EachPage(path, func(payload []byte) (bool, error) {
+		var page []T
+		if err := json.Unmarshal(payload, &page); err != nil {
+			return false, client.ReplyError(http.MethodGet, c.RequestPath(path, true), err)
 		}
-		seen[next] = true
-		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
-		if err != nil {
-			return nil, err
-		}
-		if len(payload) > 0 {
-			var page []T
-			if err := json.Unmarshal(payload, &page); err != nil {
-				return nil, err
-			}
-			out = append(out, page...)
-		}
-		next = client.NextLink(hdr.Get("Link"))
+		out = append(out, page...)
+		return limit > 0 && len(out) >= limit, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
@@ -384,7 +374,7 @@ func listUpTo[T any](c *client.Client, path string, limit int) ([]T, error) {
 func (f *Fizzy) StartAccountExport() (Export, error) {
 	var e Export
 	raw, err := f.C.Write(http.MethodPost, "/account/exports", nil)
-	return e, decodeWrite(raw, err, &e)
+	return e, decodeWrite(f.C, http.MethodPost, "/account/exports", raw, err, &e)
 }
 
 // StartMyExport starts a personal data export for the current user. The
@@ -395,8 +385,12 @@ func (f *Fizzy) StartMyExport() (Export, error) {
 	if err != nil {
 		return e, err
 	}
-	raw, err := f.C.Write(http.MethodPost, "/users/"+url.PathEscape(me.ID)+"/data_exports", nil)
-	return e, decodeWrite(raw, err, &e)
+	if err := CheckIDs(me.ID); err != nil {
+		return e, err
+	}
+	path := "/users/" + url.PathEscape(me.ID) + "/data_exports"
+	raw, err := f.C.Write(http.MethodPost, path, nil)
+	return e, decodeWrite(f.C, http.MethodPost, path, raw, err, &e)
 }
 
 // AccountExport fetches an account export's status.
@@ -417,6 +411,9 @@ func (f *Fizzy) MyExport(id string) (Export, error) {
 	var e Export
 	me, err := f.Me()
 	if err != nil {
+		return e, err
+	}
+	if err := CheckIDs(me.ID); err != nil {
 		return e, err
 	}
 	err = f.C.Get("/users/"+url.PathEscape(me.ID)+"/data_exports/"+url.PathEscape(id), &e)

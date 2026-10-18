@@ -157,7 +157,10 @@ func TestUserTimezone(t *testing.T) {
 
 func TestUserTimezoneRejectsBadNames(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
-	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "posixrules", "Factory"} {
+	// A name in the wrong case is refused on every system, even where the
+	// file system ignores case.
+	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "posixrules", "Factory",
+		"america/denver", "AMERICA/DENVER", "Etc/gmt+7", "utc", "zone.tab", "+VERSION", "posix/America/Denver", "right/UTC"} {
 		r := runGo([]string{"user", "timezone", name})
 		if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: ") {
 			t.Errorf("%q: got %+v", name, r)
@@ -170,12 +173,13 @@ func TestUserTimezoneRejectsBadNames(t *testing.T) {
 
 func TestUserTimezoneAcceptsExactNames(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
-	for _, name := range []string{"America/Denver", "Europe/London", "America/Argentina/Buenos_Aires", "UTC"} {
+	names := []string{"America/Denver", "Europe/London", "America/Argentina/Buenos_Aires", "UTC", "EST", "US/Mountain", "Etc/GMT+7"}
+	for _, name := range names {
 		if r := runGo([]string{"user", "timezone", name}); r.code != 0 {
 			t.Errorf("%q: got %+v", name, r)
 		}
 	}
-	if len(calls()) != 4 {
+	if len(calls()) != len(names) {
 		t.Errorf("calls = %q", callList(calls()))
 	}
 }
@@ -223,7 +227,7 @@ func TestUserShowAndEditMatchUser(t *testing.T) {
 	}
 }
 
-// A USER that matches nobody exits 1, and one that two users share exits 2.
+// A USER that matches nobody, or one that two users share, exits 2.
 // Neither sends a write.
 func TestUserShowAndEditUnknownOrAmbiguous(t *testing.T) {
 	twin := strings.Replace(strings.Replace(acctUser2, `"U2"`, `"U3"`, 1), `"Sam"`, `"alex"`, 1)
@@ -232,8 +236,8 @@ func TestUserShowAndEditUnknownOrAmbiguous(t *testing.T) {
 		args []string
 		code int
 	}{
-		{[]string{"user", "show", "Nobody"}, 1},
-		{[]string{"user", "edit", "Nobody", "--name", "Gate Keeper", "--yes"}, 1},
+		{[]string{"user", "show", "Nobody"}, 2},
+		{[]string{"user", "edit", "Nobody", "--name", "Gate Keeper", "--yes"}, 2},
 		{[]string{"user", "show", "ALEX"}, 2},
 		{[]string{"user", "edit", "ALEX", "--name", "Gate Keeper", "--yes"}, 2},
 	} {

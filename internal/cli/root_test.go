@@ -80,3 +80,14 @@ func TestRun(t *testing.T) {
 		})
 	}
 }
+
+// The root help's EXIT STATUS and FILES text match what fz does.
+func TestRootHelpExitAndFiles(t *testing.T) {
+	long := NewRoot().Long
+	if !strings.Contains(long, "2 means a usage error or any refusal.") {
+		t.Errorf("EXIT STATUS does not cover every refusal:\n%s", long)
+	}
+	if !strings.Contains(long, "FIZZY_TOKEN_CMD") || !strings.Contains(long[strings.Index(long, "FILES"):strings.Index(long, "ENVIRONMENT")], "FIZZY_TOKEN_CMD") {
+		t.Errorf("FILES does not name FIZZY_TOKEN_CMD:\n%s", long)
+	}
+}

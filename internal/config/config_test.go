@@ -145,7 +145,7 @@ func TestNoTokenSource(t *testing.T) {
 }
 
 func TestTokenCmdFailureHidesOutput(t *testing.T) {
-	c := &Config{TokenCmd: `sh -c 'echo SECRET; echo SECRET >&2; exit 1'`}
+	c := &Config{TokenCmd: `sh -c 'echo SECRET; echo denied >&2; exit 1'`}
 	_, err := c.ResolveToken()
 	if err == nil || strings.Contains(err.Error(), "SECRET") {
 		t.Errorf("err = %v", err)

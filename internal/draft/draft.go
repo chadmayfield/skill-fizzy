@@ -3,14 +3,14 @@
 // A draft starts with front matter (board, and optionally column, tags,
 // golden, card, synced, synced-fields), then a "# Title" line, then a body.
 // The "## Steps" section becomes Fizzy steps and everything else except the
-// title becomes the card description. This is a port of the Python fz's draft.py (removed in
-// 562a4a9); the whitespace and regular expression rules follow Python's so
-// both parsers agree.
+// title becomes the card description. The whitespace and pattern rules
+// follow the earlier Python fz, whose output the draft goldens pin.
 package draft
 
 import (
 	"errors"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,6 +25,16 @@ import (
 // ErrDraft is matched by errors.Is for every problem found in a draft.
 var ErrDraft = errors.New("draft error")
 
+// ErrImagePath is matched by errors.Is for an image target fz refuses: one
+// that resolves outside the draft's folder and the inbox, or that holds
+// -->, < or >. Such an error also matches ErrDraft.
+var ErrImagePath = errors.New("image path refused")
+
+// ErrBadValue is matched by errors.Is for a front matter value that fz
+// refuses rather than guess at, such as card: 87abc or golden: maybe. Every
+// such error also matches ErrDraft.
+var ErrBadValue = errors.New("bad front matter value")
+
 type draftError struct{ msg string }
 
 func (e *draftError) Error() string        { return e.msg }
@@ -32,6 +42,19 @@ func (e *draftError) Is(target error) bool { return target == ErrDraft }
 
 func errf(format string, args ...any) error {
 	return &draftError{fmt.Sprintf(format, args...)}
+}
+
+// imageError is an image target fz refuses. It matches ErrImagePath and
+// ErrDraft.
+type imageError struct{ msg string }
+
+func (e *imageError) Error() string { return e.msg }
+func (e *imageError) Is(target error) bool {
+	return target == ErrImagePath || target == ErrDraft
+}
+
+func imagef(format string, args ...any) error {
+	return &imageError{fmt.Sprintf(format, args...)}
 }
 
 // pySpace is the class of characters Python's str.isspace and \s accept.
@@ -106,22 +129,52 @@ func splitLines(s string) []string {
 	return out
 }
 
-// readText reads a file the way Python's read_text does: universal newlines.
-func readText(path string) (string, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
+// commentStart returns where a # comment starts in a front matter line, or
+// -1. A comment is a # after whitespace and before whitespace or the end of
+// the line. A # inside a quoted value, or inside a quoted item of a [list],
+// is part of the value. A quote counts only where a value or list item
+// starts and only when the same quote closes it later on the line, so an
+// apostrophe in a plain value does not hide a comment.
+func commentStart(line string) int {
+	afterColon, itemStart := false, false
+	var quote rune
+	prev := rune(-1)
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case itemStart && (r == '"' || r == '\'') && strings.ContainsRune(line[i+1:], r):
+			quote, itemStart = r, false
+		case r == '#' && prev >= 0 && isSpace(prev):
+			next, _ := utf8.DecodeRuneInString(line[i+1:])
+			if i+1 == len(line) || isSpace(next) {
+				// The comment takes the whitespace before it too.
+				return len(strings.TrimRightFunc(line[:i], isSpace))
+			}
+			itemStart = false
+		case !afterColon && r == ':':
+			afterColon, itemStart = true, true
+		case afterColon && (r == '[' || r == ','):
+			itemStart = true
+		case isSpace(r):
+		default:
+			itemStart = false
+		}
+		prev = r
 	}
-	s := strings.ReplaceAll(string(raw), "\r\n", "\n")
-	return strings.ReplaceAll(s, "\r", "\n"), nil
+	return -1
 }
 
-func parseFront(text string) (map[string]string, error) {
-	meta := map[string]string{}
+// parseFront reads the front matter lines. It returns each key's value and
+// the line it came from, for error messages. The last line for a key wins.
+func parseFront(text string) (meta, lines map[string]string, err error) {
+	meta, lines = map[string]string{}, map[string]string{}
 	for _, raw := range splitLines(text) {
 		line := raw
-		if loc := commentRe.FindStringIndex(raw); loc != nil {
-			line = raw[:loc[0]]
+		if i := commentStart(raw); i >= 0 {
+			line = raw[:i]
 		}
 		line = strings.TrimRightFunc(line, isSpace)
 		if pyStrip(line) == "" || strings.HasPrefix(strings.TrimLeftFunc(line, isSpace), "#") {
@@ -129,13 +182,23 @@ func parseFront(text string) (map[string]string, error) {
 		}
 		k, v, ok := strings.Cut(line, ":")
 		if !ok {
-			return nil, errf("front matter line has no ':': '%s'", raw)
+			return nil, nil, errf("front matter line has no ':': '%s'", raw)
 		}
 		v = strings.Trim(pyStrip(v), `"`)
 		v = strings.Trim(v, `'`)
-		meta[strings.ToLower(pyStrip(k))] = v
+		key := strings.ToLower(pyStrip(k))
+		meta[key] = v
+		lines[key] = pyStrip(raw)
 	}
-	return meta, nil
+	return meta, lines, nil
+}
+
+// unquote removes one matching pair of single or double quotes around s.
+func unquote(s string) string {
+	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
+		return s[1 : len(s)-1]
+	}
+	return s
 }
 
 func splitList(value string) []string {
@@ -145,7 +208,8 @@ func splitList(value string) []string {
 		if pyStrip(t) == "" {
 			continue
 		}
-		t = strings.TrimLeft(pyStrip(t), "#")
+		t = pyStrip(unquote(pyStrip(t)))
+		t = strings.TrimLeft(t, "#")
 		t = strings.Trim(pyStrip(t), `"`)
 		tags = append(tags, strings.ToLower(t))
 	}
@@ -178,15 +242,16 @@ func parseStep(line string) (content string, done, ok bool) {
 
 // Parse reads and validates a draft file.
 func Parse(path string) (*Draft, error) {
-	text, err := readText(path)
+	src, err := readSource(path)
 	if err != nil {
 		return nil, err
 	}
+	text := src.text
 	m := frontRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		return nil, errf("%s: missing front matter (--- board: ... ---)", path)
 	}
-	meta, err := parseFront(text[m[2]:m[3]])
+	meta, lines, err := parseFront(text[m[2]:m[3]])
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +264,19 @@ func Parse(path string) (*Draft, error) {
 	haveTitle := false
 	var body []string
 	steps := []Step{}
-	inSteps := false
+	inSteps, inFence := false, false
 	for _, line := range strings.Split(rest, "\n") {
+		// Inside a fenced code block, as markdown.ToHTML reads one, a
+		// heading is code, not the title or the Steps section.
+		if !inSteps && strings.HasPrefix(pyStrip(line), "```") {
+			inFence = !inFence
+			body = append(body, line)
+			continue
+		}
+		if inFence {
+			body = append(body, line)
+			continue
+		}
 		h := headingRe.FindStringSubmatch(line)
 		if h != nil && len(h[1]) == 1 && !haveTitle {
 			title, haveTitle = h[2], true
@@ -230,18 +306,17 @@ func Parse(path string) (*Draft, error) {
 	if column == "" {
 		column = "Maybe?"
 	}
-	card := 0
-	if c := meta["card"]; c != "" && isASCIIDigits(c) {
-		if n, err := strconv.Atoi(c); err == nil {
-			card = n
-		}
+	card, err := cardNumber(meta["card"])
+	if err != nil {
+		return nil, badValue(path, lines["card"], err.Error())
 	}
 	golden := false
-	if g, ok := meta["golden"]; ok {
-		switch strings.ToLower(g) {
-		case "true", "yes", "1":
-			golden = true
-		}
+	switch strings.ToLower(meta["golden"]) {
+	case "true", "yes", "on", "1":
+		golden = true
+	case "", "false", "no", "off", "0":
+	default:
+		return nil, badValue(path, lines["golden"], "golden: must be true or false (yes, no, on, off, 1 and 0 also work)")
 	}
 	return &Draft{
 		Path:   path,
@@ -256,6 +331,34 @@ func Parse(path string) (*Draft, error) {
 		Steps:  steps,
 		Meta:   meta,
 	}, nil
+}
+
+// cardNumber reads a card: value: a card number such as 87, or #87 the way
+// Fizzy writes it. An empty value means the draft has no card yet.
+func cardNumber(v string) (int, error) {
+	if v == "" {
+		return 0, nil
+	}
+	digits := strings.TrimPrefix(v, "#")
+	if isASCIIDigits(digits) {
+		if n, err := strconv.Atoi(digits); err == nil && n > 0 {
+			return n, nil
+		}
+	}
+	return 0, errors.New("card: must be a card number such as 87 or #87")
+}
+
+// valueError is a front matter value fz will not guess at. It is a draft
+// error, and the CLI refuses it with exit 2.
+type valueError struct{ msg string }
+
+func (e *valueError) Error() string { return e.msg }
+func (e *valueError) Is(target error) bool {
+	return target == ErrDraft || target == ErrBadValue
+}
+
+func badValue(path, line, why string) error {
+	return &valueError{fmt.Sprintf("%s: front matter line '%s': %s", path, line, why)}
 }
 
 func isASCIIDigits(s string) bool {
@@ -296,7 +399,42 @@ func pyRepr(s string) string {
 	return b.String()
 }
 
-// Links returns the distinct http(s) URLs in the body, in order of first use.
+// blankCode returns text with fenced code blocks and inline code spans
+// turned into spaces, so Links finds no URL inside code. Offsets and line
+// breaks stay where they were.
+func blankCode(text string) string {
+	lines := strings.Split(text, "\n")
+	inFence := false
+	for i, line := range lines {
+		fence := strings.HasPrefix(pyStrip(line), "```")
+		if inFence || fence {
+			lines[i] = strings.Repeat(" ", len(line))
+			if fence {
+				inFence = !inFence
+			}
+			continue
+		}
+		b := []byte(line)
+		for j := 0; j < len(b); j++ {
+			if b[j] != '`' {
+				continue
+			}
+			k := strings.IndexByte(line[j+1:], '`')
+			if k <= 0 {
+				continue
+			}
+			for x := j; x <= j+1+k; x++ {
+				b[x] = ' '
+			}
+			j += k + 1
+		}
+		lines[i] = string(b)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Links returns the distinct http(s) URLs in the body, in order of first
+// use, leaving out any URL inside code.
 // The Python pattern is
 //
 //	\[[^\]]*\]\((https?://[^)\s]+)\)|(?<![("])\b(https?://[^\s<>)]+[^\s<>).,;:!?])
@@ -311,7 +449,7 @@ func (d *Draft) Links() []string {
 			found = append(found, u)
 		}
 	}
-	text := d.BodyMD
+	text := blankCode(d.BodyMD)
 	for i := 0; i < len(text); {
 		if m := mdLinkRe.FindStringSubmatch(text[i:]); m != nil {
 			add(m[1])
@@ -335,19 +473,15 @@ func (d *Draft) Links() []string {
 }
 
 // Images returns the targets of image lines; only these become attachments.
-func (d *Draft) Images() []string {
-	out := []string{}
-	for _, line := range splitLines(d.BodyMD) {
-		if _, target, ok := markdown.ImageLine(line); ok {
-			out = append(out, target)
-		}
-	}
-	return out
-}
+// It finds them as markdown.ToHTML does, so the files fz uploads are the
+// ones the description embeds: a line inside a code fence is code, and
+// only \n ends a line.
+func (d *Draft) Images() []string { return markdown.ImageTargets(d.BodyMD) }
 
-// CheckImages fails if an image would not embed or its file is missing.
+// CheckImages fails if an image would not embed, if its target is refused
+// (see ResolveImage), or if its file is missing.
 func (d *Draft) CheckImages(inbox string) error {
-	for _, line := range splitLines(d.BodyMD) {
+	for _, line := range markdown.TextLines(d.BodyMD) {
 		if imageRe.MatchString(line) {
 			if _, _, ok := markdown.ImageLine(line); !ok {
 				return errf("image must be on a line by itself to embed: %s", pyRepr(pyStrip(line)))
@@ -362,25 +496,78 @@ func (d *Draft) CheckImages(inbox string) error {
 	return nil
 }
 
-// ResolveImage finds an image file: relative paths try the draft's folder,
-// then the inbox.
-func (d *Draft) ResolveImage(target, inbox string) (string, error) {
-	p := target
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			p = filepath.Join(home, p[1:])
+// CheckImagePaths fails with an ErrImagePath error if any image target is
+// refused. A missing file is not an error here, so draft preview can show a
+// draft whose images are not there yet.
+func (d *Draft) CheckImagePaths(inbox string) error {
+	for _, img := range d.Images() {
+		if _, err := d.ResolveImage(img, inbox); errors.Is(err, ErrImagePath) {
+			return err
 		}
+	}
+	return nil
+}
+
+// ResolveImage finds an image file and returns its real path. A target is
+// a path relative to the draft's folder, tried first, or to the inbox, and
+// it must stay inside one of the two after symlinks are resolved. An
+// absolute path, a ~ path, a path whose .. leaves both folders, a symlink
+// out of them, and a target holding -->, < or > are refused with an
+// ErrImagePath error. A missing file is an ErrDraft error.
+func (d *Draft) ResolveImage(target, inbox string) (string, error) {
+	if strings.Contains(target, "-->") || strings.ContainsAny(target, "<>") {
+		return "", imagef("image %s: the path must not hold -->, < or >", pyRepr(target))
+	}
+	if filepath.IsAbs(target) || target == "~" || strings.HasPrefix(target, "~/") || filepath.VolumeName(target) != "" {
+		return "", imagef("image %s: give a path relative to the draft's folder or the inbox; fz does not attach an absolute or ~ path", pyRepr(target))
+	}
+	type root struct{ abs, real string }
+	var roots []root
+	for _, dir := range []string{filepath.Dir(d.Path), inbox} {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		real := abs
+		if r, err := filepath.EvalSymlinks(abs); err == nil {
+			real = r
+		}
+		roots = append(roots, root{abs, real})
+	}
+	inside := func(p string, real bool) bool {
+		for _, r := range roots {
+			base := r.abs
+			if real {
+				base = r.real
+			}
+			if rel, err := filepath.Rel(base, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return true
+			}
+		}
+		return false
 	}
 	var candidates []string
-	if filepath.IsAbs(p) {
-		candidates = []string{filepath.Clean(p)}
-	} else {
-		candidates = []string{filepath.Join(filepath.Dir(d.Path), p), filepath.Join(inbox, p)}
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(c); err == nil && st.Mode().IsRegular() {
-			return c, nil
+	for _, r := range roots {
+		c := filepath.Join(r.abs, target)
+		if !inside(c, false) {
+			continue
 		}
+		candidates = append(candidates, c)
+		st, err := os.Stat(c)
+		if err != nil || !st.Mode().IsRegular() {
+			continue
+		}
+		real, err := filepath.EvalSymlinks(c)
+		if err != nil {
+			continue
+		}
+		if !inside(real, true) {
+			return "", imagef("image %s: it leads to %s, outside the draft's folder and the inbox", pyRepr(target), real)
+		}
+		return real, nil
+	}
+	if len(candidates) == 0 {
+		return "", imagef("image %s: the path leaves the draft's folder and the inbox", pyRepr(target))
 	}
 	return "", errf("image not found: %s (looked in %s)", target, strings.Join(candidates, ", "))
 }
@@ -394,48 +581,10 @@ func (d *Draft) DescriptionHTML(sgids map[string]string) string {
 		if sgid, ok := sgids[target]; ok {
 			out = strings.ReplaceAll(out, placeholder, `<action-text-attachment sgid="`+sgid+`"></action-text-attachment>`)
 		} else {
-			out = strings.ReplaceAll(out, placeholder, "<p>[image: "+target+"]</p>")
+			out = strings.ReplaceAll(out, placeholder, "<p>[image: "+html.EscapeString(target)+"]</p>")
 		}
 	}
 	return out
-}
-
-// RecordFields writes key: value lines into the front matter. An existing line
-// for the same key (any case) is dropped, the rest keep their order, and the
-// new lines go at the end in the order given.
-func RecordFields(path string, fields ...KV) error {
-	text, err := readText(path)
-	if err != nil {
-		return err
-	}
-	m := frontRe.FindStringSubmatchIndex(text)
-	if m == nil {
-		return errf("%s: missing front matter", path)
-	}
-	var front []string
-	for _, ln := range splitLines(text[m[2]:m[3]]) {
-		lower := strings.ToLower(pyStrip(ln))
-		drop := false
-		for _, f := range fields {
-			if strings.HasPrefix(lower, strings.ToLower(f.Key)+":") {
-				drop = true
-				break
-			}
-		}
-		if !drop {
-			front = append(front, ln)
-		}
-	}
-	for _, f := range fields {
-		front = append(front, f.Key+": "+f.Value)
-	}
-	out := "---\n" + strings.Join(front, "\n") + "\n---\n" + text[m[1]:]
-	return os.WriteFile(path, []byte(out), 0o644)
-}
-
-// RecordCard writes card: n into the draft's front matter.
-func RecordCard(path string, n int) error {
-	return RecordFields(path, KV{"card", strconv.Itoa(n)})
 }
 
 // CardStep is a step already on a card.

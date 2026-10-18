@@ -1,6 +1,10 @@
 package cli
 
-import "strings"
+import (
+	"slices"
+	"strconv"
+	"strings"
+)
 
 // simple maps fz 0.1 command names to their noun form.
 var simple = map[string][]string{
@@ -18,7 +22,7 @@ func commandIndex(args []string) int {
 	for i < len(args) {
 		a := args[i]
 		switch {
-		case a == "--dry-run" || a == "--json" || strings.HasPrefix(a, "--config="):
+		case a == "--dry-run" || a == "--json" || strings.HasPrefix(a, "--config=") || isBoolFlagValue(a):
 			i++
 		case a == "--config":
 			i += 2
@@ -27,6 +31,18 @@ func commandIndex(args []string) int {
 		}
 	}
 	return i
+}
+
+// isBoolFlagValue reports whether a is --json or --dry-run with a value,
+// such as --json=true, in a form the flag parser accepts.
+func isBoolFlagValue(a string) bool {
+	for _, f := range []string{"--json=", "--dry-run="} {
+		if v, ok := strings.CutPrefix(a, f); ok {
+			_, err := strconv.ParseBool(v)
+			return err == nil
+		}
+	}
+	return false
 }
 
 func isNumber(s string) bool {
@@ -42,10 +58,15 @@ func isNumber(s string) bool {
 }
 
 // oldStep rewrites the arguments after "step" in "step N TEXT", "step N
-// --check ID" and "step N --uncheck ID" (or --check=ID).
+// --check ID" and "step N --uncheck ID" (or --check=ID). Words after "--"
+// are text, so a --check there is never read as a flag.
 func oldStep(rest []string) []string {
+	flags := rest
+	if i := slices.Index(rest, "--"); i >= 0 {
+		flags = rest[:i]
+	}
 	for _, f := range []struct{ flag, sub string }{{"--check", "check"}, {"--uncheck", "uncheck"}} {
-		for j, a := range rest {
+		for j, a := range flags {
 			if a == f.flag && j+1 < len(rest) {
 				others := append(append([]string{}, rest[:j]...), rest[j+2:]...)
 				return append([]string{"step", f.sub, others[0], rest[j+1]}, others[1:]...)
