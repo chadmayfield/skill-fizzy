@@ -225,6 +225,10 @@ func TestCardBoostNoBody(t *testing.T) {
 	if r.code != 0 || r.stdout != "boost added to card #87\n" {
 		t.Fatalf("got %+v", r)
 	}
+	r = runGo([]string{"--json", "card", "boost", "87", "ok"})
+	if r.code != 0 || r.stdout != "{\n  \"number\": 87,\n  \"content\": \"ok\"\n}\n" {
+		t.Fatalf("json %+v", r)
+	}
 }
 
 func TestCardBoostTooLong(t *testing.T) {
@@ -247,6 +251,10 @@ func TestCardBoostDryRun(t *testing.T) {
 	r := runGo([]string{"--dry-run", "card", "boost", "87", "ok"})
 	if r.code != 0 || r.stdout != "dry-run: nothing sent; would add a boost to card #87\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
 		t.Fatalf("got %+v", r)
+	}
+	r = runGo([]string{"--dry-run", "--json", "card", "boost", "87", "ok"})
+	if r.code != 0 || r.stdout != "{\n  \"number\": 87,\n  \"content\": \"ok\",\n  \"dry_run\": true\n}\n" {
+		t.Fatalf("json %+v", r)
 	}
 	if len(calls()) != 0 {
 		t.Errorf("sent %+v", calls())

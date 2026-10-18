@@ -180,11 +180,13 @@ func cardBoost(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	// With no reply body there is no boost id, so the JSON holds what fz
+	// sent instead of a null id.
 	if c.dryRun {
-		return emit(c.cmd, c.dry(obj{{"number", n}, {"id", nil}}), c.wrote("", fmt.Sprintf("add a boost to card #%d", n)))
+		return emit(c.cmd, c.dry(obj{{"number", n}, {"content", a[1]}}), c.wrote("", fmt.Sprintf("add a boost to card #%d", n)))
 	}
 	if raw == nil {
-		return emit(c.cmd, obj{{"number", n}, {"id", nil}}, fmt.Sprintf("boost added to card #%d", n))
+		return emit(c.cmd, obj{{"number", n}, {"content", a[1]}}, fmt.Sprintf("boost added to card #%d", n))
 	}
 	return emit(c.cmd, raw, fmt.Sprintf("boost %s added to card #%d", rawString(raw, "id"), n))
 }
