@@ -33,7 +33,7 @@ func addPeopleCommands(root *cobra.Command) {
 
 	users := &cobra.Command{
 		Use:   "user",
-		Short: "list, show and rename users",
+		Short: "list, show and rename users, and set your timezone",
 		Long:  "Work with the people on the account.",
 	}
 	edit := &cobra.Command{
