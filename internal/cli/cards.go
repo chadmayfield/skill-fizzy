@@ -66,7 +66,9 @@ func addCardCommands(root *cobra.Command) {
 		Short: "create a card",
 		Long: "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing. " +
 			"fz checks --column before the create, so a missing, shared or reserved column name sends nothing. A tag given twice is sent once. " +
-			"If a call after the create fails, the error names the new card number.",
+			"If a check after the create refuses, the error says the card was created and names its number. " +
+			"Any other failure after the create prints the request that failed, whose path holds the card number, such as /1/cards/90/triage. " +
+			"Finish that card by hand rather than creating it again.",
 		Example: examples(`fz card create Home "Fix the gate"`, `fz card create Home "Fix the gate" --column Next --tag buy`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardCreate),
