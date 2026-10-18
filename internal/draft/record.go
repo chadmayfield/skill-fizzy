@@ -169,6 +169,16 @@ func RecordFields(path string, fields ...KV) error {
 	return rewriteFront(path, keys, fields)
 }
 
+// RecordFieldsDropping removes the front matter lines whose key is in drop,
+// any case, then writes fields as RecordFields does.
+func RecordFieldsDropping(path string, drop []string, fields ...KV) error {
+	keys := append([]string(nil), drop...)
+	for _, f := range fields {
+		keys = append(keys, f.Key)
+	}
+	return rewriteFront(path, keys, fields)
+}
+
 // rewriteFront drops every front matter line whose key is in drop, any
 // case, and writes fields as RecordFields does.
 func rewriteFront(path string, drop []string, fields []KV) error {

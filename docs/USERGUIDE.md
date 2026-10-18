@@ -1010,8 +1010,8 @@ After every apply, `fz` writes three more lines into the draft's front matter.
   state and Not now state.
 - `synced-fields:` holds a short hash of each of those fields.
 - `synced-draft:` is a hash of the draft's title, body and image files, as
-  they were when the apply began. An apply that stops partway leaves it as it
-  was. A draft from an older `fz` has no such line; its next `--update`
+  they were when the apply began. An apply that stops partway deletes it, so
+  the next `--update` sends the title and description. A draft from an older `fz` has no such line; its next `--update`
   sends everything and then writes it.
 
 Leave these lines alone. On the next `--update`, `fz` reads the card and

@@ -848,9 +848,10 @@ func lockDrafts(paths []string) (func(), error) {
 // and which fields.
 //
 // dh is the draft's draftHash, taken before anything was sent, and is
-// written as synced-draft: when it is not "". A sync that stopped partway
-// passes "", so the line keeps its old value and the next --update sends
-// the title and description unless the draft is as it was then.
+// written as synced-draft: when it is not "". A sync that stopped partway,
+// including one whose title and description send has an unknown outcome,
+// passes "", which deletes the line, so the next --update always sends the
+// title and description.
 func recordSynced(fz *fizzy.Fizzy, path string, n int, dh string) error {
 	// Known limit: an edit made in Fizzy between fz's writes and this read is
 	// folded into the new fingerprint, so the next --update cannot see it.
@@ -862,8 +863,9 @@ func recordSynced(fz *fizzy.Fizzy, path string, n int, dh string) error {
 		{Key: "synced", Value: cardFingerprint(card)},
 		{Key: "synced-fields", Value: syncedFields(card)},
 	}
-	if dh != "" {
-		kvs = append(kvs, draft.KV{Key: syncedDraftKey, Value: dh})
+	if dh == "" {
+		return draft.RecordFieldsDropping(path, []string{syncedDraftKey}, kvs...)
 	}
+	kvs = append(kvs, draft.KV{Key: syncedDraftKey, Value: dh})
 	return draft.RecordFields(path, kvs...)
 }
