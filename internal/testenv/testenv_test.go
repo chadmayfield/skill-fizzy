@@ -3,6 +3,7 @@ package testenv_test
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -37,5 +38,28 @@ func TestIsolate(t *testing.T) {
 	}
 	if _, err := config.Load(""); !errors.Is(err, config.ErrConfig) {
 		t.Errorf("config.Load = %v, want a config error", err)
+	}
+}
+
+// Isolate moves HOME, which moves the default go env file, so it pins
+// GOENV to the file in use before. A test that runs the go command keeps
+// settings such as GOPROXY or GOPRIVATE.
+func TestIsolateKeepsGoEnvFile(t *testing.T) {
+	for _, v := range []string{"HOME", "FIZZY_CONFIG", "GOCACHE", "GOPATH", "GOENV"} {
+		t.Setenv(v, os.Getenv(v))
+	}
+	os.Unsetenv("GOENV")
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		t.Skip(err)
+	}
+	want := filepath.Join(dir, "go", "env")
+	cleanup, err := testenv.Isolate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if got := os.Getenv("GOENV"); got != want {
+		t.Errorf("GOENV = %q, want %q", got, want)
 	}
 }

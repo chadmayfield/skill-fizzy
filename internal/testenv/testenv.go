@@ -19,8 +19,8 @@ var fizzyVars = []string{
 
 // Isolate points HOME at a new temporary directory, points FIZZY_CONFIG at
 // a file that does not exist, and unsets the other FIZZY_ variables. The Go
-// build and module caches keep their real places, so a test that runs the
-// go command still finds them. It returns a function that removes the
+// build and module caches and the go env file keep their real places, so a
+// test that runs the go command still finds them and its settings. It returns a function that removes the
 // directory.
 func Isolate() (func(), error) {
 	if err := keepGoDirs(); err != nil {
@@ -53,6 +53,17 @@ func keepGoDirs() error {
 			return err
 		}
 		if err := os.Setenv("GOCACHE", filepath.Join(dir, "go-build")); err != nil {
+			return err
+		}
+	}
+	// The go env file holds go env -w settings such as GOPROXY. Its default
+	// place is under the user config dir, which follows HOME.
+	if os.Getenv("GOENV") == "" {
+		dir, err := os.UserConfigDir()
+		if err != nil {
+			return err
+		}
+		if err := os.Setenv("GOENV", filepath.Join(dir, "go", "env")); err != nil {
 			return err
 		}
 	}
