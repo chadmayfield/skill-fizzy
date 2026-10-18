@@ -178,11 +178,16 @@ func orNone(s string) string {
 	return s
 }
 
-// cardLine formats a card the way the Python _card_line does.
+// line cleans server text that must stay on one line, such as a title or
+// a name: config.TerminalLine.
+func line(s string) string { return config.TerminalLine(s) }
+
+// cardLine formats a card the way the Python _card_line does. Server text
+// is kept to the line, so a title cannot fake another card's line.
 func cardLine(c fizzy.Card) string {
 	state := "maybe"
 	if c.Column != nil && c.Column.Name != "" {
-		state = c.Column.Name
+		state = line(c.Column.Name)
 	}
 	if c.Closed {
 		state = "done"
@@ -193,9 +198,9 @@ func cardLine(c fizzy.Card) string {
 	}
 	tags := ""
 	if len(c.Tags) > 0 {
-		tags = " #" + strings.Join(c.Tags, " #")
+		tags = " #" + line(strings.Join(c.Tags, " #"))
 	}
-	return fmt.Sprintf("#%-5d [%s] %s%s%s", c.Number, state, c.Title, gold, tags)
+	return fmt.Sprintf("#%-5d [%s] %s%s%s", c.Number, state, line(c.Title), gold, tags)
 }
 
 // pyBool formats a bool the way Python prints one.

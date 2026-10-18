@@ -204,7 +204,7 @@ func TestHookParity(t *testing.T) {
 	}
 	stdin := func(dir string) string { return `{"session_id":"s1","cwd":"` + filepath.Join(f.root, dir) + `"}` }
 	nowNext := "Fizzy: this repo maps to the Home board.\n" + wantDataLine + "\nOpen cards in Now and Next:\n" +
-		"  #88 [Now] \"Oil the hinge\" ★\n  #90 [Now] \"Paint the gate\"\n  #94 [Now] \"Oil the[2Jlatch\"\n" +
+		"  #88 [Now] \"Oil the hinge\" ★\n  #90 [Now] \"Paint the gate\"\n  #94 [Now] \"Oil thelatch\"\n" +
 		"  #87 [Next] \"Fix the gate\"\n  #96 [Next] \"Say \\\"stop\\\" \\\\ at the café gate\"\n"
 	card := func(line string) string {
 		return "Fizzy: this repo's card is on the Home board:\n" + wantDataLine + "\n" + line + "\n"

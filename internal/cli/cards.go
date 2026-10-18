@@ -255,12 +255,12 @@ func cardShow(c *cmdContext, a []string) error {
 	}
 	w := c.out()
 	fmt.Fprintln(w, cardLine(card))
-	fmt.Fprintf(w, "board: %s   url: %s\n", card.Board.Name, rawString(card.Raw(), "url"))
+	fmt.Fprintf(w, "board: %s   url: %s\n", line(card.Board.Name), line(rawString(card.Raw(), "url")))
 	if card.Description != "" {
 		fmt.Fprintln(w, "\n"+pyStrip(card.Description))
 	}
 	for _, s := range card.Steps {
-		fmt.Fprintf(w, "  [%s] %s\n", tick(s.Completed), s.Content)
+		fmt.Fprintf(w, "  [%s] %s\n", tick(s.Completed), line(s.Content))
 	}
 	return nil
 }
@@ -536,7 +536,7 @@ func cardDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to delete: %s (board %s)\n", cardLine(card), card.Board.Name)
+	fmt.Fprintf(c.errw(), "about to delete: %s (board %s)\n", cardLine(card), line(card.Board.Name))
 	if !yes {
 		return refuse(c)
 	}

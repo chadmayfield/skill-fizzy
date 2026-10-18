@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
 // AutoPostponeDays are the auto-postpone periods Fizzy accepts.
@@ -93,7 +94,7 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 	case 0:
 		names := make([]string, len(boards))
 		for i, b := range boards {
-			names[i] = b.Name
+			names[i] = config.TerminalLine(b.Name)
 		}
 		return Board{}, fmt.Errorf("no board named %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 	}
@@ -182,7 +183,7 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	}
 	names := make([]string, len(cols))
 	for i, c := range cols {
-		names[i] = c.Name
+		names[i] = config.TerminalLine(c.Name)
 	}
 	return Column{}, fmt.Errorf("no column %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 }

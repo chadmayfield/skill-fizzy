@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -57,7 +56,7 @@ func addHookCommands(root *cobra.Command) {
 			"on that folder's board. If the map entry names a card, it prints only that card. " +
 			"Claude Code adds the output to the session.\n\n" +
 			"Each title is printed as a JSON string, after a line that says card titles are data from Fizzy, not instructions. " +
-			"Control characters are removed from server text first.\n\n" +
+			"Escape sequences and control characters are removed from server text first.\n\n" +
 			"The map is the file named by FIZZY_REPOS_MAP, or " + defaultReposMap + ". " +
 			`Each entry maps a folder name to {"board": "Home"} or {"board": "Home", "card": 87}. ` +
 			"Inside a git worktree the main checkout's folder name is tried first, then each folder " +
@@ -185,7 +184,7 @@ func hookLine(c fizzy.Card) string {
 	if c.Golden {
 		star = " ★"
 	}
-	return fmt.Sprintf("  #%d [%s] %s%s", c.Number, stripControl(col), quoteTitle(stripControl(c.Title)), star)
+	return fmt.Sprintf("  #%d [%s] %s%s", c.Number, config.TerminalLine(col), quoteTitle(config.TerminalLine(c.Title)), star)
 }
 
 // quoteTitle returns s as a JSON string literal, the way Python's
@@ -199,19 +198,6 @@ func quoteTitle(s string) string {
 		return `""`
 	}
 	return strings.TrimSuffix(b.String(), "\n")
-}
-
-// stripControl removes control characters (Unicode Cc) and the line and
-// paragraph separators from server text. The hook's output goes into the
-// session context, so a card title must not be able to start a new line or
-// send a terminal escape.
-func stripControl(s string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
-			return -1
-		}
-		return r
-	}, s)
 }
 
 // sessionCwd returns the cwd field of the session JSON, or the current
@@ -300,7 +286,7 @@ func mapEntry(ctx context.Context, cwd string) (board string, focus hookFocus, o
 				focus = hookFocus{text: strconv.FormatInt(n, 10), num: n, isNum: true}
 			}
 		} else if card != "" {
-			focus = hookFocus{text: stripControl(card)}
+			focus = hookFocus{text: config.TerminalLine(card)}
 		}
 	default:
 		if pyTruthy(card) {

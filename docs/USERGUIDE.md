@@ -199,6 +199,13 @@ place, such as assigning a user who is assigned, the line is
 `"dry_run": true` to their output. The fz 0.1 commands print the same text
 and JSON as the Python fz did.
 
+Text output never passes on a terminal escape. Card titles, descriptions,
+names and other text from the server can hold escape sequences, which a
+terminal could act on, for example to overwrite a line or set the
+clipboard. `fz` removes escape sequences, carriage returns and other
+control characters before it prints. A title, a name or a step stays on its
+own line. `--json` prints the server's text as it came, escaped as JSON.
+
 ### Exit status
 
 | Code | Meaning |
@@ -1005,8 +1012,8 @@ Follow the fizzy-cards skill's rules for moving cards and ticking steps.
 
 A card title is text that anyone with access to the board can write, and it
 lands in an AI agent's context. So the hook marks titles as data. It prints
-the line about data before the first title. It removes control characters
-from each title, then prints the title as a JSON string, so quotes and
+the line about data before the first title. It removes escape sequences
+and control characters from each title, then prints the title as a JSON string, so quotes and
 backslashes come out escaped. The star marks a golden card.
 
 ### The repos map

@@ -39,5 +39,5 @@ func upload(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"sgid", orNull(sgid)}}, sgid)
+	return emit(c.cmd, obj{{"sgid", orNull(sgid)}}, line(sgid))
 }

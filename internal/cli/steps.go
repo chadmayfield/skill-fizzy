@@ -120,7 +120,7 @@ func stepList(c *cmdContext, a []string) error {
 	}
 	lines := make([]string, len(card.Steps))
 	for i, s := range card.Steps {
-		lines[i] = fmt.Sprintf("[%s] %s  %s", tick(s.Completed), s.ID, s.Content)
+		lines[i] = fmt.Sprintf("[%s] %s  %s", tick(s.Completed), line(s.ID), line(s.Content))
 	}
 	text := strings.Join(lines, "\n")
 	if text == "" {
@@ -185,7 +185,7 @@ func stepDelete(c *cmdContext, a []string) error {
 		preview := fmt.Sprintf("about to delete step %s, which card #%d does not list", a[1], n)
 		for _, s := range card.Steps {
 			if s.ID == a[1] {
-				preview = fmt.Sprintf("about to delete step: [%s] %s  %s (card #%d)", tick(s.Completed), s.ID, s.Content, n)
+				preview = fmt.Sprintf("about to delete step: [%s] %s  %s (card #%d)", tick(s.Completed), line(s.ID), line(s.Content), n)
 				break
 			}
 		}
