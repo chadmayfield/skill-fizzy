@@ -228,8 +228,7 @@ func webhookShow(c *cmdContext, a []string) error {
 func refuseWithoutYes(c *cmdContext, summary string) error {
 	fmt.Fprintln(c.errw(), summary)
 	if yes, _ := c.cmd.Flags().GetBool("yes"); !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	return nil
 }

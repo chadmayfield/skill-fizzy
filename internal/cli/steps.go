@@ -187,8 +187,7 @@ func stepDelete(c *cmdContext, a []string) error {
 			}
 		}
 		fmt.Fprintln(c.errw(), preview)
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	if err := fz.DeleteStep(n, a[1]); err != nil {
 		return err

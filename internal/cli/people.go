@@ -184,8 +184,7 @@ func userEdit(c *cmdContext, a []string) error {
 	}
 	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", u.ID, u.Name, name)
 	if !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	updated, err := fz.RenameUser(u.ID, name)
 	if err != nil {

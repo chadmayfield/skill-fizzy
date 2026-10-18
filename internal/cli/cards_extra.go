@@ -266,8 +266,7 @@ func cardImage(c *cmdContext, a []string) error {
 	}
 	fmt.Fprintf(c.errw(), "about to remove the image from: %s (board %s)\n", cardLine(card), card.Board.Name)
 	if !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	if err := fz.RemoveImage(n); err != nil {
 		return err

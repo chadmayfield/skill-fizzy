@@ -181,8 +181,7 @@ func commentDelete(c *cmdContext, a []string) error {
 	}
 	fmt.Fprintf(c.errw(), "about to delete comment %s  %s\n", commentHead(cm), firstLine(cm.Body.PlainText))
 	if !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
+		return refuse(c)
 	}
 	if err := fz.DeleteComment(n, a[1]); err != nil {
 		return authorHint(err)
