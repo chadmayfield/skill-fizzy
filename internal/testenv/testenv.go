@@ -14,7 +14,7 @@ import (
 // a test that needs one sets it with t.Setenv.
 var fizzyVars = []string{
 	"FIZZY_URL", "FIZZY_ACCOUNT", "FIZZY_TOKEN", "FIZZY_TOKEN_CMD",
-	"FIZZY_INBOX", "FIZZY_RULES_CARD",
+	"FIZZY_INBOX", "FIZZY_RULES_CARD", "FIZZY_REPOS_MAP",
 }
 
 // Isolate points HOME at a new temporary directory, points FIZZY_CONFIG at

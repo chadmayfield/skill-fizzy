@@ -12,12 +12,13 @@ import (
 
 func TestIsolate(t *testing.T) {
 	realHome, _ := os.UserHomeDir()
-	for _, v := range []string{"HOME", "FIZZY_CONFIG", "FIZZY_URL", "FIZZY_ACCOUNT", "FIZZY_TOKEN", "FIZZY_TOKEN_CMD", "GOCACHE", "GOPATH"} {
+	for _, v := range []string{"HOME", "FIZZY_CONFIG", "FIZZY_URL", "FIZZY_ACCOUNT", "FIZZY_TOKEN", "FIZZY_TOKEN_CMD", "FIZZY_REPOS_MAP", "GOCACHE", "GOPATH"} {
 		t.Setenv(v, os.Getenv(v))
 	}
 	t.Setenv("FIZZY_URL", "https://fizzy.example.com")
 	t.Setenv("FIZZY_ACCOUNT", "1")
 	t.Setenv("FIZZY_TOKEN", "T")
+	t.Setenv("FIZZY_REPOS_MAP", "/tmp/repos.json")
 	cleanup, err := testenv.Isolate()
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +30,7 @@ func TestIsolate(t *testing.T) {
 	if _, err := os.Stat(os.Getenv("FIZZY_CONFIG")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("FIZZY_CONFIG %q exists: %v", os.Getenv("FIZZY_CONFIG"), err)
 	}
-	for _, v := range []string{"FIZZY_URL", "FIZZY_ACCOUNT", "FIZZY_TOKEN", "FIZZY_TOKEN_CMD"} {
+	for _, v := range []string{"FIZZY_URL", "FIZZY_ACCOUNT", "FIZZY_TOKEN", "FIZZY_TOKEN_CMD", "FIZZY_REPOS_MAP"} {
 		if _, set := os.LookupEnv(v); set {
 			t.Errorf("%s is still set", v)
 		}
