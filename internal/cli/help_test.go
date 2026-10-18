@@ -23,17 +23,31 @@ func walk(cmd *cobra.Command, f func(*cobra.Command)) {
 	}
 }
 
-// wantCommands is the command tree Task 6 builds. Later tasks add to it.
+// wantCommands is every runnable command fz must have.
 var wantCommands = []string{
-	"fz board create", "fz board list",
-	"fz card create", "fz card delete", "fz card edit", "fz card golden", "fz card list", "fz card move",
-	"fz card reopen", "fz card show", "fz card tag",
-	"fz column list",
-	"fz comment add",
+	"fz account postpone", "fz account show",
+	"fz activity list",
+	"fz board access", "fz board create", "fz board delete", "fz board edit", "fz board list",
+	"fz board publish", "fz board show", "fz board unpublish",
+	"fz card assign", "fz card boost", "fz card boosts", "fz card create", "fz card delete", "fz card edit",
+	"fz card golden", "fz card image", "fz card list", "fz card move", "fz card pin", "fz card pins",
+	"fz card reopen", "fz card show", "fz card tag", "fz card unassign", "fz card unboost", "fz card unpin",
+	"fz card unwatch", "fz card watch",
+	"fz column cards", "fz column create", "fz column delete", "fz column edit", "fz column list", "fz column show",
+	"fz comment add", "fz comment delete", "fz comment edit", "fz comment list", "fz comment react",
+	"fz comment reactions", "fz comment show", "fz comment unreact",
 	"fz draft apply", "fz draft check", "fz draft preview",
-	"fz hook session-start", "fz man", "fz review",
+	"fz export account", "fz export mine", "fz export status",
+	"fz hook session-start", "fz man",
+	"fz notification list", "fz notification read", "fz notification settings", "fz notification unread",
+	"fz review",
 	"fz step add", "fz step check", "fz step delete", "fz step edit", "fz step list", "fz step uncheck",
+	"fz tag list",
 	"fz upload",
+	"fz user edit", "fz user list", "fz user show", "fz user timezone",
+	"fz webhook activate", "fz webhook create", "fz webhook delete", "fz webhook deliveries", "fz webhook edit",
+	"fz webhook list", "fz webhook show",
+	"fz whoami",
 }
 
 func TestCommandTree(t *testing.T) {
