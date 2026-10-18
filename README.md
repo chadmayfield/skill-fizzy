@@ -14,8 +14,14 @@ holds one archive per system, with `checksums.txt`. An archive holds the
 PATH, for example in `~/.local/bin`. The user guide's Install section shows
 how to check the archive first.
 
-To build from source instead, you need Go 1.27.2 or later. From a checkout
-of this repo:
+With Go 1.27.2 or later you can install it directly:
+
+```sh
+go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest
+```
+
+That puts `fz` in `$(go env GOPATH)/bin`. To build from a checkout of this
+repo instead:
 
 ```sh
 make install

@@ -68,7 +68,7 @@ change the guide and the command's help text in the same commit.
   The workflow has two jobs. `build` runs the guard, the tests and `make dist` with read-only contents, and uploads the archives.
   `publish` runs no repo code: it downloads those archives, attests them and creates the release, and only it has the write, id-token and attestation scopes.
   The build job turns off setup-go's cache, so it builds with empty Go caches.
-  The archives are attested only while the repository is public. On the private repository that step is skipped.
+  The archives are attested; the step runs only on a public repository.
 - `make dist` is reproducible. The build date is `SOURCE_DATE_EPOCH` if set, else the commit time, never the clock. The archives carry that time, owner 0 and sorted names.
 - CI runs the gofmt check, `go vet`, the race tests, the release build test with `FZ_TEST_DIST=1`, a build and `govulncheck` v1.9.0. A govulncheck finding fails the build.
 - The actions are pinned to commit SHAs, with the version in a comment. Dependabot proposes minor and patch updates to them, and to the Go modules, weekly.
