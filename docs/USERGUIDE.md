@@ -399,7 +399,10 @@ fz card reopen 87
 
 `--to` takes a column name, or `maybe`, `not-now` or `done`. An exact column
 name wins. A name that two columns share in any case, with no exact match,
-exits 2. `--board` moves the card to another board.
+exits 2. `--board` moves the card to another board. With `--board`, `--to`
+names a column on that board, and `fz` checks it before the card moves, so a
+bad `--to` sends nothing. Give `--to`, `--board` or both. With neither, `fz`
+exits 2.
 
 `card close` closes a card. It sends the same call as `--to done`, but it
 never reads the board's columns. A card that is already closed needs no

@@ -297,7 +297,6 @@ func (f *Fizzy) UpdateCard(n int, fields CardFields) error {
 // MoveCard moves a card to maybe, not-now, done, or a column of the card's
 // board. boardID may be empty; the card is fetched to find its board.
 func (f *Fizzy) MoveCard(n int, target, boardID string) error {
-	p := "/cards/" + strconv.Itoa(n)
 	if boardID == "" {
 		c, err := f.Card(n)
 		if err != nil {
@@ -305,27 +304,58 @@ func (f *Fizzy) MoveCard(n int, target, boardID string) error {
 		}
 		boardID = c.Board.ID
 	}
-	if err := f.CheckMoveTarget(boardID, target); err != nil {
-		return err
-	}
-	switch moveKeyword(target) {
-	case maybe:
-		_, err := f.C.Write(http.MethodDelete, p+"/triage", nil)
-		return err
-	case notNow:
-		_, err := f.C.Write(http.MethodPost, p+"/not_now", nil)
-		return err
-	case done:
-		_, err := f.C.Write(http.MethodPost, p+"/closure", nil)
-		return err
-	}
-	col, err := f.Column(boardID, target)
+	t, err := f.ResolveMoveTarget(boardID, target)
 	if err != nil {
 		return err
 	}
-	_, err = f.C.Write(http.MethodPost, p+"/triage", struct {
-		ColumnID string `json:"column_id"`
-	}{col.ID})
+	return f.MoveCardTo(n, t)
+}
+
+// MoveTarget is a checked place to move a card to: a move keyword, or a
+// column on one board. ResolveMoveTarget makes one.
+type MoveTarget struct {
+	keyword  string // maybe, notNow or done; "" for a column
+	columnID string
+}
+
+// IsMaybe reports whether the target is the Maybe? keyword, where a new
+// card already is.
+func (t MoveTarget) IsMaybe() bool { return t.keyword == maybe }
+
+// ResolveMoveTarget checks target against the board's columns and sends
+// nothing. A keyword that a custom column is also named, a column name two
+// columns share, and a name no column has are each an error, so a caller
+// can check every target before its first write.
+func (f *Fizzy) ResolveMoveTarget(boardID, target string) (MoveTarget, error) {
+	if err := f.CheckMoveTarget(boardID, target); err != nil {
+		return MoveTarget{}, err
+	}
+	if kw := moveKeyword(target); kw != "" {
+		return MoveTarget{keyword: kw}, nil
+	}
+	col, err := f.Column(boardID, target)
+	if err != nil {
+		return MoveTarget{}, err
+	}
+	return MoveTarget{columnID: col.ID}, nil
+}
+
+// MoveCardTo moves a card to a target from ResolveMoveTarget.
+func (f *Fizzy) MoveCardTo(n int, t MoveTarget) error {
+	p := "/cards/" + strconv.Itoa(n)
+	var err error
+	switch t.keyword {
+	case maybe:
+		_, err = f.C.Write(http.MethodDelete, p+"/triage", nil)
+	case notNow:
+		_, err = f.C.Write(http.MethodPost, p+"/not_now", nil)
+	case done:
+		_, err = f.C.Write(http.MethodPost, p+"/closure", nil)
+	default:
+		_, err = f.C.Write(http.MethodPost, p+"/triage", struct {
+			ColumnID string `json:"column_id"`
+		}{t.columnID})
+	}
 	return err
 }
 

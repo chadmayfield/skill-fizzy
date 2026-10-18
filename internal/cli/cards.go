@@ -76,7 +76,9 @@ func addCardCommands(root *cobra.Command) {
 	move := &cobra.Command{
 		Use:   "move NUMBER",
 		Short: "move a card to a column or another board",
-		Long: "Move a card. --to takes a column name, or maybe, not-now or done. --board moves it to another board.\n\n" +
+		Long: "Move a card. --to takes a column name, or maybe, not-now or done. --board moves it to another board. " +
+			"With --board, --to names a column on that board, and fz checks it before the card moves. " +
+			"Give --to, --board or both; with neither, fz exits 2.\n\n" +
 			"If the board has a column of its own named Done, Maybe, Maybe? or Not now, --to with that name is refused, because it could mean the column or the keyword. Give --to the column id to move the card into that column, or rename the column to use the keyword.",
 		Example: examples("fz card move 87 --to Now", "fz card move 87 --to done", "fz card move 87 --board Home --to Next"),
 		Args:    args(cobra.ExactArgs(1)),
@@ -365,27 +367,35 @@ func cardMove(c *cmdContext, a []string) error {
 		return err
 	}
 	to, _ := fl.GetString("to")
-	// boardID is the board the card ends up on, or "" to read it from the
-	// card. A --to that the target board makes ambiguous is refused before
-	// the card changes board.
-	boardID := ""
-	if name, _ := fl.GetString("board"); name != "" {
-		b, err := fz.Board(name)
+	name, _ := fl.GetString("board")
+	if to == "" && name == "" {
+		return usagef("card move needs --to, --board or both")
+	}
+	if name == "" {
+		if err := fz.MoveCard(n, to, ""); err != nil {
+			return err
+		}
+		return emit(c.cmd, obj{{"number", n}}, fmt.Sprintf("card #%d moved", n))
+	}
+	// --to is looked up on the target board, and checked before the card
+	// changes board, so a refusal sends nothing.
+	b, err := fz.Board(name)
+	if err != nil {
+		return err
+	}
+	var target *fizzy.MoveTarget
+	if to != "" {
+		t, err := fz.ResolveMoveTarget(b.ID, to)
 		if err != nil {
 			return err
 		}
-		boardID = b.ID
-		if to != "" {
-			if err := fz.CheckMoveTarget(boardID, to); err != nil {
-				return err
-			}
-		}
-		if err := fz.MoveCardToBoard(n, b.ID); err != nil {
-			return err
-		}
+		target = &t
 	}
-	if to != "" {
-		if err := fz.MoveCard(n, to, boardID); err != nil {
+	if err := fz.MoveCardToBoard(n, b.ID); err != nil {
+		return err
+	}
+	if target != nil {
+		if err := fz.MoveCardTo(n, *target); err != nil {
 			return err
 		}
 	}
