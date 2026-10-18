@@ -2,6 +2,7 @@ package fizzy
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -174,7 +175,10 @@ func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
 	var out BoardAccess
 	next := f.C.URL("/boards/"+url.PathEscape(boardID)+"/accesses", true)
 	seen := map[string]bool{}
-	for next != "" && !seen[next] {
+	for next != "" {
+		if seen[next] {
+			return out, fmt.Errorf("pagination loop: %s linked again", next)
+		}
 		seen[next] = true
 		_, hdr, payload, err := f.C.Do(http.MethodGet, next, nil)
 		if err != nil {

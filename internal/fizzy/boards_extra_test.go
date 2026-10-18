@@ -199,3 +199,17 @@ func TestColumnColorRefusedBeforeSending(t *testing.T) {
 		t.Errorf("sent %d requests", len(s.calls))
 	}
 }
+
+// A page that links back to one already read is an error, as in listUpTo,
+// not a silent stop that would drop the users on the missing pages.
+func TestBoardAccessesRepeatedLinkIsAnError(t *testing.T) {
+	var srvURL string
+	f, _, _, srv := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.Header().Set("Link", "<"+srvURL+"/1/boards/b1/accesses>; rel=\"next\"")
+		jsonOK(w, map[string]any{"board_id": "b1", "all_access": false, "users": []any{}})
+	})
+	srvURL = srv.URL
+	if _, err := f.BoardAccesses("b1"); err == nil || !strings.Contains(err.Error(), "pagination loop") {
+		t.Fatalf("want a pagination loop error, got %v", err)
+	}
+}
