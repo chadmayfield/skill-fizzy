@@ -49,7 +49,10 @@ make install
 ```
 
 That builds `fz` and copies it to `~/.local/bin`, creating the folder if it
-is missing. Check the install with `fz --version`.
+is missing. Check the install with `fz --version`. A build from `make`
+prints the version, then the commit and the build date, such as
+`v1.2.0 (commit 0123456, built 2026-10-17T00:00:00Z)` after the name. A plain `go build`
+or `go install` prints the version Go records, without the commit and date.
 
 ### Install from a release
 

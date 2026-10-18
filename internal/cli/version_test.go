@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"runtime/debug"
 	"testing"
 )
@@ -50,5 +51,26 @@ func TestResolveVersionEmptyStampActsLikeDev(t *testing.T) {
 	noInfo := func() (*debug.BuildInfo, bool) { return nil, false }
 	if got := resolveVersion("", noInfo); got != "dev" {
 		t.Errorf("empty stamp without build info: got %q, want dev", got)
+	}
+}
+
+// fz --version prints the commit and the build date when the build
+// stamped them, and only the version when it did not.
+func TestVersionOutput(t *testing.T) {
+	for _, tc := range []struct{ commit, date, want string }{
+		{"0123456", "2026-10-17T00:00:00Z", "fz v1.2.0 (commit 0123456, built 2026-10-17T00:00:00Z)\n"},
+		{"0123456", "unknown", "fz v1.2.0 (commit 0123456)\n"},
+		{"none", "2026-10-17T00:00:00Z", "fz v1.2.0 (built 2026-10-17T00:00:00Z)\n"},
+		{"none", "unknown", "fz v1.2.0\n"},
+		{"", "", "fz v1.2.0\n"},
+		{"{{.Name}}", "", "fz v1.2.0 (commit {{.Name}})\n"},
+	} {
+		root := NewRoot()
+		setVersion(root, "v1.2.0", tc.commit, tc.date)
+		var out, errw bytes.Buffer
+		code := run(root, []string{"--version"}, &out, &errw)
+		if code != 0 || out.String() != tc.want {
+			t.Errorf("commit %q date %q: exit %d, %q, want %q", tc.commit, tc.date, code, out.String(), tc.want)
+		}
 	}
 }

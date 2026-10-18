@@ -133,8 +133,7 @@ func unknownSubcommand(root *cobra.Command, args []string) error {
 
 // Execute runs fz with the process arguments and returns the exit code.
 func Execute(version, commit, date string) int {
-	_, _ = commit, date
 	root := NewRoot()
-	root.Version = resolveVersion(version, debug.ReadBuildInfo)
+	setVersion(root, resolveVersion(version, debug.ReadBuildInfo), commit, date)
 	return run(root, os.Args[1:], os.Stdout, os.Stderr)
 }
