@@ -23,7 +23,8 @@ func walk(cmd *cobra.Command, f func(*cobra.Command)) {
 	}
 }
 
-// wantCommands is every runnable command fz must have.
+// wantCommands is every runnable command fz has. TestCommandTree fails if
+// one is missing from the tree or the tree has one this list leaves out.
 var wantCommands = []string{
 	"fz account postpone", "fz account show",
 	"fz activity list",
@@ -57,9 +58,16 @@ func TestCommandTree(t *testing.T) {
 			have[c.CommandPath()] = true
 		}
 	})
+	want := map[string]bool{}
 	for _, name := range wantCommands {
+		want[name] = true
 		if !have[name] {
 			t.Errorf("missing command %q", name)
+		}
+	}
+	for name := range have {
+		if !want[name] {
+			t.Errorf("command %q is not in wantCommands; add it", name)
 		}
 	}
 }
