@@ -30,7 +30,7 @@ var wantCommands = []string{
 	"fz activity list",
 	"fz board access", "fz board create", "fz board delete", "fz board edit", "fz board list",
 	"fz board publish", "fz board show", "fz board unpublish",
-	"fz card assign", "fz card boost", "fz card boosts", "fz card create", "fz card delete", "fz card edit",
+	"fz card assign", "fz card boost", "fz card boosts", "fz card close", "fz card create", "fz card delete", "fz card edit",
 	"fz card golden", "fz card image", "fz card list", "fz card move", "fz card pin", "fz card pins",
 	"fz card reopen", "fz card show", "fz card tag", "fz card unassign", "fz card unboost", "fz card unpin",
 	"fz card unwatch", "fz card watch",

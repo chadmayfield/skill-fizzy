@@ -385,7 +385,7 @@ fz card edit 87 --status published
   formatting. OLD must not be empty.
 - `--status` takes `drafted` or `published`.
 
-Move and reopen:
+Move, close and reopen:
 
 ```sh
 fz card move 87 --to Now
@@ -393,19 +393,27 @@ fz card move 87 --to maybe
 fz card move 87 --to not-now
 fz card move 87 --to done
 fz card move 87 --board Garden --to Next
+fz card close 87
 fz card reopen 87
 ```
 
 `--to` takes a column name, or `maybe`, `not-now` or `done`. An exact column
 name wins. A name that two columns share in any case, with no exact match,
-exits 2. `--board` moves the card to another board. `card reopen` moves a closed card out of Done.
+exits 2. `--board` moves the card to another board.
+
+`card close` closes a card. It sends the same call as `--to done`, but it
+never reads the board's columns. A card that is already closed needs no
+change, so `fz` says so, sends nothing and exits 0. `card close` takes
+`--dry-run` and `--json` and needs no `--yes`. `card reopen` moves a closed
+card out of Done.
 
 A board can have a column of its own named Done, Maybe, Maybe? or Not now.
 Then `--to` with that name could mean the column or the keyword, so `fz`
 refuses it with exit 2 and sends nothing. Case does not matter. To move the
 card into that column, give `--to` the column's id. The refusal names it,
-and `fz --json column list Home` prints it. To close or triage the card with the keyword, rename the column
-first. `card create --column`, `draft apply` and `draft apply --update`
+and `fz --json column list Home` prints it. To close the card, use
+`fz card close 87`. To send it to Maybe? or Not now with the keyword, rename
+the column first. `card create --column`, `draft apply` and `draft apply --update`
 refuse the same way, before they send anything.
 
 Golden:

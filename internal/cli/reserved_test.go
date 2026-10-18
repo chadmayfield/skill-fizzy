@@ -67,7 +67,8 @@ func TestMoveToReservedColumnNameRefuses(t *testing.T) {
 	} {
 		r := runGo(args)
 		if r.code != 2 || !strings.Contains(r.stderr, "the board has a column named 'Done'") ||
-			!strings.Contains(r.stderr, "use --to with the column id (c-done)") {
+			!strings.Contains(r.stderr, "use --to with the column id (c-done)") ||
+			!strings.Contains(r.stderr, "to close the card, use fz card close") {
 			t.Errorf("%q: %+v", args, r)
 		}
 		if w := writes(); len(w) != 0 {

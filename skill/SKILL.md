@@ -116,6 +116,7 @@ but prefer `fz board list`, `fz card show 87` and `fz step add 87 "text"`.
 | Show a card | `fz card show <n>` |
 | Create a card | `fz card create "<board>" "<title>" [--column "<column>"] [--tag <tag>]` |
 | Move | `fz card move <n> --to "<column>"`, `--to maybe`, `--to not-now`, `--to done`; `--board "<board>"` to change board |
+| Close | `fz card close <n>` (works on a board with its own Done column) |
 | Reopen | `fz card reopen <n>` |
 | Golden | `fz card golden <n>` / `fz card golden <n> --off` |
 | Tag | `fz card tag <n> <tag>` / `--remove` (safe: checks before toggling) |

@@ -358,18 +358,31 @@ func (f *Fizzy) CheckMoveTarget(boardID, target string) error {
 	for _, col := range cols {
 		if moveKeyword(col.Name) == kw {
 			return refusef("the board has a column named '%s', so '%s' could mean that column or the %s keyword; "+
-				"to move the card into the column, use --to with the column id (%s); "+
-				"to %s, rename the column first", col.Name, strings.TrimSpace(target), kw, col.ID, keywordAction[kw])
+				"to move the card into the column, use --to with the column id (%s); %s",
+				col.Name, strings.TrimSpace(target), kw, col.ID, keywordHint[kw])
 		}
 	}
 	return nil
 }
 
-// keywordAction says what each move keyword does to a card.
-var keywordAction = map[string]string{
-	maybe:  "send the card back to Maybe? with the keyword",
-	notNow: "move the card to Not now with the keyword",
-	done:   "close the card with the keyword",
+// keywordHint says how to get each move keyword's effect while a column
+// has its name.
+var keywordHint = map[string]string{
+	maybe:  "to send the card back to Maybe? with the keyword, rename the column first",
+	notNow: "to move the card to Not now with the keyword, rename the column first",
+	done:   "to close the card, use fz card close NUMBER",
+}
+
+// CloseCard closes a card, the same call as a move to done, without reading
+// the board's columns. It reads the card first and sends nothing when the
+// card is already closed. It reports whether it sent the closure.
+func (f *Fizzy) CloseCard(n int) (bool, error) {
+	c, err := f.Card(n)
+	if err != nil || c.Closed {
+		return false, err
+	}
+	_, err = f.C.Write(http.MethodPost, "/cards/"+strconv.Itoa(n)+"/closure", nil)
+	return err == nil, err
 }
 
 // MoveCardToBoard moves a card to another board.
