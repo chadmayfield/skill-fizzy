@@ -96,6 +96,13 @@ func TestApplyCreateUnknownOutcome(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 		},
 		"no location": func(w http.ResponseWriter, r *http.Request, u string) { w.WriteHeader(http.StatusCreated) },
+		// A 3xx may follow a create that ran, as Rails answers one outside
+		// the JSON format, so it is an unknown outcome too.
+		"302 to the new card": func(w http.ResponseWriter, r *http.Request, u string) {
+			w.Header().Set("Location", u+"/1/cards/91")
+			w.WriteHeader(http.StatusFound)
+		},
+		"303 with no location": func(w http.ResponseWriter, r *http.Request, u string) { w.WriteHeader(http.StatusSeeOther) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv, creates := createServer(t, create)

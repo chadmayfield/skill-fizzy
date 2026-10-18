@@ -544,12 +544,14 @@ func (e *createUnknown) Error() string {
 }
 
 // createNotSent reports whether a failed card create surely made no card:
-// the server refused it with a 3xx or 4xx, or the request never left fz.
-// Any other failure, such as a timeout, a reset or a 5xx, may have made one.
+// the server refused it with a 4xx, or the request never left fz. Any
+// other failure, such as a timeout, a reset, a 5xx or a 3xx, may have made
+// one. A 3xx counts because a server can answer a create that ran with a
+// redirect to the new record.
 func createNotSent(err error) bool {
 	var api *client.APIError
 	if errors.As(err, &api) {
-		return api.Status >= 300 && api.Status < 500
+		return api.Status >= 400 && api.Status < 500
 	}
 	var op *net.OpError
 	if errors.As(err, &op) && op.Op == "dial" {

@@ -927,7 +927,7 @@ fz draft apply ~/.fizzy-inbox/drafts/
   before it adds steps or tags, moves the card or marks it golden, it
   replaces that line with `card: N`.
 - If `fz` cannot tell whether a create reached Fizzy, as after a timeout,
-  a dropped connection, a 5xx reply or a reply with no card number, it
+  a dropped connection, a 5xx or 3xx reply or a reply with no card number, it
   keeps the `creating:` line and exits 1. The message says a card may exist
   and names the board to look on. A create the server refused, with a 4xx
   reply, made no card, so `fz` removes the line.
