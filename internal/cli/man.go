@@ -46,7 +46,7 @@ var rootSections = []helpSection{
     - [x] Order the hinge
 
 The board is required. The column, tags and golden lines are optional. Everything except the title and the Steps section becomes the card description. Each step becomes a Fizzy step. Relative image paths resolve against the draft's folder, then the inbox. After a successful apply, fz writes card: N back into the front matter so a draft is never created twice. It also writes synced:, a fingerprint of the card as Fizzy then holds it, so fz draft apply --update can tell when someone changed the card in Fizzy, and synced-fields:, a short hash of each part of the card, so the refusal can name what changed.`},
-	{"FILES", `- ~/.config/fizzy-skill/config.json holds url, account, token_cmd, inbox and rules_card. The token itself comes only from FIZZY_TOKEN or the command in token_cmd.
+	{"FILES", `- ~/.config/fizzy-skill/config.json holds url, account, token_cmd, inbox and rules_card. The token itself comes only from FIZZY_TOKEN, or from the command that FIZZY_TOKEN_CMD or the token_cmd key names.
 - ~/.local/state/fizzy-skill/actions.log gets one JSON line per write with the time, method, path and status. It never holds the token.
 - ~/.fizzy-inbox/ is the default inbox. Draft images resolve against the draft's folder, then here.`},
 	{"ENVIRONMENT", `- FIZZY_CONFIG is the path of the config file.
@@ -58,7 +58,7 @@ The board is required. The column, tags and golden lines are optional. Everythin
 - FIZZY_RULES_CARD is the number of the card that holds your own conventions.`},
 	{"EXIT STATUS", `- 0 means success.
 - 1 means an API, config or draft error. The message says which.
-- 2 means a usage error, or a delete refused without --yes.`},
+- 2 means a usage error or any refusal. fz refuses a change that needs --yes when run without --yes, a name that matches more than one user, and a change it cannot check first. A refusal changes nothing.`},
 }
 
 const rootIntro = "fz is a command-line client for the Fizzy API. The server URL, account and token come from the config file or from environment variables."
