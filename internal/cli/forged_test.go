@@ -72,7 +72,7 @@ func forgedServer(t *testing.T) {
 // testForgedLines checks that no server text in text mode can start a line
 // of its own, or carry an escape, a carriage return or a bell. Single-line
 // text is joined onto its line. A comment body keeps its newlines, with
-// every line after the first indented. card show prints the description as
+// every line indented under the head line. card show prints the description as
 // it is, which the parity golden pins.
 func testForgedLines(t *testing.T) {
 	forgedServer(t)
@@ -136,12 +136,12 @@ func testForgedLines(t *testing.T) {
 	}
 }
 
-// A comment body keeps its lines, each one after the first indented by two
-// spaces.
+// A comment body keeps its lines, each one indented by two spaces under
+// the head line, the first one too.
 func TestCommentBodyIndented(t *testing.T) {
 	forgedServer(t)
 	r := runGo([]string{"comment", "show", "87", "c1"})
-	want := serverDataLine + "\nc1  GateFORGED line  2026-01-02T03:04:05Z\nGate latches.\n  FORGED body\n\n  FORGED again\n"
+	want := serverDataLine + "\nc1  GateFORGED line  2026-01-02T03:04:05Z\n  Gate latches.\n  FORGED body\n\n  FORGED again\n"
 	if r.code != 0 || r.stdout != want {
 		t.Errorf("got %+v\nwant %q", r, want)
 	}

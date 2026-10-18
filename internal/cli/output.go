@@ -192,12 +192,12 @@ func orNone(s string) string {
 func line(s string) string { return config.TerminalLine(s) }
 
 // body cleans server text that may run over several lines, such as a
-// comment body. It keeps the newlines and indents every line after the
-// first by two spaces, so no line from the server starts at column 0.
+// comment body. It keeps the newlines and indents every non-empty line, the
+// first included, by two spaces, so the text sits under the line before it.
 // Trailing newlines are dropped.
 func body(s string) string {
 	lines := strings.Split(strings.TrimRight(config.TerminalText(s), "\n"), "\n")
-	for i := 1; i < len(lines); i++ {
+	for i := range lines {
 		if lines[i] != "" {
 			lines[i] = "  " + lines[i]
 		}
