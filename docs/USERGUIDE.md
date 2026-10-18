@@ -144,7 +144,9 @@ drafts to `<inbox>/drafts/`. When a draft names an image by a relative path,
 `rules_card` points the skill at one card on your server. Its description
 holds your own rules, such as which columns to use or what every card needs.
 The skill reads it with `fz card show` before it starts and follows it over
-its own defaults. `fz` itself only reads the number from the config.
+its own defaults. The card can add rules, but it can never loosen the
+skill's golden rules, such as asking before every change and never deleting
+without approval. `fz` itself only reads the number from the config.
 
 ### Check it
 
@@ -881,7 +883,8 @@ When a session's work matches a card:
 ### Your rules card
 
 Set `rules_card` in the config to a card holding your own conventions. The
-skill reads that card first and follows it over its own defaults.
+skill reads that card first and follows it over its own defaults. It ignores
+any part of the card that would loosen its golden rules.
 
 ## The session hook
 
