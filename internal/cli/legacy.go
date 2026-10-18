@@ -59,6 +59,34 @@ func oldStep(rest []string) []string {
 	return append([]string{"step", "add"}, rest...)
 }
 
+// tagSubcommands are the words after "tag" that name a tag command, so
+// "tag list" is never read as an old card tag line.
+var tagSubcommands = map[string]bool{"list": true}
+
+// oldTag rewrites the arguments after "tag" in "tag N TAG", with flags
+// anywhere, such as "tag --remove N TAG", to "card tag N TAG" with the flags
+// last. It reports false unless the first word that is not a flag is a card
+// number and no word names a tag subcommand.
+func oldTag(rest []string) ([]string, bool) {
+	var words, flags []string
+	for _, a := range rest {
+		if strings.HasPrefix(a, "-") {
+			flags = append(flags, a)
+		} else {
+			words = append(words, a)
+		}
+	}
+	if len(words) == 0 || !isNumber(words[0]) {
+		return nil, false
+	}
+	for _, w := range words {
+		if tagSubcommands[w] {
+			return nil, false
+		}
+	}
+	return append(append([]string{"card", "tag"}, words...), flags...), true
+}
+
 // Rewrite turns fz 0.1 command lines into the noun form before cobra parses them.
 func Rewrite(args []string) []string {
 	i := commandIndex(args)
@@ -70,10 +98,14 @@ func Rewrite(args []string) []string {
 	if to, ok := simple[cmd]; ok {
 		return append(append(head, to...), rest...)
 	}
+	if cmd == "tag" {
+		if to, ok := oldTag(rest); ok {
+			return append(head, to...)
+		}
+		return args
+	}
 	numbered := len(rest) > 0 && isNumber(rest[0])
 	switch {
-	case cmd == "tag" && numbered:
-		return append(append(head, "card", "tag"), rest...)
 	case cmd == "step" && numbered:
 		return append(head, oldStep(rest)...)
 	case cmd == "comment" && numbered:

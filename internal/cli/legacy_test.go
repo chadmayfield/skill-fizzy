@@ -18,6 +18,10 @@ func TestRewrite(t *testing.T) {
 		{[]string{"reopen", "5"}, []string{"card", "reopen", "5"}},
 		{[]string{"golden", "5", "--off"}, []string{"card", "golden", "5", "--off"}},
 		{[]string{"tag", "5", "buy"}, []string{"card", "tag", "5", "buy"}},
+		{[]string{"tag", "--remove", "87", "buy"}, []string{"card", "tag", "87", "buy", "--remove"}},
+		{[]string{"tag", "87", "--remove", "buy"}, []string{"card", "tag", "87", "buy", "--remove"}},
+		{[]string{"tag", "87", "buy", "--remove"}, []string{"card", "tag", "87", "buy", "--remove"}},
+		{[]string{"--dry-run", "tag", "--remove", "87", "buy"}, []string{"--dry-run", "card", "tag", "87", "buy", "--remove"}},
 		{[]string{"delete", "5", "--yes"}, []string{"card", "delete", "5", "--yes"}},
 		{[]string{"comment", "5", "hi"}, []string{"comment", "add", "5", "hi"}},
 		{[]string{"step", "5", "Order it", "--done"}, []string{"step", "add", "5", "Order it", "--done"}},
@@ -36,6 +40,10 @@ func TestRewritePassesNewFormsThrough(t *testing.T) {
 	for _, argv := range [][]string{
 		{"card", "edit", "5", "--title", "x"},
 		{"step", "list", "5"},
+		{"tag", "list"},
+		{"tag", "--json", "list"},
+		{"--json", "tag", "list"},
+		{"tag", "--remove", "buy", "87"},
 		{"comment", "add", "5", "x"},
 		{"review"},
 		{"draft", "apply", "d/"},
@@ -116,5 +124,17 @@ func TestGlobalFlagsParse(t *testing.T) {
 	}
 	if cmd.CommandPath() != "fz card show" {
 		t.Errorf("command = %q, want fz card show", cmd.CommandPath())
+	}
+}
+
+// The old flag-first tag form reaches card tag end to end.
+func TestOldTagRemoveFlagFirst(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"tags":["buy"]}`)
+	r := runGo([]string{"tag", "--remove", "87", "buy"})
+	if r.code != 0 {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 1 || w[0].path != "/1/cards/87/taggings" {
+		t.Errorf("writes %+v", w)
 	}
 }
