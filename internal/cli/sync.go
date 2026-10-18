@@ -38,22 +38,23 @@ func cardLane(card fizzy.Card) string {
 // is missing or is not a card fingerprint, or whose card's fingerprint
 // differs from synced:, because then the card may hold changes made in Fizzy
 // that the draft would overwrite. When the draft has a usable
-// synced-fields: line, the refusal names the fields that changed.
+// synced-fields: line, the refusal names the fields that changed. The
+// error is a Refusal, so the command exits 2.
 func checkSynced(d *draft.Draft, card fizzy.Card) error {
 	name := filepath.Base(d.Path)
 	switch {
 	case d.Synced == "":
-		return fmt.Errorf("%s: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force", name)
+		return fizzy.Refuse(fmt.Sprintf("%s: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force", name))
 	case isTimestamp(d.Synced):
-		return fmt.Errorf("%s: synced: is a time written by an older fz, so changes made in Fizzy cannot be detected; rerun with --force", name)
+		return fizzy.Refuse(fmt.Sprintf("%s: synced: is a time written by an older fz, so changes made in Fizzy cannot be detected; rerun with --force", name))
 	case !isFingerprint(d.Synced):
-		return fmt.Errorf("%s: synced: is not a card fingerprint, so changes made in Fizzy cannot be detected; rerun with --force", name)
+		return fizzy.Refuse(fmt.Sprintf("%s: synced: is not a card fingerprint, so changes made in Fizzy cannot be detected; rerun with --force", name))
 	case cardFingerprint(card) != d.Synced:
 		what := ""
 		if fields := changedFields(d.Meta["synced-fields"], card); len(fields) > 0 {
 			what = " (" + strings.Join(fields, ", ") + ")"
 		}
-		return fmt.Errorf("%s: card #%d changed in Fizzy since the last sync%s; check it, then rerun with --force", name, d.Card, what)
+		return fizzy.Refuse(fmt.Sprintf("%s: card #%d changed in Fizzy since the last sync%s; check it, then rerun with --force", name, d.Card, what))
 	}
 	return nil
 }

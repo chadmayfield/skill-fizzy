@@ -974,7 +974,7 @@ something other than a fingerprint, because it cannot tell what changed.
 `--force` overrides both.
 
 `apply --update` checks every draft before it writes anything, so one refused
-draft stops the whole run and nothing is half applied.
+draft stops the whole run and nothing is half applied. A refusal exits 2.
 
 If a write fails partway through an update, `fz` has already printed each
 write that went through. It reads the card again, records `synced:` and

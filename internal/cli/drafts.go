@@ -594,8 +594,9 @@ func draftApply(c *cmdContext, a []string) error {
 		for _, r := range refused {
 			fmt.Fprintf(c.errw(), "fz: %s\n", r)
 		}
+		// A conflict is a refusal, so it exits 2.
 		if len(refused) > 0 {
-			return exitCode(1)
+			return exitCode(2)
 		}
 	}
 	// summary has one line per draft for the report printed if the run

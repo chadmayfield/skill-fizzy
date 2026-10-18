@@ -491,7 +491,7 @@ func TestApplyUpdateRecordsSynced(t *testing.T) {
 	srv.edit(fizzyEdits["description"])
 	got = syncRun(t, srv, "draft", "apply", "--update", path)
 	want := "fz: gate.md: card #87 changed in Fizzy since the last sync (description); check it, then rerun with --force\n"
-	if got.code != 1 || got.stderr != want {
+	if got.code != 2 || got.stderr != want {
 		t.Errorf("after a Fizzy edit: code %d stderr %q", got.code, got.stderr)
 	}
 }
@@ -506,7 +506,7 @@ func TestApplyUpdatePreflightRefusesFizzySideEdits(t *testing.T) {
 			srv.edit(fizzyEdits[name])
 			got := syncRun(t, srv, "draft", "apply", "--update", path)
 			want := "fz: gate.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force\n"
-			if got.code != 1 || got.stderr != want || got.stdout != "" {
+			if got.code != 2 || got.stderr != want || got.stdout != "" {
 				t.Errorf("code %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 			}
 			if w := srv.writes(); len(w) != 0 {
@@ -667,7 +667,7 @@ func TestApplyUpdateReportsEveryConflictAndWritesNothing(t *testing.T) {
 	got := syncRun(t, srv, "draft", "apply", "--update", dir)
 	want := "fz: a.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force\n" +
 		"fz: b.md: card #88 changed in Fizzy since the last sync; check it, then rerun with --force\n"
-	if got.code != 1 || got.stderr != want || got.stdout != "" {
+	if got.code != 2 || got.stderr != want || got.stdout != "" {
 		t.Errorf("code %d\nstdout %q\nstderr %q\nwant stderr %q", got.code, got.stdout, got.stderr, want)
 	}
 	if w := srv.writes(); len(w) != 0 {
@@ -683,7 +683,7 @@ func TestApplyUpdateConflictBlocksNewCards(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "b.md"), text)
 	got := syncRun(t, srv, "draft", "apply", "--update", dir)
 	want := "fz: b.md: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force\n"
-	if got.code != 1 || got.stderr != want {
+	if got.code != 2 || got.stderr != want {
 		t.Errorf("code %d stderr %q", got.code, got.stderr)
 	}
 	if w := srv.writes(); len(w) != 0 {
@@ -700,7 +700,7 @@ func TestApplyUpdateConflictDryRunWritesNothing(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Oil the hinge\n\nOnce a year.\n")
 	writeFile(t, filepath.Join(dir, "b.md"), conflictDraft(87))
 	got := syncRun(t, srv, "--dry-run", "draft", "apply", "--update", dir)
-	if got.code != 1 || strings.Contains(got.stderr, "[dry-run]") || got.stdout != "" {
+	if got.code != 2 || strings.Contains(got.stderr, "[dry-run]") || got.stdout != "" {
 		t.Errorf("code %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	if w := srv.writes(); len(w) != 0 {
@@ -748,7 +748,7 @@ func TestApplyUpdateNamesChangedFields(t *testing.T) {
 			srv.edit(fizzyEdits[edit])
 			got := syncRun(t, srv, "draft", "apply", "--update", path)
 			msg := "fz: gate.md: card #87 changed in Fizzy since the last sync (" + want + "); check it, then rerun with --force\n"
-			if got.code != 1 || got.stderr != msg {
+			if got.code != 2 || got.stderr != msg {
 				t.Errorf("code %d stderr %q\nwant %q", got.code, got.stderr, msg)
 			}
 		})
