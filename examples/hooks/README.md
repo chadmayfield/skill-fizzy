@@ -19,7 +19,8 @@ The output goes into an AI agent's context, and titles and column names are
 text anyone with access to the board can write.
 
 The whole hook gets 3 seconds, and the limit covers reading stdin and the
-repos map too. A repos map that is not a regular file prints nothing. The
+repos map too, including parsing the map's JSON. The repos map must be a
+regular file of at most 1 MiB. Any other map prints nothing. The
 script starts `fz` in a session of its own, and at the limit it kills that
 whole process group. A token command that `fz` started is killed with it,
 so nothing keeps running after the hook exits.

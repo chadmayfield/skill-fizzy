@@ -15,7 +15,8 @@ func addUploadCommand(root *cobra.Command) {
 		Short: "upload a file and print its sgid",
 		Long: "Upload a file through Fizzy's direct upload and print the attachable sgid for rich text. " +
 			"FILE must be a regular file of at most 100 MiB. A missing file, a folder, a device or a larger file exits 2 and sends nothing, in a dry run too. " +
-			"The storage URL Fizzy names must be https, or a path on the configured server.",
+			"The storage URL Fizzy names must be https, or a path on the configured server. " +
+			"Storage connection errors name the host and a generic failure or timeout, without signed paths or redirect details.",
 		Example: examples("fz upload ~/Pictures/hinge.jpg"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(upload),

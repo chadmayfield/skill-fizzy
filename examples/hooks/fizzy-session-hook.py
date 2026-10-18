@@ -72,17 +72,29 @@ def read_stdin():
         chunks.append(chunk)
 
 
-def read_map():
-    """Load the repos map. A path that is not a regular file is an error.
+def _map_timeout(signum, frame):
+    raise TimeoutError("repos map time limit")
 
-    The open does not block, so a named pipe at the map's path cannot hold
-    the hook.
-    """
-    fd = os.open(MAP, os.O_RDONLY | os.O_NONBLOCK)
-    with os.fdopen(fd) as f:
-        if not stat.S_ISREG(os.fstat(fd).st_mode):
-            raise OSError(f"{MAP} is not a regular file")
-        return json.load(f)
+
+def read_map():
+    """Load a regular repos map of at most 1 MiB before DEADLINE."""
+    left = DEADLINE - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("repos map time limit")
+    previous = signal.signal(signal.SIGALRM, _map_timeout)
+    signal.setitimer(signal.ITIMER_REAL, left)
+    try:
+        fd = os.open(MAP, os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as source:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError(f"{MAP} is not a regular file")
+            data = source.read((1 << 20) + 1)
+        if len(data) > 1 << 20:
+            raise ValueError("repos map is larger than 1 MiB")
+        return json.loads(data)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 # Terminal escape sequences, matched the way fz's config.TerminalLine

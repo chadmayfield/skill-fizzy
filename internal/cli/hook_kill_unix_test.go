@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -14,6 +15,48 @@ import (
 	"testing"
 	"time"
 )
+
+// TestPythonHookBoundsRegularMap limits map size and time spent parsing JSON.
+func TestPythonHookBoundsRegularMap(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is not on PATH")
+	}
+	fixture := newHookFixture(t)
+	program := `import runpy, sys, time
+hook = runpy.run_path(sys.argv[1], run_name="fizzy_hook_test")
+namespace = hook["read_map"].__globals__
+namespace["DEADLINE"] = time.monotonic() + 0.2
+if sys.argv[2] == "slow":
+    original = namespace["json"].loads
+    def slow_loads(*args, **kwargs):
+        time.sleep(5)
+        return original(*args, **kwargs)
+    namespace["json"].loads = slow_loads
+try:
+    hook["read_map"]()
+except TimeoutError:
+    sys.exit(0 if sys.argv[2] == "slow" else 2)
+except ValueError:
+    sys.exit(0 if sys.argv[2] == "large" else 2)
+sys.exit(3)
+`
+	for _, mode := range []string{"slow", "large"} {
+		t.Run(mode, func(t *testing.T) {
+			text := hookMap
+			if mode == "large" {
+				text = strings.Repeat(" ", 1<<20) + text
+			}
+			writeFile(t, fixture.mapPath, text)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, "python3", "-I", "-c", program, fixture.script, mode)
+			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + fixture.home, "FIZZY_REPOS_MAP=" + fixture.mapPath}
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("map %s: %v, %s", mode, err, out)
+			}
+		})
+	}
+}
 
 // hungTokenCmd is a token command that never prints, with a child of its
 // own. Both write their pids to pidFile.

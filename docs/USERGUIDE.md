@@ -139,6 +139,9 @@ The matching token command is
 A missing config file is not an error, as long as the environment supplies
 the URL and account.
 
+The config must be a regular file of at most 1 MiB. A larger file or a
+named pipe exits 1. A named pipe is refused without waiting for a writer.
+
 The file names a command that `fz` runs, so `fz` refuses a config file that
 the group or others can write. `chmod 600` on the file fixes that. The file
 cannot hold the token itself, so a `token` key is an error.
@@ -627,6 +630,9 @@ memory. The storage URL that Fizzy names must be an https URL, or a path
 that starts with a single `/`, which goes to your configured server. Any
 other URL is refused before the file is sent.
 
+Storage connection errors name the host and a generic failure, timeout or
+cancellation. Signed paths, queries and nested redirect details are hidden.
+
 ### Tags and people
 
 ```sh
@@ -870,7 +876,8 @@ The hinge pin is worn. The latch is fine.
   that name is refused, as [`card move`](#cards) refuses it.
 - `tags:` is a comma-separated list, with or without `[ ]` around it. Quotes
   around a tag and a leading `#` are dropped, so `['#buy', "gate"]` means
-  `buy` and `gate`.
+  `buy` and `gate`. A tag that becomes empty, such as `['#']`, exits 2 in
+  check, preview and apply.
 - `golden:` takes `true`, `yes`, `on` or `1`, or `false`, `no`, `off` or `0`,
   in any case. `fz` refuses any other value and exits 2.
 - `card:` is the card number, `87` or `#87`. `fz` writes it after it creates
@@ -978,10 +985,12 @@ fz draft apply ~/.fizzy-inbox/drafts/
   config file that does not parse, or that `fz` refuses, stops it with
   exit 1.
 - `apply` parses every draft, finds its images, checks that each image is
-  a regular file of at most 100 MiB, finds every draft's board and column,
+  a readable regular file of at most 100 MiB, hashes every image, finds
+  every draft's board and required move,
   and checks that it can rewrite the draft file, all before it creates
   anything. A column that a later draft gets wrong stops the run before an
-  earlier draft makes its card. A read-only draft, or
+  earlier draft makes its card. An unreadable image in a later draft also
+  stops the whole run before any write. A read-only draft, or
   one in a read-only folder, stops the run with exit 1 and nothing is sent.
   A draft with more than one hard link stops it with exit 2, because the
   rewrite would split the links. Copy it to a file of its own. A draft that
@@ -1008,7 +1017,9 @@ fz draft apply ~/.fizzy-inbox/drafts/
 - While it runs, `apply` holds a lock file beside each draft it may write,
   `.<name>.fzlock`, such as `.gate.md.fzlock`, and removes it at the end. A
   second `apply` of the same draft at the same time exits 2, names the lock
-  and sends nothing. A dry run takes no lock.
+  and sends nothing. A lock path that is a symlink, is not a regular file
+  or has more than one hard link is refused with exit 2. A dry run takes no
+  lock.
 - On macOS, Linux and the BSDs the lock is a `flock(2)` on that file, and
   the system drops it when `fz` exits, even after Ctrl-C or `kill -9`. A lock
   file left behind by a stopped apply does not block the next one. Check the

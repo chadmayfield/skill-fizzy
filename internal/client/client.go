@@ -167,19 +167,40 @@ func redactErr(err error) error {
 	return err
 }
 
-// redactErrHost keeps only the scheme and host of the URL in a *url.Error.
-// A storage service's signed path can hold the signing key, so a request
-// logged by host only names the host in its errors too.
+// redactErrHost names only the storage origin and a generic error.
+// Nested diagnostics can echo signing keys from redirect headers.
 func redactErrHost(err error) error {
 	var ue *url.Error
 	if errors.As(err, &ue) {
+		shown := "(unparsable URL)"
 		if u, perr := url.Parse(ue.URL); perr == nil {
-			ue.URL = (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
-		} else {
-			ue.URL = "(unparsable URL)"
+			shown = (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 		}
+		return &url.Error{Op: ue.Op, URL: shown, Err: storageRequestError{ue.Err}}
 	}
-	return err
+	return storageRequestError{err}
+}
+
+type storageRequestError struct{ err error }
+
+// Error hides storage diagnostics that may carry signing details.
+func (e storageRequestError) Error() string {
+	if e.Timeout() {
+		return "storage request timed out"
+	}
+	if errors.Is(e.err, context.Canceled) {
+		return "storage request canceled"
+	}
+	return "storage request failed"
+}
+
+// Unwrap preserves the underlying cause for errors.Is and errors.As.
+func (e storageRequestError) Unwrap() error { return e.err }
+
+// Timeout reports whether the underlying storage failure timed out.
+func (e storageRequestError) Timeout() bool {
+	var timeout interface{ Timeout() bool }
+	return errors.As(e.err, &timeout) && timeout.Timeout()
 }
 
 // ErrUnsafeID is the error IDFromLocation returns for an id that holds

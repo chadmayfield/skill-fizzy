@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -548,6 +549,42 @@ func TestStorageNetworkErrorHasNoPath(t *testing.T) {
 	}
 	if msg := err.Error(); strings.Contains(msg, "HINGEKEY") || strings.Contains(msg, "GATESIG") || !strings.Contains(msg, strings.TrimPrefix(srv.URL, "http://")) {
 		t.Errorf("error %q", msg)
+	}
+}
+
+// TestStorageMalformedRedirectHasNoSecrets covers nested URL parse errors.
+func TestStorageMalformedRedirectHasNoSecrets(t *testing.T) {
+	for _, status := range []int{301, 302, 303} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Location", "/disk/HINGEKEY/%zz?signature=GATESIG")
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+			c, _, _ := newTestClient(t, srv, false)
+			_, _, _, err := c.Do(http.MethodPut, srv.URL+"/disk/HINGEKEY/gate.jpg?signature=GATESIG", nil,
+				Stream(strings.NewReader("jpg"), 3), NoAuth(), Upload(), LogHost())
+			if err == nil {
+				t.Fatal("want a redirect error")
+			}
+			if text := err.Error(); strings.Contains(text, "HINGEKEY") || strings.Contains(text, "GATESIG") || !strings.Contains(text, srv.URL) {
+				t.Errorf("error exposes signing details: %q", text)
+			}
+		})
+	}
+}
+
+// TestStorageRedactionKeepsErrorIdentity preserves timeout and cancellation checks.
+func TestStorageRedactionKeepsErrorIdentity(t *testing.T) {
+	for _, cause := range []error{context.DeadlineExceeded, context.Canceled} {
+		err := redactErrHost(&url.Error{Op: "Put", URL: "https://fizzy.example.com/disk/HINGEKEY?signature=GATESIG", Err: cause})
+		if !errors.Is(err, cause) {
+			t.Errorf("lost cause %v: %v", cause, err)
+		}
+		var wrapped *url.Error
+		if !errors.As(err, &wrapped) || wrapped.Timeout() != errors.Is(cause, context.DeadlineExceeded) {
+			t.Errorf("lost timeout classification: %v", err)
+		}
 	}
 }
 

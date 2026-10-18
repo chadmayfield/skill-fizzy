@@ -36,6 +36,32 @@ func TestLoadFileOnly(t *testing.T) {
 	}
 }
 
+// TestConfigSizeLimit checks the boundary for account and inbox config reads.
+func TestConfigSizeLimit(t *testing.T) {
+	isolate(t)
+	body := `{"url":"https://fizzy.example.com","account":"1"}`
+	path := writeFile(t, strings.Repeat(" ", maxConfigBytes-len(body))+body)
+	if _, err := Load(path); err != nil {
+		t.Fatalf("config at the cap: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Repeat(" ", maxConfigBytes+1)+body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, read := range []struct {
+		name string
+		run  func() error
+	}{
+		{"config", func() error { _, err := Load(path); return err }},
+		{"inbox", func() error { _, err := LoadInbox(path); return err }},
+	} {
+		t.Run(read.name, func(t *testing.T) {
+			if err := read.run(); !errors.Is(err, ErrConfig) || !strings.Contains(err.Error(), "larger than 1 MiB") {
+				t.Errorf("error %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadNumericAccountAndRulesCard(t *testing.T) {
 	isolate(t)
 	for _, body := range []string{

@@ -33,6 +33,7 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "check DRAFT...",
 		Short: "validate drafts, and --links",
 		Long: "Parse each draft, resolve its images, and with --links fetch every link outside code. " +
+			"A tag that is empty after its quotes, spaces and leading # are removed exits 2. " +
 			"It needs no server URL or account. " +
 			"An image must be a path relative to the draft's folder or the inbox that stays inside one of them after symlinks are resolved; " +
 			"any other image is refused with exit 2. " +
@@ -45,7 +46,7 @@ func addDraftCommands(root *cobra.Command) {
 	preview := &cobra.Command{
 		Use:     "preview DRAFT...",
 		Short:   "show the card a draft would make",
-		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing. preview reads the config file for the inbox setting, so a config file that does not parse, or that fz refuses, stops it with exit 1. An image path outside the draft's folder and the inbox is refused with exit 2.",
+		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing. preview reads the config file for the inbox setting, so a config file that does not parse, or that fz refuses, stops it with exit 1. An empty tag or an image path outside the draft's folder and the inbox is refused with exit 2.",
 		Example: examples("fz draft preview gate.md"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftPreview),
@@ -54,6 +55,8 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "apply DRAFT...",
 		Short: "create cards from drafts, or --update them",
 		Long: "Create a card for each draft and write card: N and synced: back into it. " +
+			"Before any write, fz validates every draft's tags, reads and hashes its images, and resolves its board and required move. " +
+			"A lock file with more than one hard link is refused with exit 2. " +
 			"Just before the create, fz writes creating: and the time into the draft. card: N replaces it right after the create, before any step, tag, move or golden call. " +
 			"If fz cannot tell whether the create reached Fizzy, as after a timeout, the line stays and fz exits 1 and names the board to check. " +
 			"A draft that still has creating: is refused with exit 2 until you replace the line with card: N or delete it, so a draft never makes a second card. " +
@@ -314,7 +317,7 @@ func draftCheck(c *cmdContext, a []string) error {
 		}
 		if errors.Is(err, draft.ErrDraft) {
 			fmt.Fprintf(w, "✗ %s: %s\n", p, err)
-			if errors.Is(err, draft.ErrImagePath) || errors.Is(err, draft.ErrTooLarge) {
+			if errors.Is(err, draft.ErrImagePath) || errors.Is(err, draft.ErrTooLarge) || errors.Is(err, draft.ErrBadValue) {
 				refused++
 			}
 			bad++
@@ -351,8 +354,8 @@ func draftCheck(c *cmdContext, a []string) error {
 			}
 		}
 	}
-	// A refused image path is a refusal, so it exits 2, as preview and
-	// apply do for it.
+	// Refused paths, oversized files and bad front matter values exit 2,
+	// as preview and apply do for them.
 	if refused > 0 {
 		return exitCode(2)
 	}
@@ -716,9 +719,9 @@ func draftApply(c *cmdContext, a []string) error {
 			return exitCode(2)
 		}
 	}
-	// Resolve every board and column next, still before any write, so a
-	// name a later draft gets wrong stops the batch before an earlier draft
-	// makes its card.
+	// Resolve boards and moves, and hash every image before any write, so
+	// an invalid target or unreadable image stops the whole batch.
+	hashes := make(map[*draft.Draft]string, len(drafts))
 	for _, d := range drafts {
 		if d.Card != 0 && !update {
 			continue
@@ -727,11 +730,16 @@ func draftApply(c *cmdContext, a []string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", filepath.Base(d.Path), err)
 		}
-		if !isMaybe(d.Column) {
+		if !isMaybe(d.Column) || d.Card != 0 {
 			if _, err := fz.ResolveMoveTarget(board.ID, d.Column); err != nil {
 				return fmt.Errorf("%s: %w", filepath.Base(d.Path), err)
 			}
 		}
+		hash, err := draftHash(d, cfg.InboxPath())
+		if err != nil {
+			return refuseImage(err)
+		}
+		hashes[d] = hash
 	}
 	// summary has one line per draft for the report printed if the run
 	// stops early.
@@ -742,16 +750,9 @@ func draftApply(c *cmdContext, a []string) error {
 	w := c.out()
 	for i, d := range drafts {
 		name := filepath.Base(d.Path)
-		// The draft's hash is taken before anything is sent, so an edit
-		// made while fz runs is sent by the next --update.
-		dh := ""
-		if d.Card == 0 || update {
-			h, err := draftHash(d, cfg.InboxPath())
-			if err != nil {
-				return failApply(c, refuseImage(err), summary)
-			}
-			dh = h
-		}
+		// The hash was taken before any write, so an edit made while fz
+		// runs is sent by the next --update.
+		dh := hashes[d]
 		if d.Card != 0 {
 			if !update {
 				summary[i] = fmt.Sprintf("%s: card #%d, skipped", name, d.Card)
@@ -845,8 +846,8 @@ func lockPath(p string) string {
 // errLockHeld is acquireLock's error for a lock another apply holds.
 var errLockHeld = errors.New("lock held")
 
-// errLockUnsafe is acquireLock's error for a lock path that is not a
-// regular file, such as a planted symlink.
+// errLockUnsafe is acquireLock's error for a symlink, a nonregular lock
+// file or a lock file with more than one hard link.
 var errLockUnsafe = errors.New("lock path unsafe")
 
 // lockDrafts takes the apply lock for each draft in paths and returns a
@@ -871,7 +872,7 @@ func lockDrafts(paths []string) (func(), error) {
 			return nil, fizzy.Refuse(fmt.Sprintf("%s: another fz draft apply holds the lock %s, so fz sends nothing. %s", p, l, staleLockHelp))
 		case errors.Is(err, errLockUnsafe):
 			unlock()
-			return nil, fizzy.Refuse(fmt.Sprintf("%s: the lock path %s is not a regular file, so fz sends nothing. Delete it, then rerun", p, l))
+			return nil, fizzy.Refuse(fmt.Sprintf("%s: the lock path %s is not a regular file with one hard link, so fz sends nothing. Delete it, then rerun", p, l))
 		case err != nil:
 			unlock()
 			return nil, fmt.Errorf("%s: taking the lock %s failed: %w", p, l, err)

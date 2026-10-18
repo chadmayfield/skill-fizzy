@@ -917,3 +917,50 @@ func TestApplyBatchMissingColumnSendsNothing(t *testing.T) {
 		t.Fatalf("exit %d, writes %q, stderr %q", got.code, srv.writes(), got.stderr)
 	}
 }
+
+// TestApplyBatchEmptyTagSendsNothing checks tags before an earlier draft writes.
+func TestApplyBatchEmptyTagSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), "---\nboard: Home\ntags: ['#']\n---\n# Oil the hinge\n")
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code != 2 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "tag") {
+		t.Fatalf("result %+v, writes %q", got, srv.writes())
+	}
+}
+
+// TestApplyBatchUnreadableImageSendsNothing catches read failures before creates.
+func TestApplyBatchUnreadableImageSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	image := filepath.Join(dir, "hinge.jpg")
+	writeFile(t, image, "hinge")
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), "---\nboard: Home\n---\n# Oil the hinge\n\n![hinge](hinge.jpg)\n")
+	old := openImage
+	t.Cleanup(func() { openImage = old })
+	openImage = func(path string) (*os.File, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrPermission}
+	}
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code != 1 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "permission denied") {
+		t.Fatalf("result %+v, writes %q", got, srv.writes())
+	}
+}
+
+// TestApplyBatchAmbiguousMaybeSendsNothing checks moves back to the fixed lane.
+func TestApplyBatchAmbiguousMaybeSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	srv.mu.Lock()
+	srv.columns = `[{"id":"c-now","name":"Now"},{"id":"c-maybe","name":"Maybe?"}]`
+	srv.mu.Unlock()
+	srv.edit(func(card *cardState) { card.column = `{"id":"c-now","name":"Now"}` })
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Oil the hinge\n")
+	writeFile(t, filepath.Join(dir, "b.md"), srv.draft(t, syncDraftText))
+	got := syncRun(t, srv, "draft", "apply", "--update", dir)
+	if got.code != 2 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "could mean") {
+		t.Fatalf("result %+v, writes %q", got, srv.writes())
+	}
+}
