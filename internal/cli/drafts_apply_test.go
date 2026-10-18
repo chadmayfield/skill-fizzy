@@ -320,3 +320,35 @@ func TestApplyHelpDoesNotPairPruneWithForce(t *testing.T) {
 		}
 	}
 }
+
+// TestSyncBoardMoveThenColumn checks that after a board move the column is
+// set on the new board, even when the card's old column had the same name.
+// It also kills mutation M56, which skips the board move.
+func TestSyncBoardMoveThenColumn(t *testing.T) {
+	text := strings.Replace(syncDraftText, "board: Home\ncolumn: Maybe?\n", "board: Garage\ncolumn: Next\n", 1)
+	srv := newSyncServer(t)
+	srv.columns = `[{"id":"c-next","name":"Next"}]`
+	srv.edit(func(c *cardState) { c.column = `{"id":"c-next","name":"Next","color":{"name":"Blue","value":"#00f"}}` })
+	path := filepath.Join(t.TempDir(), "gate.md")
+	writeFile(t, path, srv.draft(t, text))
+	got := syncRun(t, srv, "draft", "apply", "--update", path)
+	if got.code != 0 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	w := srv.writes()
+	board, move := -1, -1
+	for i, c := range w {
+		switch c {
+		case "PUT /1/cards/87/board":
+			board = i
+		case "POST /1/cards/87/triage":
+			move = i
+		}
+	}
+	if board < 0 || move < board {
+		t.Errorf("want the board move, then the column move: %q", w)
+	}
+	if !strings.Contains(got.stdout, "#87 moved to board Garage\n") || !strings.Contains(got.stdout, "#87 moved to Next\n") {
+		t.Errorf("stdout = %q", got.stdout)
+	}
+}

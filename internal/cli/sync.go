@@ -146,7 +146,11 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 	if err != nil {
 		return report, err
 	}
-	if !card.Closed && cardLane(card) != lane(d.Column) {
+	// After a board move the card's old column says nothing about where it
+	// lands, so the column is always set on the new board.
+	moveBoard := card.Board.ID != board.ID
+	moveColumn := !card.Closed && (moveBoard || cardLane(card) != lane(d.Column))
+	if moveColumn {
 		if err := fz.CheckMoveTarget(board.ID, d.Column); err != nil {
 			return report, err
 		}
@@ -163,7 +167,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		}
 	}
 	sending = true
-	if card.Board.ID != board.ID {
+	if moveBoard {
 		if err := fz.MoveCardToBoard(d.Card, board.ID); err != nil {
 			return report, err
 		}
@@ -229,7 +233,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 	switch {
 	case card.Closed:
 		add("card is closed; column left alone")
-	case cardLane(card) != lane(d.Column):
+	case moveColumn:
 		if err := fz.MoveCard(d.Card, d.Column, board.ID); err != nil {
 			return report, err
 		}
