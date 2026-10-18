@@ -415,7 +415,7 @@ func (f *Fizzy) CheckMoveTarget(boardID, target string) error {
 		if moveKeyword(col.Name) == kw {
 			return refusef("the board has a column named '%s', so '%s' could mean that column or the %s keyword; "+
 				"to move the card into the column, use --to with the column id (%s); %s",
-				col.Name, strings.TrimSpace(target), kw, col.ID, keywordHint[kw])
+				config.TerminalLine(col.Name), strings.TrimSpace(target), kw, config.TerminalLine(col.ID), keywordHint[kw])
 		}
 	}
 	return nil

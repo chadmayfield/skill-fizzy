@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
 // User is a person on the account.
@@ -152,7 +154,7 @@ func matchUser(users []User, s string, idPassthrough bool) (UserMatch, error) {
 	}
 	names := make([]string, len(users))
 	for i, u := range users {
-		names[i] = u.Name
+		names[i] = config.TerminalLine(u.Name)
 	}
 	return UserMatch{}, refusef("no user %s (have: %s)", PyRepr(s), strings.Join(names, ", "))
 }

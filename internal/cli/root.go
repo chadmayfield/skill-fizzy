@@ -87,7 +87,9 @@ func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 	if errors.As(err, &code) {
 		return int(code)
 	}
-	fmt.Fprintf(errw, "fz: %s\n", errorText(err))
+	// The error can hold server text, such as a user or tag name, so it
+	// goes through the terminal cleaner like everything else fz prints.
+	fmt.Fprintf(terminalWriter{errw}, "fz: %s\n", errorText(err))
 	if _, ok := err.(usageError); ok || fizzy.IsRefusal(err) || strings.HasPrefix(err.Error(), "unknown command") {
 		return 2
 	}
