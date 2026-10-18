@@ -114,8 +114,9 @@ func trimEnding(s string) string {
 }
 
 // RecordFields writes key: value lines into the front matter. An existing line
-// for the same key (any case) is dropped, the rest keep their order, and the
-// new lines go at the end in the order given. Every other byte of the file
+// for the same key (any case) is dropped, the rest keep their order, blank
+// lines included, and the new lines go after the last line with content, in
+// the order given. Every other byte of the file
 // stays as it was, including a BOM and the file's line endings, which the new
 // lines use too. The file is replaced by a rename, so a failed write leaves
 // the old draft whole. A symlink is followed and stays a symlink.
@@ -153,19 +154,34 @@ func RecordFields(path string, fields ...KV) error {
 		}
 		kept = append(kept, b.String()+ending)
 	}
+	// The new lines go after the last line with content, so blank lines,
+	// such as one before the closing ---, stay where they are.
+	k := -1
+	for i, line := range kept {
+		if pyStrip(trimEnding(line)) != "" {
+			k = i
+		}
+	}
+	seq := append([]string(nil), kept[:k+1]...)
+	for _, f := range fields {
+		seq = append(seq, f.Key+": "+f.Value)
+	}
+	seq = append(seq, kept[k+1:]...)
+	// Every line but the last ends with its own ending, or the file's. The
+	// last has none, because the bytes after the front matter start with
+	// the ending before the closing ---.
 	eol := lineEnd(src.raw)
 	var out bytes.Buffer
 	out.Write(src.raw[:start])
-	front := strings.Join(kept, "")
-	// The last kept line's ending is dropped here, because the bytes after
-	// the front matter start with the ending before the closing ---.
-	front = strings.TrimSuffix(front, endingOf(front))
-	out.WriteString(front)
-	for i, f := range fields {
-		if i > 0 || front != "" {
-			out.WriteString(eol)
+	for i, line := range seq {
+		e := endingOf(line)
+		switch {
+		case i == len(seq)-1:
+			line = strings.TrimSuffix(line, e)
+		case e == "":
+			line += eol
 		}
-		out.WriteString(f.Key + ": " + f.Value)
+		out.WriteString(line)
 	}
 	out.Write(src.raw[end:])
 	return writeAtomic(path, out.Bytes())

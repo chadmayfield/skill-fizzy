@@ -54,6 +54,33 @@ func TestRecordFieldsKeepsBytes(t *testing.T) {
 			"---\nboard: Home\ncards: gate, hinge\ncardinal: north\ncard: 5\n---\n# Fix the gate\n",
 			"---\nboard: Home\ncards: gate, hinge\ncardinal: north\ncard: 9\n---\n# Fix the gate\n",
 		},
+		{
+			// opus-integrity-7: blank lines in the front matter are kept,
+			// and the new line goes after the last line with content.
+			"blank line before the closing delimiter",
+			"---\nboard: Home\n\n---\n# Fix the gate\n",
+			"---\nboard: Home\ncard: 9\n\n---\n# Fix the gate\n",
+		},
+		{
+			"blank line before the closing delimiter, bom and crlf",
+			"\xef\xbb\xbf---\r\nboard: Home\r\n\r\n---\r\n# Fix the gate\r\n",
+			"\xef\xbb\xbf---\r\nboard: Home\r\ncard: 9\r\n\r\n---\r\n# Fix the gate\r\n",
+		},
+		{
+			"blank line between keys",
+			"---\nboard: Home\n\nnote: keep\n---\n# Fix the gate\n",
+			"---\nboard: Home\n\nnote: keep\ncard: 9\n---\n# Fix the gate\n",
+		},
+		{
+			"whitespace line before the closing delimiter",
+			"---\nboard: Home\n   \n---\n# Fix the gate\n",
+			"---\nboard: Home\ncard: 9\n   \n---\n# Fix the gate\n",
+		},
+		{
+			"old card line and a blank line",
+			"---\nboard: Home\ncard: 5\n\n\n---\n# Fix the gate\n",
+			"---\nboard: Home\ncard: 9\n\n\n---\n# Fix the gate\n",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := writeFile(t, t.TempDir(), "gate.md", tc.in)
