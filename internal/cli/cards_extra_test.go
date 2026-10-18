@@ -62,7 +62,7 @@ func extraServer(t *testing.T, card string) (*httptest.Server, func() []extraCal
 	}
 }
 
-func writes(cs []extraCall) []extraCall {
+func extraWrites(cs []extraCall) []extraCall {
 	var out []extraCall
 	for _, c := range cs {
 		if c.method != http.MethodGet {
@@ -92,7 +92,7 @@ func TestCardAssign(t *testing.T) {
 	if r.code != 0 || r.stdout != "card #87: assigned Hinge Smith (u2, matched by email)\n" {
 		t.Fatalf("got %+v", r)
 	}
-	w := writes(calls())
+	w := extraWrites(calls())
 	if len(w) != 1 || w[0].path != "/1/cards/87/assignments" || w[0].body != `{"assignee_id":"u2"}` {
 		t.Errorf("writes %+v", w)
 	}
@@ -104,7 +104,7 @@ func TestCardAssignAlready(t *testing.T) {
 	if r.code != 0 || r.stdout != "card #87: Gate Keeper (u1, matched by name) already assigned\n" {
 		t.Fatalf("got %+v", r)
 	}
-	if w := writes(calls()); len(w) != 0 {
+	if w := extraWrites(calls()); len(w) != 0 {
 		t.Errorf("writes %+v", w)
 	}
 	r = runGo([]string{"--json", "card", "unassign", "87", "u2"})
@@ -120,7 +120,7 @@ func TestCardUnassign(t *testing.T) {
 	if r.code != 0 || r.stdout != "card #87: unassigned Gate Keeper (u1, matched by id)\n" {
 		t.Fatalf("got %+v", r)
 	}
-	if w := writes(calls()); len(w) != 1 || w[0].body != `{"assignee_id":"u1"}` {
+	if w := extraWrites(calls()); len(w) != 1 || w[0].body != `{"assignee_id":"u1"}` {
 		t.Errorf("writes %+v", w)
 	}
 }
@@ -139,7 +139,7 @@ func TestCardAssignDryRun(t *testing.T) {
 	if r.code != 0 || !strings.Contains(r.stderr, "[dry-run] POST ") || !strings.Contains(r.stderr, `/1/cards/87/assignments {"assignee_id": "u1"}`) {
 		t.Fatalf("got %+v", r)
 	}
-	if w := writes(calls()); len(w) != 0 {
+	if w := extraWrites(calls()); len(w) != 0 {
 		t.Errorf("dry run sent %+v", w)
 	}
 }
@@ -157,13 +157,13 @@ func TestCardWatchAndPin(t *testing.T) {
 		{[]string{"card", "unpin", "87"}, "card #87 unpinned\n", "DELETE", "/1/cards/87/pin"},
 		{[]string{"card", "unboost", "87", "r1"}, "boost r1 removed from card #87\n", "DELETE", "/1/cards/87/reactions/r1"},
 	} {
-		before := len(writes(calls()))
+		before := len(extraWrites(calls()))
 		r := runGo(c.args)
 		if r.code != 0 || r.stdout != c.out {
 			t.Errorf("%v: got %+v", c.args, r)
 			continue
 		}
-		w := writes(calls())
+		w := extraWrites(calls())
 		if len(w) != before+1 || w[before].method != c.method || w[before].path != c.path {
 			t.Errorf("%v: writes %+v", c.args, w[before:])
 		}
@@ -204,7 +204,7 @@ func TestCardBoost(t *testing.T) {
 	if r.code != 0 || r.stdout != "boost r2 added to card #87\n" {
 		t.Fatalf("got %+v", r)
 	}
-	if w := writes(calls()); len(w) != 1 || w[0].path != "/1/cards/87/reactions" || w[0].body != `{"reaction":{"content":"Nice hinge"}}` {
+	if w := extraWrites(calls()); len(w) != 1 || w[0].path != "/1/cards/87/reactions" || w[0].body != `{"reaction":{"content":"Nice hinge"}}` {
 		t.Errorf("writes %+v", w)
 	}
 	r = runGo([]string{"--json", "card", "boost", "87", "ok"})
@@ -251,14 +251,14 @@ func TestCardImage(t *testing.T) {
 	if r.code != 2 || r.stderr != "about to remove the image from: #87    [maybe] Fix the gate (board Home)\nrefusing without --yes\n" {
 		t.Errorf("no --yes: %+v", r)
 	}
-	if w := writes(calls()); len(w) != 0 {
+	if w := extraWrites(calls()); len(w) != 0 {
 		t.Fatalf("sent %+v", w)
 	}
 	r = runGo([]string{"card", "image", "87", "--remove", "--yes"})
 	if r.code != 0 || r.stdout != "card #87 image removed\n" {
 		t.Errorf("--yes: %+v", r)
 	}
-	if w := writes(calls()); len(w) != 1 || w[0].method != "DELETE" || w[0].path != "/1/cards/87/image" {
+	if w := extraWrites(calls()); len(w) != 1 || w[0].method != "DELETE" || w[0].path != "/1/cards/87/image" {
 		t.Errorf("writes %+v", w)
 	}
 }
@@ -269,7 +269,7 @@ func TestCardImageNone(t *testing.T) {
 	if r.code != 0 || r.stdout != "card #87 has no image\n" {
 		t.Errorf("got %+v", r)
 	}
-	if w := writes(calls()); len(w) != 0 {
+	if w := extraWrites(calls()); len(w) != 0 {
 		t.Errorf("sent %+v", w)
 	}
 }
