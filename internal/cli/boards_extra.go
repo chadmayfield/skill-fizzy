@@ -193,9 +193,13 @@ func boardDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	cards, err := fz.Cards(b.ID, nil)
-	if err != nil {
-		return err
+	var counts [3]int
+	for i, state := range []string{"all", "closed", "not_now"} {
+		cards, err := fz.Cards(b.ID, []fizzy.Param{{Key: "indexed_by", Value: state}})
+		if err != nil {
+			return err
+		}
+		counts[i] = len(cards)
 	}
 	cols, err := fz.Columns(b.ID)
 	if err != nil {
@@ -209,7 +213,7 @@ func boardDelete(c *cmdContext, a []string) error {
 	if len(names) > 0 {
 		listed = strings.Join(names, ", ")
 	}
-	fmt.Fprintf(c.errw(), "about to delete board %s (%s): %s, custom columns: %s\n", b.Name, b.ID, plural(len(cards), "card", "cards"), listed)
+	fmt.Fprintf(c.errw(), "about to delete board %s (%s): %d open, %d closed, %d not now cards; custom columns: %s\n", b.Name, b.ID, counts[0], counts[1], counts[2], listed)
 	if !yes {
 		return refuse(c)
 	}

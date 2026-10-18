@@ -151,7 +151,7 @@ func columnDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to delete column %s (%s) on board %s: %s\n", col.Name, col.ID, b.Name, plural(len(cards), "card", "cards"))
+	fmt.Fprintf(c.errw(), "about to delete column %s (%s) on board %s: %s\n", col.Name, col.ID, b.Name, plural(len(cards), "open card", "open cards"))
 	if !yes {
 		return refuse(c)
 	}

@@ -35,6 +35,14 @@ func bxServer(t *testing.T, allAccess bool) (*httptest.Server, func() []seenCall
 		case "GET /1/boards/b1/accesses":
 			io.WriteString(w, `{"board_id":"b1","all_access":`+access+`,"users":[{"id":"u1","name":"Pat","role":"owner","has_access":true,"involvement":"watching"},{"id":"u2","name":"Sam","role":"member","has_access":false,"involvement":null}]}`)
 		case "GET /1/cards":
+			switch r.URL.Query().Get("indexed_by") {
+			case "closed":
+				io.WriteString(w, `[{"number":90,"title":"Old"}]`)
+				return
+			case "not_now":
+				io.WriteString(w, `[{"number":91,"title":"a"},{"number":92,"title":"b"},{"number":93,"title":"c"}]`)
+				return
+			}
 			io.WriteString(w, `[{"number":87,"title":"Fix the gate","column":{"id":"c1","name":"Next"}},{"number":88,"title":"Oil the hinge"}]`)
 		case "GET /1/boards/b1/columns":
 			io.WriteString(w, `[{"id":"c1","name":"Next","color":{"name":"Lime","value":"var(--color-card-4)"}}]`)
@@ -152,7 +160,7 @@ func TestBoardDeleteRefusesWithoutYes(t *testing.T) {
 	srv, calls := bxServer(t, false)
 	editEnv(t, srv)
 	r := runGo([]string{"board", "delete", "Home"})
-	if r.code != 2 || !strings.Contains(r.stderr, "Home") || !strings.Contains(r.stderr, "2 cards") ||
+	if r.code != 2 || !strings.Contains(r.stderr, "Home") || !strings.Contains(r.stderr, "2 open, 1 closed, 3 not now cards") ||
 		!strings.Contains(r.stderr, "Next") || !strings.Contains(r.stderr, "refusing without --yes") {
 		t.Fatalf("got %+v", r)
 	}
@@ -315,7 +323,7 @@ func TestColumnDelete(t *testing.T) {
 	srv, calls := bxServer(t, false)
 	editEnv(t, srv)
 	r := runGo([]string{"column", "delete", "Home", "Next"})
-	if r.code != 2 || !strings.Contains(r.stderr, "Next") || !strings.Contains(r.stderr, "1 card") || !strings.Contains(r.stderr, "refusing without --yes") || len(writes(calls())) != 0 {
+	if r.code != 2 || !strings.Contains(r.stderr, "Next") || !strings.Contains(r.stderr, "1 open card") || !strings.Contains(r.stderr, "refusing without --yes") || len(writes(calls())) != 0 {
 		t.Fatalf("refusal: %+v writes %+v", r, writes(calls()))
 	}
 	r = runGo([]string{"column", "delete", "Home", "Next", "--yes"})
