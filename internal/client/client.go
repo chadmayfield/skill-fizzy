@@ -162,6 +162,9 @@ func (c *Client) URL(path string, accountScoped bool) string {
 	return c.cfg.URL + prefix + path
 }
 
+// Account returns the configured account, without slashes.
+func (c *Client) Account() string { return c.cfg.Account }
+
 // Do sends one request. In dry-run mode a non-GET request is printed, not
 // sent, and Do returns status 0 with no payload. A status of 300 or above
 // returns an *APIError along with the status, header and payload.
