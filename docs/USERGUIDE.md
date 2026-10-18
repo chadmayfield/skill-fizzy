@@ -443,7 +443,9 @@ fz card image 87 --remove --yes
 ```
 
 `fz` can only remove a card's header image, so `--remove` is required. It
-prints the card first and refuses without `--yes`.
+prints the card first and refuses without `--yes`. A card with no image
+prints that and exits 0. If Fizzy's reply has no `image_url` field, `fz`
+cannot tell whether there is an image, so it exits 2 and sends nothing.
 
 Delete:
 

@@ -404,3 +404,23 @@ func TestCardAssignRefusesWithoutAssignees(t *testing.T) {
 		t.Errorf("writes %+v", w)
 	}
 }
+
+// A card reply without an image_url key does not say whether the card has
+// an image, so card image --remove exits 2 and sends nothing, with or
+// without --yes. A null image_url still means there is no image.
+func TestCardImageRefusesWithoutImageKey(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"title":"Fix the gate"}`)
+	for _, args := range [][]string{
+		{"card", "image", "87", "--remove"},
+		{"card", "image", "87", "--remove", "--yes"},
+		{"--dry-run", "card", "image", "87", "--remove", "--yes"},
+	} {
+		r := runGo(args)
+		if r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "image_url") {
+			t.Errorf("%q: %+v", args, r)
+		}
+	}
+	if w := extraWrites(calls()); len(w) != 0 {
+		t.Fatalf("sent %+v", w)
+	}
+}

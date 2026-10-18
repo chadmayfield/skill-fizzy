@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -76,9 +77,10 @@ func addCardExtraCommands(root *cobra.Command) {
 	}
 
 	image := &cobra.Command{
-		Use:     "image NUMBER",
-		Short:   "remove a card's header image (needs --yes)",
-		Long:    "Remove a card's header image. fz can only remove the image, so --remove is required. It prints the card first and refuses without --yes.",
+		Use:   "image NUMBER",
+		Short: "remove a card's header image (needs --yes)",
+		Long: "Remove a card's header image. fz can only remove the image, so --remove is required. It prints the card first and refuses without --yes. " +
+			"A card with no image prints that and exits 0. If Fizzy's reply has no image_url field, fz cannot tell, so it exits 2 and sends nothing.",
 		Example: examples("fz card image 87 --remove --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(cardImage),
@@ -247,6 +249,13 @@ func cardImage(c *cmdContext, a []string) error {
 	card, err := fz.Card(n)
 	if err != nil {
 		return err
+	}
+	// A missing key is told apart from null, as card assign does for
+	// assignees: without it fz cannot tell whether there is an image.
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(card.Raw(), &keys) != nil || keys["image_url"] == nil {
+		fmt.Fprintf(c.errw(), "fz: card #%d has no image_url in Fizzy's reply, so fz cannot tell whether it has an image\n", n)
+		return exitCode(2)
 	}
 	if rawString(card.Raw(), "image_url") == "None" {
 		return emit(c.cmd, c.dry(obj{{"number", n}, {"removed", false}}), fmt.Sprintf("card #%d has no image", n))
