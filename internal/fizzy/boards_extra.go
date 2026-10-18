@@ -2,13 +2,10 @@ package fizzy
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
-
-	"github.com/chadmayfield/skill-fizzy/internal/client"
 )
 
 // BoardInfo is one board as GET /boards/:id returns it. The list endpoint
@@ -173,28 +170,21 @@ func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
 		return BoardAccess{}, err
 	}
 	var out BoardAccess
-	next := f.C.URL("/boards/"+url.PathEscape(boardID)+"/accesses", true)
-	seen := map[string]bool{}
-	for next != "" {
-		if seen[next] {
-			return out, fmt.Errorf("pagination loop: %s linked again", next)
-		}
-		seen[next] = true
-		_, hdr, payload, err := f.C.Do(http.MethodGet, next, nil)
-		if err != nil {
-			return out, err
-		}
+	err := f.C.EachPage("/boards/"+url.PathEscape(boardID)+"/accesses", func(payload []byte) (bool, error) {
 		var page struct {
 			BoardID   string       `json:"board_id"`
 			AllAccess bool         `json:"all_access"`
 			Users     []AccessUser `json:"users"`
 		}
 		if err := json.Unmarshal(payload, &page); err != nil {
-			return out, err
+			return false, err
 		}
 		out.BoardID, out.AllAccess = page.BoardID, page.AllAccess
 		out.Users = append(out.Users, page.Users...)
-		next = client.NextLink(hdr.Get("Link"))
+		return false, nil
+	})
+	if err != nil {
+		return BoardAccess{}, err
 	}
 	return out, nil
 }

@@ -11,15 +11,22 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// tokenCmdTimeout caps how long the token command may run.
+var tokenCmdTimeout = 30 * time.Second
 
 // ErrConfig is wrapped by every error this package returns.
 var ErrConfig = errors.New("config error")
@@ -57,8 +64,10 @@ func (c *Config) InboxPath() string { return ExpandTilde(c.Inbox) }
 // LogFile returns the action log path with ~ expanded.
 func (c *Config) LogFile() string { return ExpandTilde(c.LogPath) }
 
-// ResolveToken returns the token from Token, or by running TokenCmd. It never
-// includes command output in an error, because the output may hold the secret.
+// ResolveToken returns the token from Token, or by running TokenCmd. The
+// command gets tokenCmdTimeout to finish. A failure names the exit status, or
+// "not found", plus up to 200 characters of cleaned stderr. Stdout never
+// appears in an error, because it may hold the secret.
 func (c *Config) ResolveToken() (string, error) {
 	if c.Token != "" {
 		return c.Token, nil
@@ -70,11 +79,33 @@ func (c *Config) ResolveToken() (string, error) {
 	if err != nil || len(words) == 0 {
 		return "", fmt.Errorf("%w: token command failed (invalid command)", ErrConfig)
 	}
-	cmd := exec.Command(words[0], words[1:]...)
+	ctx, cancel := context.WithTimeout(context.Background(), tokenCmdTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, words[0], words[1:]...)
+	// A child that keeps stdout or stderr open would hold Wait past the kill.
+	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
+	stderr := &capWriter{max: 4096}
 	cmd.Stdout = &out
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%w: token command failed", ErrConfig)
+		var reason string
+		var exitErr *exec.ExitError
+		switch {
+		case errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist):
+			reason = "not found"
+		case ctx.Err() == context.DeadlineExceeded:
+			reason = fmt.Sprintf("timed out after %s", tokenCmdTimeout)
+		case errors.As(err, &exitErr):
+			reason = exitErr.ProcessState.String()
+		default:
+			reason = "could not run"
+		}
+		detail := SafeText(stderr.String(), 200)
+		if detail != "" {
+			detail = ": " + detail
+		}
+		return "", fmt.Errorf("%w: token command failed (%s)%s", ErrConfig, reason, detail)
 	}
 	token := strings.TrimSpace(out.String())
 	if token == "" {
@@ -82,6 +113,25 @@ func (c *Config) ResolveToken() (string, error) {
 	}
 	return token, nil
 }
+
+// capWriter keeps the first max bytes written to it and drops the rest.
+type capWriter struct {
+	buf bytes.Buffer
+	max int
+}
+
+func (w *capWriter) Write(p []byte) (int, error) {
+	if room := w.max - w.buf.Len(); room > 0 {
+		if len(p) > room {
+			w.buf.Write(p[:room])
+		} else {
+			w.buf.Write(p)
+		}
+	}
+	return len(p), nil
+}
+
+func (w *capWriter) String() string { return w.buf.String() }
 
 // scalar renders a JSON string or number as text. Other types give "".
 func scalar(v any) string {
@@ -109,10 +159,19 @@ func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	switch {
 	case err == nil:
+		if err := checkFileMode(path); err != nil {
+			return nil, err
+		}
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.UseNumber()
 		if err := dec.Decode(&data); err != nil {
 			return nil, fmt.Errorf("%w: %s: invalid JSON (%v)", ErrConfig, path, err)
+		}
+		if _, err := dec.Token(); err != io.EOF {
+			return nil, fmt.Errorf("%w: %s: invalid JSON (text after the JSON object)", ErrConfig, path)
+		}
+		if _, ok := data["token"]; ok {
+			return nil, fmt.Errorf("%w: %s: the config file cannot hold the token; give a command that prints it in token_cmd, or set FIZZY_TOKEN", ErrConfig, path)
 		}
 	case !errors.Is(err, os.ErrNotExist):
 		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
@@ -129,9 +188,16 @@ func Load(path string) (*Config, error) {
 	if url == "" || account == "" {
 		return nil, fmt.Errorf("%w: set FIZZY_URL and FIZZY_ACCOUNT, or url/account in %s", ErrConfig, path)
 	}
+	if err := checkURL(url); err != nil {
+		return nil, err
+	}
+	account = strings.Trim(account, "/")
+	if err := checkAccount(account); err != nil {
+		return nil, err
+	}
 	cfg := &Config{
 		URL:      strings.TrimRight(url, "/"),
-		Account:  strings.Trim(account, "/"),
+		Account:  account,
 		TokenCmd: pick("FIZZY_TOKEN_CMD", "token_cmd"),
 		Token:    os.Getenv("FIZZY_TOKEN"),
 		Inbox:    pick("FIZZY_INBOX", "inbox"),

@@ -351,25 +351,16 @@ func (f *Fizzy) Activities(boardID, creatorID string, limit int) ([]Activity, er
 // every page, as list does.
 func listUpTo[T any](c *client.Client, path string, limit int) ([]T, error) {
 	var out []T
-	next := c.URL(path, true)
-	seen := map[string]bool{}
-	for next != "" && (limit == 0 || len(out) < limit) {
-		if seen[next] {
-			return nil, fmt.Errorf("pagination loop: %s linked again", next)
+	err := c.EachPage(path, func(payload []byte) (bool, error) {
+		var page []T
+		if err := json.Unmarshal(payload, &page); err != nil {
+			return false, err
 		}
-		seen[next] = true
-		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
-		if err != nil {
-			return nil, err
-		}
-		if len(payload) > 0 {
-			var page []T
-			if err := json.Unmarshal(payload, &page); err != nil {
-				return nil, err
-			}
-			out = append(out, page...)
-		}
-		next = client.NextLink(hdr.Get("Link"))
+		out = append(out, page...)
+		return limit > 0 && len(out) >= limit, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
