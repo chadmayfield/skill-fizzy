@@ -381,7 +381,42 @@ func pyRepr(s string) string {
 	return b.String()
 }
 
-// Links returns the distinct http(s) URLs in the body, in order of first use.
+// blankCode returns text with fenced code blocks and inline code spans
+// turned into spaces, so Links finds no URL inside code. Offsets and line
+// breaks stay where they were.
+func blankCode(text string) string {
+	lines := strings.Split(text, "\n")
+	inFence := false
+	for i, line := range lines {
+		fence := strings.HasPrefix(pyStrip(line), "```")
+		if inFence || fence {
+			lines[i] = strings.Repeat(" ", len(line))
+			if fence {
+				inFence = !inFence
+			}
+			continue
+		}
+		b := []byte(line)
+		for j := 0; j < len(b); j++ {
+			if b[j] != '`' {
+				continue
+			}
+			k := strings.IndexByte(line[j+1:], '`')
+			if k <= 0 {
+				continue
+			}
+			for x := j; x <= j+1+k; x++ {
+				b[x] = ' '
+			}
+			j += k + 1
+		}
+		lines[i] = string(b)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Links returns the distinct http(s) URLs in the body, in order of first
+// use, leaving out any URL inside code.
 // The Python pattern is
 //
 //	\[[^\]]*\]\((https?://[^)\s]+)\)|(?<![("])\b(https?://[^\s<>)]+[^\s<>).,;:!?])
@@ -396,7 +431,7 @@ func (d *Draft) Links() []string {
 			found = append(found, u)
 		}
 	}
-	text := d.BodyMD
+	text := blankCode(d.BodyMD)
 	for i := 0; i < len(text); {
 		if m := mdLinkRe.FindStringSubmatch(text[i:]); m != nil {
 			add(m[1])

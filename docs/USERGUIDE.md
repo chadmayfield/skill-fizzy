@@ -834,7 +834,12 @@ fz draft apply ~/.fizzy-inbox/drafts/
 ```
 
 - `check` parses each draft and finds its images. `--links` also fetches
-  every link and reports its status. Those fetches carry no token.
+  every link and reports its status. Those fetches carry no token and no
+  cookie, and use no proxy. Links inside code are not fetched.
+- `--links` never connects to this machine or a private network. A link
+  whose address is loopback, private, link-local or unspecified, or that
+  redirects to one, prints `skipped (local address)` and does not fail the
+  check.
 - `preview` prints the title, board, column, tags, description HTML and steps.
   It sends nothing.
 - `apply` parses every draft, finds its images and checks that it can

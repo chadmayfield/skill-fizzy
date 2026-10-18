@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chadmayfield/skill-fizzy/internal/config"
@@ -27,9 +29,10 @@ func addDraftCommands(root *cobra.Command) {
 	}
 	root.AddCommand(g)
 	check := &cobra.Command{
-		Use:     "check DRAFT...",
-		Short:   "validate drafts, and --links",
-		Long:    "Parse each draft, resolve its images, and with --links fetch every link.",
+		Use:   "check DRAFT...",
+		Short: "validate drafts, and --links",
+		Long: "Parse each draft, resolve its images, and with --links fetch every link outside code. " +
+			"A link to a loopback, private, link-local or unspecified address, or one that redirects there, is skipped and printed as skipped (local address).",
 		Example: examples("fz draft check ~/.fizzy-inbox/drafts/", "fz draft check gate.md --links"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftCheck),
@@ -133,14 +136,48 @@ func draftKey(p string) string {
 	return filepath.Clean(p)
 }
 
-// linkStatus is an HTTP status, or the name of the error that stopped the
-// request.
-type linkStatus struct {
-	code int
-	err  string
+// errLocalAddress stops a link check that would connect to this machine
+// or a private network.
+var errLocalAddress = errors.New("local address")
+
+// linkDialBlocked reports whether a link check may not connect to a. It is
+// a variable so tests can let it reach their loopback servers.
+var linkDialBlocked = func(a netip.AddrPort) bool {
+	ip := a.Addr().Unmap()
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
 }
 
-func (s linkStatus) ok() bool { return s.err == "" && s.code < 400 }
+// linkClient is the HTTP client for draft check --links. It checks the
+// address of every connection it makes, after DNS and on every redirect
+// hop, and refuses local and private ones before it connects. It uses no
+// proxy, so the address it checks is the one it reaches. It never sends a
+// token or a cookie.
+func linkClient() *http.Client {
+	d := &net.Dialer{
+		Timeout: 15 * time.Second,
+		Control: func(network, address string, _ syscall.RawConn) error {
+			ap, err := netip.ParseAddrPort(address)
+			if err != nil || linkDialBlocked(ap) {
+				return errLocalAddress
+			}
+			return nil
+		},
+	}
+	tr := &http.Transport{Proxy: nil, DialContext: d.DialContext, TLSHandshakeTimeout: 15 * time.Second}
+	return &http.Client{Timeout: 15 * time.Second, Transport: tr}
+}
+
+// linkStatus is an HTTP status, or the name of the error that stopped the
+// request. skipped is set when the link, or a redirect from it, points at a
+// local or private address, which fz does not fetch.
+type linkStatus struct {
+	code    int
+	err     string
+	skipped bool
+}
+
+func (s linkStatus) ok() bool { return s.skipped || (s.err == "" && s.code < 400) }
 
 func (s linkStatus) String() string {
 	if s.err != "" {
@@ -158,6 +195,9 @@ func checkLink(hc *http.Client, url string) linkStatus {
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (fizzy-skill link check)")
 	resp, err := hc.Do(req)
+	if errors.Is(err, errLocalAddress) {
+		return linkStatus{skipped: true}
+	}
 	if err != nil {
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
@@ -179,7 +219,7 @@ func draftCheck(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	hc := &http.Client{Timeout: 15 * time.Second}
+	hc := linkClient()
 	w := c.out()
 	bad := 0
 	for _, p := range paths {
@@ -204,6 +244,10 @@ func draftCheck(c *cmdContext, a []string) error {
 		if links {
 			for _, u := range d.Links() {
 				s := checkLink(hc, u)
+				if s.skipped {
+					fmt.Fprintf(w, "    skipped (local address) %s\n", u)
+					continue
+				}
 				mark := "BAD"
 				if s.ok() {
 					mark = "ok "
