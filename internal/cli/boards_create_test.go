@@ -41,10 +41,37 @@ func TestBoardCreateColumnsWithoutLocation(t *testing.T) {
 	if r.code != 1 || !strings.Contains(r.stderr, "so the auto-postpone period was not set and its columns were not created") {
 		t.Errorf("both: %+v", r)
 	}
-	// With no columns and no period, no id is needed.
+	// With no columns and no period, a reply with no Location is still an
+	// error, as for a card, so fz never prints "created: None" for a real
+	// create.
 	r = runGo([]string{"board", "create", "Gate"})
-	if r.code != 0 {
+	if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "Location") {
 		t.Errorf("plain: %+v", r)
+	}
+}
+
+// A column, board or webhook create whose 2xx reply has no Location, and
+// for a webhook no id in the body, is an error, exit 1. It never prints
+// "created: None", the dry-run text.
+func TestCreateWithoutLocationIsAnError(t *testing.T) {
+	routes := map[string]string{}
+	for k, v := range dryRunRoutes {
+		routes[k] = v
+	}
+	routes["POST /1/boards/b1/columns"] = ""
+	routes["POST /1/boards"] = ""
+	routes["POST /1/boards/b1/webhooks"] = ""
+	for _, argv := range [][]string{
+		{"column", "create", "Home", "Later"},
+		{"board", "create", "Patio"},
+		{"board-create", "Patio"},
+		{"webhook", "create", "Home", "--name", "Gate alerts", "--url", "https://hooks.example.com/gate", "--actions", "card_closed", "--yes"},
+	} {
+		acctServer(t, routes)
+		r := runGo(argv)
+		if r.code != 1 || strings.Contains(r.stdout, "None") || !strings.Contains(r.stderr, "Location") {
+			t.Errorf("fz %q: %+v", argv, r)
+		}
 	}
 }
 

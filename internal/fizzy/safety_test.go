@@ -1,6 +1,7 @@
 package fizzy
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -49,8 +50,9 @@ func TestCreateBoardNoLocationWithPostpone(t *testing.T) {
 	if len(s.calls) != 1 {
 		t.Errorf("calls %+v", s.calls)
 	}
+	// With no period and no columns it is still an error, as for a card.
 	s.calls = nil
-	if id, err := f.CreateBoard("Gate", 0, nil); err != nil || id != "" {
+	if id, err := f.CreateBoard("Gate", 0, nil); !errors.Is(err, ErrNoLocation) || id != "" {
 		t.Errorf("no postpone: %q %v", id, err)
 	}
 }

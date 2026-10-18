@@ -126,11 +126,14 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (st
 	if len(columns) > 0 {
 		lost = append(lost, "its columns were not created")
 	}
+	if id == "" {
+		if len(lost) == 0 {
+			return "", fmt.Errorf("Fizzy created the board %s but %w", PyRepr(name), ErrNoLocation)
+		}
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", PyRepr(name), strings.Join(lost, " and "))
+	}
 	if len(lost) == 0 {
 		return id, nil
-	}
-	if id == "" {
-		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", PyRepr(name), strings.Join(lost, " and "))
 	}
 	if err := CheckIDs(id); err != nil {
 		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", PyRepr(name), err, strings.Join(lost, " and "))
@@ -260,7 +263,7 @@ func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
 		}
 		body.Color = v
 	}
-	return f.C.Create("/boards/"+url.PathEscape(boardID)+"/columns", wrap("column", body))
+	return f.created("/boards/"+url.PathEscape(boardID)+"/columns", wrap("column", body), "column")
 }
 
 // ColumnCards lists the cards in one column, following every page.

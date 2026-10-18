@@ -235,7 +235,10 @@ to Not now. `--columns` takes custom columns, left to right. `fz` creates the
 board first and then sets the period, because Fizzy can refuse both in one
 request. The period and the columns need the new board's id from Fizzy's
 reply. If the reply has none, `fz` says the board was created without them
-and exits 1. If setting the period or creating a column fails, `fz` says the
+and exits 1. A board created with neither still needs the id, so a reply
+without one exits 1 too. The same holds for `column create` and
+`webhook create`: a reply with no `Location` header, and for a webhook no id
+in its body, exits 1, because `fz` cannot name what it made. If setting the period or creating a column fails, `fz` says the
 board was created, gives its id, names the step that did not finish and
 prints the `fz board edit` and `fz column create` commands that finish the
 rest. It exits 1. Run those commands rather than the create again, which

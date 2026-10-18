@@ -69,7 +69,7 @@ func TestEmptyTextRefuses(t *testing.T) {
 func TestNamesAreTrimmed(t *testing.T) {
 	routes := emptyTextRoutes()
 	routes["PUT /1/boards/B1"] = ""
-	routes["POST /1/boards/B1/columns"] = ""
+	routes["POST /1/boards/B1/columns"] = "Location: /1/boards/B1/columns/c9.json"
 	routes["PUT /1/boards/B1/columns/c1"] = ""
 	routes["POST /1/boards/B1/webhooks"] = `{"id":"H2","name":"Gate","payload_url":"https://fizzy.example.com/hook","active":true,"subscribed_actions":["card_closed"]}`
 	routes["PATCH /1/boards/B1/webhooks/H1"] = `{"id":"H1","name":"Gate","payload_url":"https://fizzy.example.com/hook","active":true,"subscribed_actions":["card_closed"]}`
