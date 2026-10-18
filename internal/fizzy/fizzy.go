@@ -94,9 +94,9 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 		for i, b := range boards {
 			names[i] = b.Name
 		}
-		return Board{}, fmt.Errorf("no board named %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
+		return Board{}, fmt.Errorf("no board named %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 	}
-	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), pyRepr(nameOrID))
+	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), PyRepr(nameOrID))
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
@@ -131,10 +131,10 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (st
 		return id, nil
 	}
 	if id == "" {
-		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", pyRepr(name), strings.Join(lost, " and "))
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", PyRepr(name), strings.Join(lost, " and "))
 	}
 	if err := CheckIDs(id); err != nil {
-		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", pyRepr(name), err, strings.Join(lost, " and "))
+		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", PyRepr(name), err, strings.Join(lost, " and "))
 	}
 	if postponeDays != 0 {
 		if _, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
@@ -177,13 +177,13 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	case n == 1:
 		return c, nil
 	case n > 1:
-		return Column{}, refusef("%d columns are named %s; use the column id", n, pyRepr(nameOrID))
+		return Column{}, refusef("%d columns are named %s; use the column id", n, PyRepr(nameOrID))
 	}
 	names := make([]string, len(cols))
 	for i, c := range cols {
 		names[i] = c.Name
 	}
-	return Column{}, fmt.Errorf("no column %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
+	return Column{}, fmt.Errorf("no column %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 }
 
 // pickByName returns the one item whose name is want, or failing that the
@@ -436,7 +436,7 @@ func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
 	// the toggle could remove one it has. card assign refuses the same way.
 	var keys map[string]json.RawMessage
 	if json.Unmarshal(c.Raw(), &keys) != nil || keys["tags"] == nil {
-		return false, refusef("card #%d has no tags list in Fizzy's reply, so fz cannot tell whether it has the tag %s", n, pyRepr(tag))
+		return false, refusef("card #%d has no tags list in Fizzy's reply, so fz cannot tell whether it has the tag %s", n, PyRepr(tag))
 	}
 	present := false
 	for _, t := range c.Tags {

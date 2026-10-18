@@ -210,39 +210,9 @@ func pyStrip(s string) string {
 	return strings.TrimFunc(s, func(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) })
 }
 
-// pyRepr formats a string like Python's repr: single quotes, unless the
-// string holds a single quote and no double quote.
-func pyRepr(s string) string {
-	q := '\''
-	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
-		q = '"'
-	}
-	var b strings.Builder
-	b.WriteRune(q)
-	for _, r := range s {
-		switch {
-		case r == q || r == '\\':
-			b.WriteRune('\\')
-			b.WriteRune(r)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r == ' ' || (r != unicode.ReplacementChar && unicode.IsPrint(r)):
-			b.WriteRune(r)
-		case r < 0x100:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		case r < 0x10000:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			fmt.Fprintf(&b, `\U%08x`, r)
-		}
-	}
-	b.WriteRune(q)
-	return b.String()
-}
+// pyRepr formats a string like Python's repr. It is fizzy.PyRepr, so fz
+// has one copy.
+func pyRepr(s string) string { return fizzy.PyRepr(s) }
 
 // exitCode ends a command with a code after it has printed its own message.
 type exitCode int

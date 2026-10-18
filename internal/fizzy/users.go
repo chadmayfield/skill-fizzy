@@ -139,7 +139,7 @@ func matchUser(users []User, s string, idPassthrough bool) (UserMatch, error) {
 		case 1:
 			return UserMatch{named[0].ID, named[0].Name, "name"}, nil
 		default:
-			return UserMatch{}, refusef("%d users are named %s; use the user id or email", len(named), pyRepr(s))
+			return UserMatch{}, refusef("%d users are named %s; use the user id or email", len(named), PyRepr(s))
 		}
 	}
 	for _, u := range users {
@@ -154,7 +154,7 @@ func matchUser(users []User, s string, idPassthrough bool) (UserMatch, error) {
 	for i, u := range users {
 		names[i] = u.Name
 	}
-	return UserMatch{}, refusef("no user %s (have: %s)", pyRepr(s), strings.Join(names, ", "))
+	return UserMatch{}, refusef("no user %s (have: %s)", PyRepr(s), strings.Join(names, ", "))
 }
 
 // looksLikeID reports whether s has the form of a Fizzy id: 20 to 32

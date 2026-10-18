@@ -227,7 +227,7 @@ func ColumnColorValue(color string) (string, error) {
 		}
 	}
 	return "", refusef("unknown column color %s; use a name (%s), or default, 1 to 8, or one of their var(--color-card-...) values",
-		pyRepr(color), strings.Join(ColumnColorNames(), ", "))
+		PyRepr(color), strings.Join(ColumnColorNames(), ", "))
 }
 
 // GetColumn fetches one column by id.

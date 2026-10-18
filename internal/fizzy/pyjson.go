@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // PyIndent re-indents JSON the way Python's json.dumps(obj, indent=2) prints
@@ -146,16 +147,25 @@ func pyString(s string) string {
 	return b.String()
 }
 
-// pyRepr formats a string like Python's repr: single quotes, unless the
-// string holds a single quote and no double quote.
-func pyRepr(s string) string {
+// PyRepr formats a string like Python's repr: single quotes, unless the
+// string holds a single quote and no double quote. A byte that is not UTF-8
+// prints as Python's surrogate escape for it, such as \udcff, the way Python
+// shows an argument it could not decode. internal/cli uses this copy too.
+func PyRepr(s string) string {
 	q := '\''
 	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
 		q = '"'
 	}
 	var b strings.Builder
 	b.WriteRune(q)
-	for _, r := range s {
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			fmt.Fprintf(&b, `\u%04x`, 0xdc00+int(s[i]))
+			i++
+			continue
+		}
+		i += size
 		switch {
 		case r == q || r == '\\':
 			b.WriteRune('\\')
@@ -166,7 +176,7 @@ func pyRepr(s string) string {
 			b.WriteString(`\r`)
 		case r == '\t':
 			b.WriteString(`\t`)
-		case r == ' ' || (r != unicode.ReplacementChar && unicode.IsPrint(r)):
+		case r == ' ' || unicode.IsPrint(r):
 			b.WriteRune(r)
 		case r < 0x100:
 			fmt.Fprintf(&b, `\x%02x`, r)
