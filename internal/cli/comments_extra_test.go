@@ -27,9 +27,11 @@ func commentServer(t *testing.T) (*httptest.Server, func() []seenCall) {
 			io.WriteString(w, "["+cmtA+"]")
 		case r.Method == "GET":
 			io.WriteString(w, cmtA)
-		case r.Method == "PUT" && strings.Contains(r.URL.Path, "c-forbidden"):
+		case (r.Method == "PUT" || r.Method == "DELETE") && strings.Contains(r.URL.Path, "c-forbidden"):
 			w.WriteHeader(403)
 			io.WriteString(w, "not yours")
+		case (r.Method == "PUT" || r.Method == "DELETE") && strings.Contains(r.URL.Path, "c-missing"):
+			w.WriteHeader(404)
 		case r.Method == "POST":
 			// Fizzy's API docs: 201 Created, with no body and no Location.
 			w.WriteHeader(201)
@@ -88,8 +90,35 @@ func TestCommentEditForbidden(t *testing.T) {
 	srv, _ := commentServer(t)
 	editEnv(t, srv)
 	r := runGo([]string{"comment", "edit", "87", "c-forbidden", "x"})
-	if r.code != 1 || !strings.Contains(r.stderr, "fz: ") || !strings.Contains(r.stderr, "403") {
+	if r.code != 1 || !strings.HasPrefix(r.stderr, "fz: PUT /1/cards/87/comments/c-forbidden -> HTTP 403") ||
+		!strings.Contains(r.stderr, "only the comment's author can edit or delete it") {
 		t.Fatalf("%+v", r)
+	}
+}
+
+func TestCommentDeleteForbidden(t *testing.T) {
+	srv, _ := commentServer(t)
+	editEnv(t, srv)
+	r := runGo([]string{"comment", "delete", "87", "c-forbidden", "--yes"})
+	if r.code != 1 || !strings.Contains(r.stderr, "fz: DELETE /1/cards/87/comments/c-forbidden -> HTTP 403") ||
+		!strings.Contains(r.stderr, "only the comment's author can edit or delete it") {
+		t.Fatalf("%+v", r)
+	}
+}
+
+// TestCommentWriteOtherErrorsHaveNoHint checks the author hint is for a 403
+// only.
+func TestCommentWriteOtherErrorsHaveNoHint(t *testing.T) {
+	srv, _ := commentServer(t)
+	editEnv(t, srv)
+	for _, argv := range [][]string{
+		{"comment", "edit", "87", "c-missing", "x"},
+		{"comment", "delete", "87", "c-missing", "--yes"},
+	} {
+		r := runGo(argv)
+		if r.code != 1 || !strings.Contains(r.stderr, "HTTP 404") || strings.Contains(r.stderr, "author") {
+			t.Errorf("%v: %+v", argv, r)
+		}
 	}
 }
 

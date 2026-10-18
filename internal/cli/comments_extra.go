@@ -2,9 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/markdown"
 	"github.com/spf13/cobra"
@@ -27,7 +30,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 	del := &cobra.Command{
 		Use:     "delete NUMBER COMMENT_ID",
 		Short:   "delete a comment (needs --yes)",
-		Long:    "Delete a comment. The Fizzy API docs say only the comment's creator can delete it. Prints the comment first and refuses without --yes.",
+		Long:    "Delete a comment. Only the comment's author can. On a 403 from the server, fz prints the status and says so. Prints the comment first and refuses without --yes.",
 		Example: examples("fz comment delete 87 03abc123def456ghi789jkl0mn --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(commentDelete),
@@ -53,7 +56,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "edit NUMBER COMMENT_ID TEXT",
 			Short:   "replace a comment's text",
-			Long:    "Replace a comment's text with new Markdown. Only the comment's author can, and the server's refusal is printed as is.",
+			Long:    "Replace a comment's text with new Markdown. Only the comment's author can. On a 403 from the server, fz prints the status and says so.",
 			Example: examples(`fz comment edit 87 03abc123def456ghi789jkl0mn "Gate latches now."`),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentEdit),
@@ -94,6 +97,17 @@ func firstLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// authorHint adds a hint to a 403 from a comment edit or delete. The server
+// sends 403 when the comment belongs to someone else. The original status
+// stays in the message, and the error still exits 1.
+func authorHint(err error) error {
+	var apiErr *client.APIError
+	if errors.As(err, &apiErr) && apiErr.Status == http.StatusForbidden {
+		return fmt.Errorf("%w; only the comment's author can edit or delete it", err)
+	}
+	return err
 }
 
 func commentHead(c fizzy.Comment) string {
@@ -143,7 +157,7 @@ func commentEdit(c *cmdContext, a []string) error {
 		return err
 	}
 	if err := fz.EditComment(n, a[1], markdown.ToHTML(a[2])); err != nil {
-		return err
+		return authorHint(err)
 	}
 	return emit(c.cmd, c.dry(obj{{"updated", a[1]}}), c.wrote("comment "+a[1]+" updated", "update comment "+a[1]))
 }
@@ -168,7 +182,7 @@ func commentDelete(c *cmdContext, a []string) error {
 		return exitCode(2)
 	}
 	if err := fz.DeleteComment(n, a[1]); err != nil {
-		return err
+		return authorHint(err)
 	}
 	return emit(c.cmd, c.dry(obj{{"deleted", a[1]}}), c.wrote("comment "+a[1]+" deleted", "delete comment "+a[1]))
 }

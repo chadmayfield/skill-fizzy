@@ -479,7 +479,9 @@ The text is Markdown. `comment list` prints each comment's id, author, time
 and first line, oldest first. `comment show` prints one comment in full.
 `comment edit` replaces the whole text. `comment delete` prints the comment
 first and refuses without `--yes`. The Fizzy API docs say only a comment's
-creator can edit or delete it. `fz` prints the server's refusal as it comes.
+creator can edit or delete it. When the server answers 403, `fz` prints the
+status and adds "only the comment's author can edit or delete it", and exits
+1.
 
 Reactions:
 
