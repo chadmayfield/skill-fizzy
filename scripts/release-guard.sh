@@ -5,7 +5,8 @@
 # the file named by GITHUB_OUTPUT when that variable is set, and exits 0.
 # On any rejection it prints the reason on stderr, writes nothing to
 # GITHUB_OUTPUT and exits 1.
-# Run it inside the checkout, after "git fetch origin main".
+# Run it inside a checkout that has origin/main, such as actions/checkout
+# with fetch-depth 0.
 set -eu
 
 fail() {
