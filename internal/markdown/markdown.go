@@ -378,8 +378,10 @@ func restoreCode(text string, codes []string) string {
 func links(text string) string {
 	r := []rune(text)
 	// next[k] is the index of the first ] at or after k, and stop[k] the
-	// first ) or space, or len(r). linkAt reads them instead of scanning
-	// ahead from every [, which made a line of brackets quadratic.
+	// first ), space or NUL, or len(r). linkAt reads them instead of
+	// scanning ahead from every [, which made a line of brackets quadratic.
+	// A URL ends at a NUL, the start of a stashed code span, so the span's
+	// <code> tag cannot land inside the href.
 	next, stop := make([]int, len(r)+1), make([]int, len(r)+1)
 	next[len(r)], stop[len(r)] = len(r), len(r)
 	for k := len(r) - 1; k >= 0; k-- {
@@ -387,7 +389,7 @@ func links(text string) string {
 		if r[k] == ']' {
 			next[k] = k
 		}
-		if r[k] == ')' || isSpace(r[k]) {
+		if r[k] == ')' || r[k] == 0 || isSpace(r[k]) {
 			stop[k] = k
 		}
 	}
@@ -487,8 +489,9 @@ func bareURLs(text string, codes *[]string) string {
 				q := p
 				// A URL ends at whitespace, a quote, or a < or > (escaped by
 				// now, or a tag that links added), so it cannot close the
-				// href attribute.
-				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'", r[q]) &&
+				// href attribute. It also ends at a NUL, where a stashed
+				// code span starts, so no <code> tag lands in the href.
+				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'\x00", r[q]) &&
 					!hasPrefix(r, q, "&lt;") && !hasPrefix(r, q, "&gt;") {
 					q++
 				}

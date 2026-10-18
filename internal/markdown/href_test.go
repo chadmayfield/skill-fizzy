@@ -1,6 +1,9 @@
 package markdown
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestHrefEscapesAmpersandOnce checks that every href holds & as &amp;
 // exactly once, for a labeled link and a bare URL alike, and that a URL
@@ -51,6 +54,24 @@ func TestNoEmphasisInsideURL(t *testing.T) {
 	} {
 		if got := ToHTML(in); got != want {
 			t.Errorf("ToHTML(%q)\n got  %s\n want %s", in, got, want)
+		}
+	}
+}
+
+// A URL ends where an inline code span starts, so the code's <code> tag
+// never lands inside an href.
+func TestURLEndsAtCodeSpan(t *testing.T) {
+	for in, want := range map[string]string{
+		"See https://example.com/a`b`": `<p>See <a href="https://example.com/a">https://example.com/a</a><code>b</code></p>`,
+		"[x](https://example.com/`b`)": `<p>[x](<a href="https://example.com/">https://example.com/</a><code>b</code>)</p>`,
+		"[x](https://example.com/a)`b`": `<p><a href="https://example.com/a">x</a><code>b</code></p>`,
+	} {
+		got := ToHTML(in)
+		if got != want {
+			t.Errorf("ToHTML(%q)\n got %s\nwant %s", in, got, want)
+		}
+		if strings.Contains(got, `href="https://example.com/a<code>`) || strings.Contains(got, `/<code>b</code>"`) {
+			t.Errorf("ToHTML(%q) put code in an href: %s", in, got)
 		}
 	}
 }
