@@ -51,16 +51,6 @@ func webhookServer(t *testing.T, hook string, deliveriesStatus int) (*httptest.S
 	}
 }
 
-func writes(cs []seenCall) []seenCall {
-	var out []seenCall
-	for _, c := range cs {
-		if c.method != http.MethodGet {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
 func TestWebhookCommandsRegistered(t *testing.T) {
 	for _, name := range []string{"list", "show", "create", "edit", "delete", "activate", "deliveries"} {
 		cmd, _, err := NewRoot().Find([]string{"webhook", name})
