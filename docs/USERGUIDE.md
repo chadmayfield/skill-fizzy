@@ -930,7 +930,9 @@ fz draft apply ~/.fizzy-inbox/drafts/
   the documentation ranges. A NAT64 (64:ff9b::/96) or 6to4 (2002::/16)
   address is judged by the IPv4 address inside it.
 - `preview` prints the title, board, column, tags, description HTML and steps.
-  It sends nothing.
+  It sends nothing. It reads the config file for the inbox setting, so a
+  config file that does not parse, or that `fz` refuses, stops it with
+  exit 1.
 - `apply` parses every draft, finds its images and checks that it can
   rewrite the draft file before it creates anything. A read-only draft, or
   one in a read-only folder, stops the run with exit 1 and nothing is sent.

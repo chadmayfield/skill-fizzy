@@ -45,7 +45,7 @@ func addDraftCommands(root *cobra.Command) {
 	preview := &cobra.Command{
 		Use:     "preview DRAFT...",
 		Short:   "show the card a draft would make",
-		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing. An image path outside the draft's folder and the inbox is refused with exit 2.",
+		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing. preview reads the config file for the inbox setting, so a config file that does not parse, or that fz refuses, stops it with exit 1. An image path outside the draft's folder and the inbox is refused with exit 2.",
 		Example: examples("fz draft preview gate.md"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftPreview),
