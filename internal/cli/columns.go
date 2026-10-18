@@ -128,7 +128,7 @@ func columnCreate(c *cmdContext, a []string) error {
 		return err
 	}
 	return emit(c.cmd, c.dry(obj{{"id", orNull(id)}, {"name", name}}),
-		c.wrote(fmt.Sprintf("column %s created: %s", pyRepr(name), orNone(id)), "create column "+pyRepr(name)))
+		c.wrote(fmt.Sprintf("column %s created: %s", pyRepr(name), line(orNone(id))), "create column "+pyRepr(name)))
 }
 
 func columnEdit(c *cmdContext, a []string) error {

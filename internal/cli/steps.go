@@ -94,7 +94,7 @@ func stepAdd(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", orNull(id)}}, "step added: "+orNone(id))
+	return emit(c.cmd, obj{{"id", orNull(id)}}, "step added: "+line(orNone(id)))
 }
 
 func stepList(c *cmdContext, a []string) error {

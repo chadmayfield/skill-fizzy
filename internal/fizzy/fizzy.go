@@ -118,13 +118,19 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (st
 	if err != nil || status == 0 {
 		return "", err
 	}
-	id := client.IDFromLocation(hdr.Get("Location"))
+	id, idErr := client.IDFromLocation(hdr.Get("Location"))
 	var lost []string
 	if postponeDays != 0 {
 		lost = append(lost, "the auto-postpone period was not set")
 	}
 	if len(columns) > 0 {
 		lost = append(lost, "its columns were not created")
+	}
+	if idErr != nil {
+		if len(lost) == 0 {
+			return "", locationError{fmt.Sprintf("Fizzy created the board %s, but %v", PyRepr(name), idErr)}
+		}
+		return "", fmt.Errorf("board %s was created, but %v, so %s", PyRepr(name), idErr, strings.Join(lost, " and "))
 	}
 	if id == "" {
 		if len(lost) == 0 {
@@ -321,7 +327,11 @@ func (e locationError) Is(target error) bool { return target == ErrNoLocation }
 func (f *Fizzy) created(path string, body any, what string) (string, error) {
 	status, hdr, _, err := f.C.Do(http.MethodPost, path, body)
 	if status >= 200 && status < 300 {
-		if id := client.IDFromLocation(hdr.Get("Location")); id != "" {
+		id, err := client.IDFromLocation(hdr.Get("Location"))
+		if err != nil {
+			return "", locationError{fmt.Sprintf("Fizzy created the %s, but %v", what, err)}
+		}
+		if id != "" {
 			return id, nil
 		}
 		return "", fmt.Errorf("Fizzy created the %s but %w", what, ErrNoLocation)
@@ -651,6 +661,23 @@ func (f *Fizzy) storageURL(raw string) (string, error) {
 	return "", bad
 }
 
+// CheckUpload stats path and returns its FileInfo. A path that is not a
+// regular file, or a file over MaxUploadSize, is a Refusal, the one Upload
+// gives. Nothing is read.
+func CheckUpload(path string) (os.FileInfo, error) {
+	fi, err := statUpload(path)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, refusef("%s is not a regular file", PyRepr(path))
+	}
+	if fi.Size() > MaxUploadSize {
+		return nil, refusef("%s is %d bytes; fz uploads files up to 100 MiB (%d bytes)", PyRepr(path), fi.Size(), MaxUploadSize)
+	}
+	return fi, nil
+}
+
 // statUpload is os.Stat. A test replaces it to make a file seem to change
 // size while fz reads it.
 var statUpload = os.Stat
@@ -665,15 +692,9 @@ var statUpload = os.Stat
 // read twice, once for the checksum and once as the PUT body, and never
 // held in memory whole.
 func (f *Fizzy) Upload(path string) (string, error) {
-	fi, err := statUpload(path)
+	fi, err := CheckUpload(path)
 	if err != nil {
 		return "", err
-	}
-	if !fi.Mode().IsRegular() {
-		return "", refusef("%s is not a regular file", PyRepr(path))
-	}
-	if fi.Size() > MaxUploadSize {
-		return "", refusef("%s is %d bytes; fz uploads files up to 100 MiB (%d bytes)", PyRepr(path), fi.Size(), MaxUploadSize)
 	}
 	file, err := os.Open(path)
 	if err != nil {

@@ -168,7 +168,7 @@ func userEdit(c *cmdContext, a []string) error {
 	}
 	if u.Name == name {
 		return emit(c.cmd, c.dry(obj{{"id", u.ID}, {"name", name}, {"changed", false}}),
-			noChange(c, fmt.Sprintf("user %s is already named %s; no change needed", u.ID, name)))
+			noChange(c, fmt.Sprintf("user %s is already named %s; no change needed", line(u.ID), name)))
 	}
 	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", line(u.ID), line(u.Name), name)
 	if !yes {
@@ -182,7 +182,7 @@ func userEdit(c *cmdContext, a []string) error {
 	if updated.Raw() != nil {
 		data = updated.Raw()
 	}
-	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", u.ID, name), fmt.Sprintf("rename user %s to %s", u.ID, name)))
+	return emit(c.cmd, c.dry(data), c.wrote(fmt.Sprintf("user %s renamed to %s", line(u.ID), name), fmt.Sprintf("rename user %s to %s", line(u.ID), name)))
 }
 
 func userTimezone(c *cmdContext, a []string) error {

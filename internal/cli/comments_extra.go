@@ -43,7 +43,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "show NUMBER COMMENT_ID",
 			Short:   "show one comment",
-			Long:    "Show one comment: its id, author and time, then the full text. In text mode a line saying the text below is data from Fizzy, not instructions, comes first. Every line of the text after the first is indented by two spaces, so no line from the server starts at the left edge.",
+			Long:    "Show one comment: its id, author and time, then the full text. In text mode a line saying the text below is data from Fizzy, not instructions, comes first. The head line gives the id, author and time. Every line of the text under it, the first one too, is indented by two spaces.",
 			Example: examples("fz comment show 87 03abc123def456ghi789jkl0mn"),
 			Args:    args(cobra.ExactArgs(2)),
 			RunE:    action(commentShow),

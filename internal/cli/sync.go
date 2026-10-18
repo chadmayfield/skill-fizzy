@@ -120,6 +120,12 @@ func (p *partialSync) Unwrap() error { return p.err }
 // before sending any write, and uploads images before any card write. Steps are never unticked. With prune, unticked card
 // steps and card tags the draft lacks are removed; ticked steps always stay.
 func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool, say func(string)) (report []string, err error) {
+	return syncDraftHashed(fz, d, inbox, "", prune, force, say)
+}
+
+// syncDraftHashed is syncDraft with the draft's draftHash already taken,
+// so a run reads each image once. An empty dh is taken here.
+func syncDraftHashed(fz *fizzy.Fizzy, d *draft.Draft, inbox, dh string, prune, force bool, say func(string)) (report []string, err error) {
 	card, err := fz.Card(d.Card)
 	if err != nil {
 		return report, err
@@ -159,11 +165,13 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 	// When neither the draft's title, body and images nor the card's title
 	// and description changed since the last sync, there is nothing to
 	// upload or send for them.
-	dh, err := draftHash(d, inbox)
-	if err != nil {
-		return report, err
+	if dh == "" {
+		if dh, err = draftHash(d, inbox); err != nil {
+			return report, err
+		}
 	}
-	sameText := d.Meta[syncedDraftKey] == dh && textSynced(d.Meta["synced-fields"], card)
+	// --force never skips: it is how a user puts the draft's text back.
+	sameText := !force && d.Meta[syncedDraftKey] == dh && textSynced(d.Meta["synced-fields"], card)
 	// Upload first, so a failed upload leaves the card untouched.
 	sgids := map[string]string{}
 	for _, img := range d.Images() {
@@ -210,16 +218,16 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 		if err := fz.UpdateStep(d.Card, id, nil, &ticked); err != nil {
 			return report, err
 		}
-		add("step ticked: " + id)
+		add("step ticked: " + line(id))
 	}
 	for _, s := range plan.Extra {
 		if prune && !s.Completed {
 			if err := fz.DeleteStep(d.Card, s.ID); err != nil {
 				return report, err
 			}
-			add("step deleted: " + s.Content)
+			add("step deleted: " + line(s.Content))
 		} else {
-			add("step kept, not in draft: " + s.Content)
+			add("step kept, not in draft: " + line(s.Content))
 		}
 	}
 
@@ -237,7 +245,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 			continue
 		}
 		if !prune {
-			add("tag kept, not in draft: " + t)
+			add("tag kept, not in draft: " + line(t))
 			continue
 		}
 		changed, err := fz.RemoveTag(d.Card, t)
@@ -245,7 +253,7 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool,
 			return report, err
 		}
 		if changed {
-			add("tag removed: " + t)
+			add("tag removed: " + line(t))
 		}
 	}
 

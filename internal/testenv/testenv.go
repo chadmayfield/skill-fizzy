@@ -84,11 +84,17 @@ func keepGoDirs() error {
 	return nil
 }
 
-// GuardNetwork replaces http.DefaultTransport with one that dials only
-// loopback addresses and uses no proxy. fz's API client uses the default
-// transport, so a test whose server or guard is wrong fails at the dial and
-// never reaches a real host. Only a literal loopback IP or localhost is
-// dialed, so no name is looked up either.
+// GuardNetwork replaces http.DefaultTransport with one that uses no proxy
+// and dials only a literal loopback IP or the name localhost. The system
+// resolver looks localhost up, through the hosts file and possibly DNS, and
+// the guard does not check the address it returns. Any other name is
+// refused before a lookup.
+//
+// It covers every request sent through http.DefaultTransport, which is how
+// fz's API client sends, so an API test whose server is wrong fails at the
+// dial. It does not cover the draft check --links checker, which builds its
+// own transport, a test that builds its own transport, or a subprocess a
+// test starts, such as the Python hook in the hook tests.
 func GuardNetwork() {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
