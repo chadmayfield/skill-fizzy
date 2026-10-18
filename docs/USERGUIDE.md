@@ -948,6 +948,12 @@ fz draft apply ~/.fizzy-inbox/drafts/
   nothing is sent. Look on the board. If the card is there, replace the line
   with `card: N`. If it is not, delete the line. Then apply the draft again.
   So the same draft never makes a second card.
+- While it runs, `apply` holds a lock file beside each draft it may write,
+  `.<name>.fzlock`, such as `.gate.md.fzlock`, and removes it at the end. A
+  second `apply` of the same draft at the same time exits 2, names the lock
+  and sends nothing. If no apply is running, the lock was left by one that
+  stopped. Check the draft's front matter, then delete the lock. A dry run
+  takes no lock.
 - If one of those later calls fails, `apply` exits 1. The message names the
   card, says what was not sent, and gives the command that finishes it,
   `fz draft apply --update FILE`. A run over several drafts stops at the

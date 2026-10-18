@@ -615,6 +615,23 @@ func draftApply(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	// Lock every draft this run may write before reading it for real, so a
+	// second fz cannot parse it in the window before creating: or card: is
+	// written. A dry run writes nothing and takes no lock.
+	if !c.dryRun {
+		var want []string
+		for _, p := range paths {
+			if d, err := parseDraft(p); err == nil && d.Card != 0 && !update {
+				continue
+			}
+			want = append(want, p)
+		}
+		unlock, err := lockDrafts(want)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
 	// Validate every draft first: a parse error, a missing image or a draft
 	// fz could not write card: back into stops the batch before any card is
 	// created.
@@ -748,6 +765,46 @@ func draftApply(c *cmdContext, a []string) error {
 		fmt.Fprintf(w, "#%d %s → %s / %s   %s/%s/cards/%d\n", n, d.Title, d.Board, d.Column, cfg.URL, cfg.Account, n)
 	}
 	return nil
+}
+
+// lockPath is the apply lock of the draft at p: .<name>.fzlock beside the
+// file, with symlinks resolved, so every path to one draft shares it.
+func lockPath(p string) string {
+	key := draftKey(p)
+	return filepath.Join(filepath.Dir(key), "."+filepath.Base(key)+".fzlock")
+}
+
+// lockDrafts creates the apply lock of each existing draft in paths with
+// O_EXCL and returns a function that removes the locks it made. A lock that
+// already exists is a Refusal that names it. A folder where no lock can be
+// made is left unlocked: fz cannot write the draft there either, and
+// CheckWritable refuses it before anything is sent.
+func lockDrafts(paths []string) (func(), error) {
+	var held []string
+	unlock := func() {
+		for _, l := range held {
+			os.Remove(l)
+		}
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		l := lockPath(p)
+		f, err := os.OpenFile(l, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, os.ErrExist) {
+			unlock()
+			return nil, fizzy.Refuse(fmt.Sprintf("%s: another fz draft apply holds the lock %s, so fz sends nothing. "+
+				"If no apply is running, the lock was left by one that stopped: check the draft's front matter, then delete the lock", p, l))
+		}
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(f, "%d\n", os.Getpid())
+		f.Close()
+		held = append(held, l)
+	}
+	return unlock, nil
 }
 
 // recordSynced writes the card's fingerprint into the draft as synced:,
