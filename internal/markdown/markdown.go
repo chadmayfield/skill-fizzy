@@ -28,7 +28,7 @@ import (
 func ToHTML(md string) string {
 	lines := lines(md)
 	var out, para []string
-	listTag := "" // "ul" or "ol"
+	var list []listLevel // open lists, outermost first
 
 	flushPara := func() {
 		if len(para) > 0 {
@@ -40,12 +40,23 @@ func ToHTML(md string) string {
 			para = para[:0]
 		}
 	}
-	closeList := func() {
-		if listTag != "" {
-			out = append(out, "</"+listTag+">")
-			listTag = ""
+	// closeTo closes the lists deeper than depth n. A nested list ends its
+	// parent's <li>.
+	closeTo := func(n int) {
+		for len(list) > n {
+			top := list[len(list)-1]
+			list = list[:len(list)-1]
+			if top.pending != nil {
+				out = append(out, "<li>"+*top.pending+"</li>")
+			}
+			end := "</" + top.tag + ">"
+			if len(list) > 0 {
+				end += "</li>"
+			}
+			out = append(out, end)
 		}
 	}
+	closeList := func() { closeTo(0) }
 
 	for i := 0; i < len(lines); {
 		line := lines[i]
@@ -126,26 +137,87 @@ func ToHTML(md string) string {
 		if isBullet {
 			tag = "ul"
 		}
-		if listTag != tag {
-			closeList()
-			out = append(out, "<"+tag+">")
-			listTag = tag
-		}
+		body := Inline(item)
 		if checked, text, ok := task(item); ok {
 			box := "☐"
 			if checked {
 				box = "☑"
 			}
-			out = append(out, "<li>"+box+" "+Inline(text)+"</li>")
-		} else {
-			out = append(out, "<li>"+Inline(item)+"</li>")
+			body = box + " " + Inline(text)
 		}
+		depth := itemDepth(list, line)
+		if depth > len(list) {
+			// A new level opens inside the item above, which stays open.
+			if n := len(list); n > 0 {
+				out = append(out, "<li>"+*list[n-1].pending+"<"+tag+">")
+				list[n-1].pending = nil
+			} else {
+				out = append(out, "<"+tag+">")
+			}
+			list = append(list, listLevel{tag: tag})
+		} else {
+			closeTo(depth)
+			lv := &list[depth-1]
+			if lv.pending != nil {
+				out = append(out, "<li>"+*lv.pending+"</li>")
+			}
+			if lv.tag != tag {
+				out = append(out, "</"+lv.tag+">", "<"+tag+">")
+				lv.tag = tag
+			}
+		}
+		list[depth-1].pending = &body
+		list[depth-1].col = len([]rune(line)) - len([]rune(item))
 		i++
 	}
 
 	flushPara()
 	closeList()
 	return strings.Join(out, "\n")
+}
+
+// maxDepth is how deep lists nest. A deeper item stays at this depth.
+const maxDepth = 3
+
+// listLevel is one open list.
+type listLevel struct {
+	tag string
+	// col is the content column of the list's last item: where its text
+	// begins, so 2 for "- x" and 3 for "1. x".
+	col int
+	// pending is the last item's HTML until it is written. It is nil once
+	// a nested list has opened inside that item.
+	pending *string
+}
+
+// itemDepth returns the depth, from 1, of the list item on line, given the
+// lists open above it. An item nests one level under the item above when it
+// is indented with spaces only, at least to that item's content column.
+// Otherwise it joins the deepest open list whose parent item it reaches, or
+// the outermost one. Tab indents never nest.
+func itemDepth(list []listLevel, line string) int {
+	if len(list) == 0 {
+		return 1
+	}
+	indent := 0
+	for _, c := range line {
+		if c != ' ' {
+			if isSpace(c) {
+				return 1
+			}
+			break
+		}
+		indent++
+	}
+	if indent >= list[len(list)-1].col {
+		return min(len(list)+1, maxDepth)
+	}
+	for d := len(list); d > 1; d-- {
+		if indent >= list[d-2].col {
+			return d
+		}
+	}
+	return 1
 }
 
 // lines splits md into lines the way ToHTML does: \r\n becomes \n, and only

@@ -381,3 +381,20 @@ func TestPlanStepsSkipsTickedSteps(t *testing.T) {
 		t.Errorf("plan %+v", plan)
 	}
 }
+
+// Nested list items nest in the description, while the Steps section stays a
+// flat list of steps.
+func TestNestedListsInBodyNotSteps(t *testing.T) {
+	src := "---\nboard: Home\n---\n# Fix the gate\n\n## Details\n- hinge\n  - pin\n\n## Steps\n- [ ] Order the hinge\n  - [ ] Swap it\n"
+	d, err := Parse(writeFile(t, t.TempDir(), "gate.md", src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Step{{Content: "Order the hinge"}, {Content: "Swap it"}}
+	if !reflect.DeepEqual(d.Steps, want) {
+		t.Errorf("steps %+v, want %+v", d.Steps, want)
+	}
+	if html := d.DescriptionHTML(nil); !strings.Contains(html, "<li>hinge<ul>\n<li>pin</li>\n</ul></li>") {
+		t.Errorf("description %q", html)
+	}
+}
