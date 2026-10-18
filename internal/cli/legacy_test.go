@@ -36,6 +36,9 @@ func TestRewrite(t *testing.T) {
 		{[]string{"step", "5", "--check", "S1"}, []string{"step", "check", "5", "S1"}},
 		{[]string{"step", "5", "--uncheck", "S1"}, []string{"step", "uncheck", "5", "S1"}},
 		{[]string{"step", "5", "--check=S1"}, []string{"step", "check", "5", "S1"}},
+		{[]string{"--json=true", "cards"}, []string{"--json=true", "card", "list"}},
+		{[]string{"--json=false", "--dry-run=true", "show", "87"}, []string{"--json=false", "--dry-run=true", "card", "show", "87"}},
+		{[]string{"--dry-run=false", "tag", "87", "buy"}, []string{"--dry-run=false", "card", "tag", "87", "buy"}},
 	}
 	for _, tc := range cases {
 		if got := Rewrite(append([]string{}, tc.old...)); !reflect.DeepEqual(got, tc.new) {

@@ -745,7 +745,8 @@ fz comment 87 "Measured the gap: 42 mm"
 
 The full list is `boards`, `board-create`, `columns`, `cards`, `show`,
 `create`, `move`, `reopen`, `golden`, `delete` and `tag`, plus the
-numbered forms of `step` and `comment`.
+numbered forms of `step` and `comment`. The global flags can come first, in
+any of their forms, such as `fz --json=true cards`.
 
 ## Drafts
 

@@ -1,6 +1,9 @@
 package cli
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // simple maps fz 0.1 command names to their noun form.
 var simple = map[string][]string{
@@ -18,7 +21,7 @@ func commandIndex(args []string) int {
 	for i < len(args) {
 		a := args[i]
 		switch {
-		case a == "--dry-run" || a == "--json" || strings.HasPrefix(a, "--config="):
+		case a == "--dry-run" || a == "--json" || strings.HasPrefix(a, "--config=") || isBoolFlagValue(a):
 			i++
 		case a == "--config":
 			i += 2
@@ -27,6 +30,18 @@ func commandIndex(args []string) int {
 		}
 	}
 	return i
+}
+
+// isBoolFlagValue reports whether a is --json or --dry-run with a value,
+// such as --json=true, in a form the flag parser accepts.
+func isBoolFlagValue(a string) bool {
+	for _, f := range []string{"--json=", "--dry-run="} {
+		if v, ok := strings.CutPrefix(a, f); ok {
+			_, err := strconv.ParseBool(v)
+			return err == nil
+		}
+	}
+	return false
 }
 
 func isNumber(s string) bool {
