@@ -120,7 +120,7 @@ func TestWebhookCreate(t *testing.T) {
 	srv, calls := webhookServer(t, testWebhook, 200)
 	parityEnv(t, srv)
 	r := runGo([]string{"webhook", "create", "B1", "--name", "Gate alerts", "--url", "https://hooks.example.com/gate", "--actions", "card_closed,comment_created", "--yes"})
-	if r.code != 0 || r.stdout != "webhook created: H1\n" {
+	if r.code != 0 || r.stdout != "webhook created: H1\nsigning secret: s3cret\n" || !strings.Contains(r.stderr, "save the signing secret now; fz hides it from list and show") {
 		t.Fatalf("got %+v", r)
 	}
 	w := writes(calls())
@@ -153,7 +153,7 @@ func TestWebhookCreateDryRun(t *testing.T) {
 	srv, calls := webhookServer(t, testWebhook, 200)
 	parityEnv(t, srv)
 	r := runGo([]string{"--dry-run", "webhook", "create", "B1", "--name", "n", "--url", "https://h.example.com/x", "--actions", "card_closed", "--yes"})
-	if r.code != 0 || !strings.Contains(r.stderr, "[dry-run] POST") || len(writes(calls())) != 0 {
+	if r.code != 0 || !strings.Contains(r.stderr, "[dry-run] POST") || len(writes(calls())) != 0 || !strings.Contains(r.stdout, "dry-run: nothing sent") || strings.Contains(r.stdout, "created") {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -240,5 +240,42 @@ func TestWebhookDeliveries403(t *testing.T) {
 	r := runGo([]string{"webhook", "deliveries", "B1", "H1"})
 	if r.code != 1 || !strings.Contains(r.stderr, "account admin") || !strings.Contains(r.stderr, "403") {
 		t.Fatalf("got %+v", r)
+	}
+}
+
+func TestWebhookJSONHidesSecret(t *testing.T) {
+	srv, _ := webhookServer(t, testWebhook, 200)
+	parityEnv(t, srv)
+	for _, args := range [][]string{{"--json", "webhook", "list", "B1"}, {"--json", "webhook", "show", "B1", "H1"}} {
+		r := runGo(args)
+		if r.code != 0 || strings.Contains(r.stdout, "signing_secret") || strings.Contains(r.stdout, "s3cret") {
+			t.Errorf("%v: %+v", args, r)
+		}
+		if !strings.Contains(r.stdout, `"payload_url"`) || strings.Index(r.stdout, `"active"`) > strings.Index(r.stdout, `"subscribed_actions"`) {
+			t.Errorf("%v: keys lost or reordered: %s", args, r.stdout)
+		}
+	}
+	r := runGo([]string{"--json", "webhook", "show", "B1", "H1", "--reveal-secret"})
+	if r.code != 0 || !strings.Contains(r.stdout, `"signing_secret": "s3cret"`) {
+		t.Errorf("reveal: %+v", r)
+	}
+}
+
+func TestWebhookCreateJSONShowsSecret(t *testing.T) {
+	srv, _ := webhookServer(t, testWebhook, 200)
+	parityEnv(t, srv)
+	r := runGo([]string{"--json", "webhook", "create", "B1", "--name", "n", "--url", "https://h.example.com/x", "--actions", "card_closed", "--yes"})
+	if r.code != 0 || !strings.Contains(r.stdout, `"signing_secret": "s3cret"`) || !strings.Contains(r.stderr, "save the signing secret now") {
+		t.Errorf("%+v", r)
+	}
+}
+
+func TestWebhookActivateDryRun(t *testing.T) {
+	inactive := strings.Replace(testWebhook, `"active":true`, `"active":false`, 1)
+	srv, calls := webhookServer(t, inactive, 200)
+	parityEnv(t, srv)
+	r := runGo([]string{"--dry-run", "webhook", "activate", "B1", "H1"})
+	if r.code != 0 || !strings.Contains(r.stderr, "[dry-run] POST") || !strings.Contains(r.stdout, "dry-run: nothing sent") || strings.Contains(r.stdout, "activated\n") || len(writes(calls())) != 0 {
+		t.Errorf("%+v", r)
 	}
 }

@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,30 +21,34 @@ func addWebhookCommands(root *cobra.Command) {
 		Short: "manage a board's webhooks (account admins only)",
 		Long: "Work with a board's webhooks. A webhook sends card data to an outside URL, so create, edit and delete need --yes and print the URL and actions first.\n\n" +
 			"Only account admins can use these commands. The server answers 403 to anyone else.\n\n" +
+			"The signing secret is shown once, when you create a webhook. List and show hide it, also with --json. Use show --reveal-secret to print it again.\n\n" +
 			"Actions: " + strings.Join(fizzy.WebhookActions, ", ") + ".",
 	}
 	root.AddCommand(g)
 	g.AddCommand(&cobra.Command{
 		Use:     "list BOARD",
 		Short:   "list a board's webhooks",
-		Long:    "List the webhooks on a board, given by name or id. Prints one line per webhook, never the signing secret.",
+		Long:    "List the webhooks on a board, given by name or id. Prints one line per webhook. The signing secret is hidden, also with --json.",
 		Example: examples("fz webhook list Gate"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(webhookList),
 	})
-	g.AddCommand(&cobra.Command{
+	show := &cobra.Command{
 		Use:     "show BOARD ID",
 		Short:   "show one webhook",
-		Long:    "Show one webhook. Text output never includes the signing secret; --json prints what the server sent.",
-		Example: examples("fz webhook show Gate 03abc123def456ghi789jkl0mn"),
+		Long:    "Show one webhook. Text output never includes the signing secret, and --json drops it unless you add --reveal-secret.",
+		Example: examples("fz webhook show Gate 03abc123def456ghi789jkl0mn", "fz webhook show Gate 03abc123def456ghi789jkl0mn --json --reveal-secret"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(webhookShow),
-	})
+	}
+	show.Flags().Bool("reveal-secret", false, "include the signing secret in --json output")
+	g.AddCommand(show)
 	create := &cobra.Command{
 		Use:   "create BOARD --name NAME --url URL --actions A,B --yes",
 		Short: "create a webhook (needs --yes)",
 		Long: "Create a webhook that sends the listed actions to a URL. The URL must be https, or http for localhost. " +
-			"It cannot change after creation. Prints the URL and actions and refuses without --yes.",
+			"It cannot change after creation. Prints the URL and actions and refuses without --yes. " +
+			"The reply includes the signing secret. Create prints it once, in text and with --json, and list and show hide it afterwards.",
 		Example: examples(`fz webhook create Gate --name "Hinge alerts" --url https://fizzy.example.com/hook --actions card_closed,comment_created --yes`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(webhookCreate),
@@ -130,6 +136,35 @@ func deliveryLine(d fizzy.WebhookDelivery) string {
 	return fmt.Sprintf("%s  %s  %s  %s", d.ID, d.State, d.Event.Action, result)
 }
 
+// stripSecret drops signing_secret from a webhook's raw JSON and keeps every
+// other key, value and the key order. It returns raw unchanged if raw is not
+// a JSON object.
+func stripSecret(raw json.RawMessage) json.RawMessage {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return raw
+	}
+	var out obj
+	for dec.More() {
+		k, err := dec.Token()
+		if err != nil {
+			return raw
+		}
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return raw
+		}
+		if k.(string) != "signing_secret" {
+			out = append(out, kv{k.(string), v})
+		}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return raw
+	}
+	return b
+}
+
 // splitActions splits a comma-separated flag, dropping blanks.
 func splitActions(s string) []string {
 	var out []string
@@ -158,7 +193,11 @@ func webhookList(c *cmdContext, a []string) error {
 	for i, h := range hooks {
 		lines[i] = webhookLine(h)
 	}
-	return emit(c.cmd, rawList(hooks), strings.Join(lines, "\n"))
+	stripped := make([]json.RawMessage, len(hooks))
+	for i, h := range hooks {
+		stripped[i] = stripSecret(h.Raw())
+	}
+	return emit(c.cmd, stripped, strings.Join(lines, "\n"))
 }
 
 func webhookShow(c *cmdContext, a []string) error {
@@ -174,7 +213,11 @@ func webhookShow(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
-	return emit(c.cmd, h.Raw(), webhookLine(h))
+	raw := h.Raw()
+	if reveal, _ := c.cmd.Flags().GetBool("reveal-secret"); !reveal {
+		raw = stripSecret(raw)
+	}
+	return emit(c.cmd, raw, webhookLine(h))
 }
 
 // refuseWithoutYes prints what would be sent and where, then refuses unless
@@ -222,10 +265,18 @@ func webhookCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
-	if h.Raw() != nil {
-		return emit(c.cmd, h.Raw(), "webhook created: "+h.ID)
+	if c.dryRun {
+		return emit(c.cmd, obj{{"id", nil}}, "dry-run: nothing sent; would create webhook "+pyRepr(name))
 	}
-	return emit(c.cmd, obj{{"id", orNull(h.ID)}}, "webhook created: "+orNone(h.ID))
+	text := "webhook created: " + orNone(h.ID)
+	if h.SigningSecret != "" {
+		fmt.Fprintln(c.errw(), "save the signing secret now; fz hides it from list and show")
+		text += "\nsigning secret: " + h.SigningSecret
+	}
+	if h.Raw() != nil {
+		return emit(c.cmd, h.Raw(), text)
+	}
+	return emit(c.cmd, obj{{"id", orNull(h.ID)}}, text)
 }
 
 func webhookEdit(c *cmdContext, a []string) error {
@@ -282,7 +333,7 @@ func webhookEdit(c *cmdContext, a []string) error {
 	}
 	text := fmt.Sprintf("webhook %s updated: %s", a[1], strings.Join(fields, ", "))
 	if upd.Raw() != nil {
-		return emit(c.cmd, upd.Raw(), text)
+		return emit(c.cmd, stripSecret(upd.Raw()), text)
 	}
 	return emit(c.cmd, obj{{"updated", a[1]}}, text)
 }
@@ -323,8 +374,11 @@ func webhookActivate(c *cmdContext, a []string) error {
 		return adminOnly(err)
 	}
 	text := "webhook " + a[1] + " activated"
-	if !changed {
+	switch {
+	case !changed:
 		text = "webhook " + a[1] + " already active"
+	case c.dryRun:
+		text = "dry-run: nothing sent; would activate webhook " + a[1]
 	}
 	return emit(c.cmd, obj{{"id", a[1]}, {"changed", changed}}, text)
 }

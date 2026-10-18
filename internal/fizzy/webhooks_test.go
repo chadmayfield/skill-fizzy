@@ -177,3 +177,20 @@ func TestActivateWebhookSkipsActive(t *testing.T) {
 		t.Errorf("active: %v %v calls %d", changed, err, len(s.calls))
 	}
 }
+
+func TestCheckWebhookURLRejectsCredentials(t *testing.T) {
+	for _, u := range []string{"https://user:pw@h.example.com/x", "https://user@h.example.com/x", "http://user:pw@localhost/x"} {
+		err := CheckWebhookURL(u)
+		if err == nil || err.Error() != "webhook url must not contain credentials" {
+			t.Errorf("%s: %v", u, err)
+		}
+	}
+}
+
+func TestCheckWebhookURLLocalhostIgnoresCase(t *testing.T) {
+	for _, u := range []string{"http://LOCALHOST:8080/x", "http://Localhost/x"} {
+		if err := CheckWebhookURL(u); err != nil {
+			t.Errorf("%s: %v", u, err)
+		}
+	}
+}

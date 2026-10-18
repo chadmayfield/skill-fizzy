@@ -96,6 +96,9 @@ func CheckWebhookURL(raw string) error {
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
 		return errors.New("webhook url must start with https://")
 	}
+	if u.User != nil {
+		return errors.New("webhook url must not contain credentials")
+	}
 	if u.Hostname() == "" {
 		return errors.New("webhook url has no host")
 	}
@@ -103,7 +106,7 @@ func CheckWebhookURL(raw string) error {
 	case "https":
 		return nil
 	case "http":
-		switch u.Hostname() {
+		switch strings.ToLower(u.Hostname()) {
 		case "localhost", "127.0.0.1", "::1":
 			return nil
 		}
