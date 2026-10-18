@@ -101,24 +101,36 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
 // a second request when postponeDays is not 0. It returns the new id, empty
-// in dry-run mode.
+// in dry-run mode. The id comes from the Location header. When it is
+// missing, or cannot be a path segment, and a period was asked for, the
+// error says the board was created without it.
 func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
 	if postponeDays != 0 {
 		if err := ValidPostponeDays(postponeDays); err != nil {
 			return "", err
 		}
 	}
-	id, err := f.C.Create("/boards", wrap("board", struct {
+	// Do, not Create, so a dry run (status 0) is told apart from a reply
+	// with no Location.
+	status, hdr, _, err := f.C.Do(http.MethodPost, "/boards", wrap("board", struct {
 		Name string `json:"name"`
 	}{name}))
-	if err != nil {
+	if err != nil || status == 0 {
 		return "", err
 	}
-	if id != "" && postponeDays != 0 {
-		_, err = f.C.Write(http.MethodPut, "/boards/"+id, wrap("board", struct {
-			Days int `json:"auto_postpone_period_in_days"`
-		}{postponeDays}))
+	id := client.IDFromLocation(hdr.Get("Location"))
+	if postponeDays == 0 {
+		return id, nil
 	}
+	if id == "" {
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so the auto-postpone period was not set", pyRepr(name))
+	}
+	if err := CheckIDs(id); err != nil {
+		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so the auto-postpone period was not set", pyRepr(name), err)
+	}
+	_, err = f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
+		Days int `json:"auto_postpone_period_in_days"`
+	}{postponeDays}))
 	return id, err
 }
 

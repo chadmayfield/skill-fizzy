@@ -2,6 +2,7 @@ package fizzy
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -194,7 +195,8 @@ func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (
 
 // UpdateWebhook changes the name and the subscribed actions. Nil name and
 // nil actions are not sent. The url cannot change after creation. The result
-// is empty in dry-run mode.
+// is empty in dry-run mode. A reply that is not a webhook with an id is an
+// error, because fz cannot show what the server now holds.
 func (f *Fizzy) UpdateWebhook(boardID, id string, name *string, actions []string) (Webhook, error) {
 	p, err := webhookPath(boardID, id)
 	if err != nil {
@@ -211,13 +213,16 @@ func (f *Fizzy) UpdateWebhook(boardID, id string, name *string, actions []string
 			return Webhook{}, err
 		}
 	}
-	payload, err := f.C.Write(http.MethodPatch, p, wrap("webhook", struct {
+	status, _, payload, err := f.C.Do(http.MethodPatch, p, wrap("webhook", struct {
 		Name    *string  `json:"name,omitempty"`
 		Actions []string `json:"subscribed_actions,omitempty"`
 	}{name, actions}))
-	var w Webhook
-	if err != nil || payload == nil || json.Unmarshal(payload, &w) != nil {
+	if err != nil || status == 0 {
 		return Webhook{}, err
+	}
+	var w Webhook
+	if json.Unmarshal(payload, &w) != nil || w.ID == "" {
+		return Webhook{}, fmt.Errorf("webhook %s: the server's reply to the update is not a webhook with an id, so fz cannot show the result; check it with webhook show", id)
 	}
 	return w, nil
 }

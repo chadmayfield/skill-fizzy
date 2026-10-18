@@ -395,6 +395,9 @@ func (f *Fizzy) StartMyExport() (Export, error) {
 	if err != nil {
 		return e, err
 	}
+	if err := CheckIDs(me.ID); err != nil {
+		return e, err
+	}
 	raw, err := f.C.Write(http.MethodPost, "/users/"+url.PathEscape(me.ID)+"/data_exports", nil)
 	return e, decodeWrite(raw, err, &e)
 }
@@ -417,6 +420,9 @@ func (f *Fizzy) MyExport(id string) (Export, error) {
 	var e Export
 	me, err := f.Me()
 	if err != nil {
+		return e, err
+	}
+	if err := CheckIDs(me.ID); err != nil {
 		return e, err
 	}
 	err = f.C.Get("/users/"+url.PathEscape(me.ID)+"/data_exports/"+url.PathEscape(id), &e)
