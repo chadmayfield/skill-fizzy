@@ -64,7 +64,8 @@ func addDraftCommands(root *cobra.Command) {
 			"New draft steps are added. Card steps and tags the draft does not have are kept and reported; " +
 			"--prune deletes the unticked steps and removes the tags. A closed card is never reopened. " +
 			"The images, title and description are sent only when the draft's title, body or image files changed since the last sync, " +
-			"or the card's title or description changed in Fizzy; otherwise fz prints title and description unchanged.\n\n" +
+			"or the card's title or description changed in Fizzy; otherwise fz prints title and description unchanged. " +
+			"With --force they are always sent.\n\n" +
 			"After every apply, fz writes a fingerprint of the card's title, description, steps, tags, golden mark, " +
 			"column, board, closed state and Not now state into the draft's synced: line, a short hash of each into synced-fields:, " +
 			"and a hash of the draft's title, body and image files into synced-draft:. " +

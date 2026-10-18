@@ -170,7 +170,8 @@ func syncDraftHashed(fz *fizzy.Fizzy, d *draft.Draft, inbox, dh string, prune, f
 			return report, err
 		}
 	}
-	sameText := d.Meta[syncedDraftKey] == dh && textSynced(d.Meta["synced-fields"], card)
+	// --force never skips: it is how a user puts the draft's text back.
+	sameText := !force && d.Meta[syncedDraftKey] == dh && textSynced(d.Meta["synced-fields"], card)
 	// Upload first, so a failed upload leaves the card untouched.
 	sgids := map[string]string{}
 	for _, img := range d.Images() {

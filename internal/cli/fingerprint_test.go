@@ -100,7 +100,7 @@ func TestFingerprintPinned(t *testing.T) {
 
 func TestSyncedFieldsFormat(t *testing.T) {
 	got := syncedFields(fpDecode(t, fpCard))
-	if !regexp.MustCompile(`^title=[0-9a-f]{8} description=[0-9a-f]{8} steps=[0-9a-f]{8} tags=[0-9a-f]{8} ` +
+	if !regexp.MustCompile(`^title=[0-9a-f]{16} description=[0-9a-f]{16} steps=[0-9a-f]{8} tags=[0-9a-f]{8} ` +
 		`golden=[0-9a-f]{8} column=[0-9a-f]{8} board=[0-9a-f]{8} closed=[0-9a-f]{8} postponed=[0-9a-f]{8}$`).MatchString(got) {
 		t.Errorf("synced-fields = %q", got)
 	}

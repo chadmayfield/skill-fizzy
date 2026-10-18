@@ -1010,7 +1010,8 @@ last sync, and the card's title and description are as `fz` last saw them,
 `--update` uploads no images, sends no description and prints
 `title and description unchanged`. Changing one byte of an image file, or
 any of the body, sends them again. Steps, tags, column, golden mark and board
-are compared and sent as before. A dry run prints the same line.
+are compared and sent as before. A dry run prints the same line. With
+`--force`, `fz` always sends the title, description and images.
 
 ### The synced fingerprint
 
@@ -1019,7 +1020,11 @@ After every apply, `fz` writes three more lines into the draft's front matter.
 - `synced:` is a fingerprint of the card as Fizzy then holds it. It covers
   the title, description, steps, tags, golden mark, column, board, closed
   state and Not now state.
-- `synced-fields:` holds a short hash of each of those fields.
+- `synced-fields:` holds a short hash of each of those fields: 16 hex
+  characters for the title and description, 8 for the rest. A line from an
+  older `fz` has 8 for every field. `fz` still names the fields that
+  changed from it, and the next `--update` sends the title and description
+  once, then writes the longer form.
 - `synced-draft:` is a hash of the draft's title, body and image files, as
   they were when the apply began. An apply that stops partway deletes it, so
   the next `--update` sends the title and description. A draft from an older `fz` has no such line; its next `--update`
