@@ -380,7 +380,7 @@ func webhookActivate(c *cmdContext, a []string) error {
 	text := "webhook " + a[1] + " activated"
 	switch {
 	case !changed:
-		text = "webhook " + a[1] + " already active"
+		text = noChange(c, "webhook "+a[1]+" already active")
 	case c.dryRun:
 		text = c.wrote("", "activate webhook "+a[1])
 	}

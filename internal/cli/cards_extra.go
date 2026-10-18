@@ -143,7 +143,7 @@ func cardAssign(c *cmdContext, a []string, assign bool) error {
 	if u.Name == "" {
 		who = fmt.Sprintf("%s (matched by %s)", u.ID, u.By)
 	}
-	text := fmt.Sprintf("card #%d: %s %s", n, who, already)
+	text := noChange(c, fmt.Sprintf("card #%d: %s %s", n, who, already))
 	if changed {
 		text = c.wrote(fmt.Sprintf("card #%d: %s %s", n, verb, who), fmt.Sprintf(would, who, n))
 	}
@@ -262,7 +262,7 @@ func cardImage(c *cmdContext, a []string) error {
 		return exitCode(2)
 	}
 	if rawString(card.Raw(), "image_url") == "None" {
-		return emit(c.cmd, c.dry(obj{{"number", n}, {"removed", false}}), fmt.Sprintf("card #%d has no image", n))
+		return emit(c.cmd, c.dry(obj{{"number", n}, {"removed", false}}), noChange(c, fmt.Sprintf("card #%d has no image", n)))
 	}
 	fmt.Fprintf(c.errw(), "about to remove the image from: %s (board %s)\n", cardLine(card), card.Board.Name)
 	if !yes {

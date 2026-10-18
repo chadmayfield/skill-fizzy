@@ -96,6 +96,16 @@ func addBoardExtraCommands(root *cobra.Command) {
 	g.AddCommand(show, edit, del, publish, unpublish, access)
 }
 
+// noChange returns text, the line a command prints when the change it was
+// asked for is already in place. In dry-run mode it says that nothing was
+// sent instead, as wrote does for a change.
+func noChange(c *cmdContext, text string) string {
+	if c.dryRun {
+		return "dry-run: nothing sent; no change needed"
+	}
+	return text
+}
+
 // refuse prints the closing line of a refusal and returns exit code 2.
 func refuse(c *cmdContext) error {
 	fmt.Fprintln(c.errw(), "refusing without --yes")
@@ -331,8 +341,8 @@ func boardAccess(c *cmdContext, a []string) error {
 		return err
 	}
 	if all && d.AllAccess {
-		return emit(c.cmd, obj{{"id", b.ID}, {"all_access", true}, {"changed", false}},
-			fmt.Sprintf("board %s already gives all users access; no change needed", b.Name))
+		return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", true}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("board %s already gives all users access; no change needed", b.Name)))
 	}
 	w := c.errw()
 	fmt.Fprintf(w, "about to change access to board %s (%s)\n  now: %s\n", b.Name, b.ID, accessSummary(d))
