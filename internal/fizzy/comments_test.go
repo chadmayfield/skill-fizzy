@@ -115,3 +115,17 @@ func TestCommentWritesDryRun(t *testing.T) {
 		}
 	}
 }
+
+func TestReactToCommentChecksContent(t *testing.T) {
+	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		w.WriteHeader(http.StatusCreated)
+	})
+	for _, text := range []string{"", "seventeen letters"} {
+		if _, err := f.ReactToComment(87, "c1", text); !IsRefusal(err) {
+			t.Errorf("%q: want a Refusal, got %v", text, err)
+		}
+	}
+	if len(s.calls) != 0 {
+		t.Fatalf("sent %+v", s.calls)
+	}
+}

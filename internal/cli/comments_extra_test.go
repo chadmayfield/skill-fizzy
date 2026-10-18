@@ -208,3 +208,28 @@ func TestCommentReactDryRun(t *testing.T) {
 func unescapeHTML(s string) string {
 	return strings.NewReplacer("\\u003c", "<", "\\u003e", ">", "\\u0026", "&").Replace(s)
 }
+
+// A comment reaction follows the boost rule: some text, at most 16 code
+// points. Anything else exits 2 and sends nothing, in a dry run too.
+func TestCommentReactChecksLength(t *testing.T) {
+	srv, calls := commentServer(t)
+	editEnv(t, srv)
+	for _, args := range [][]string{
+		{"comment", "react", "87", "c1", ""},
+		{"comment", "react", "87", "c1", "this text is far too long"},
+		{"--dry-run", "comment", "react", "87", "c1", "this text is far too long"},
+		{"--dry-run", "comment", "react", "87", "c1", ""},
+	} {
+		r := runGo(args)
+		if r.code != 2 || r.stdout != "" || strings.Contains(r.stderr, "[dry-run]") {
+			t.Errorf("%q: %+v", args, r)
+		}
+	}
+	if w := writes(calls()); len(w) != 0 {
+		t.Fatalf("sent %+v", w)
+	}
+	r := runGo([]string{"comment", "react", "87", "c1", "sixteen chars ok"})
+	if r.code != 0 || len(writes(calls())) != 1 {
+		t.Fatalf("16 characters: %+v", r)
+	}
+}

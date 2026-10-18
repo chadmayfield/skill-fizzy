@@ -65,7 +65,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "react NUMBER COMMENT_ID TEXT",
 			Short:   "react to a comment",
-			Long:    "Add a reaction to a comment. The text is at most 16 characters. Fizzy does not send back the new reaction's id; comment reactions lists it.",
+			Long:    "Add a reaction to a comment. The text is at most 16 characters, counted as card boost counts them. fz refuses empty or longer text and sends nothing. Fizzy does not send back the new reaction's id; comment reactions lists it.",
 			Example: examples(`fz comment react 87 03abc123def456ghi789jkl0mn "ok"`),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentReact),
