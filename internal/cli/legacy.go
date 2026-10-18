@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -57,10 +58,15 @@ func isNumber(s string) bool {
 }
 
 // oldStep rewrites the arguments after "step" in "step N TEXT", "step N
-// --check ID" and "step N --uncheck ID" (or --check=ID).
+// --check ID" and "step N --uncheck ID" (or --check=ID). Words after "--"
+// are text, so a --check there is never read as a flag.
 func oldStep(rest []string) []string {
+	flags := rest
+	if i := slices.Index(rest, "--"); i >= 0 {
+		flags = rest[:i]
+	}
 	for _, f := range []struct{ flag, sub string }{{"--check", "check"}, {"--uncheck", "uncheck"}} {
-		for j, a := range rest {
+		for j, a := range flags {
 			if a == f.flag && j+1 < len(rest) {
 				others := append(append([]string{}, rest[:j]...), rest[j+2:]...)
 				return append([]string{"step", f.sub, others[0], rest[j+1]}, others[1:]...)

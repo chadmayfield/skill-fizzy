@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"net/http"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -178,5 +179,44 @@ func TestOldTagWithConfigFlag(t *testing.T) {
 	}
 	if w := extraWrites(calls()); len(w) != 2 {
 		t.Errorf("writes %+v", w)
+	}
+}
+
+// Words after -- are text, so the 0.1 rewrite never reads a --check
+// there as a tick.
+func TestOldStepIgnoresWordsAfterDoubleDash(t *testing.T) {
+	srv, seen := recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/1/cards/87/steps/03abc123def456ghi789jkl0mn.json")
+		w.WriteHeader(http.StatusCreated)
+	})
+	parityEnv(t, srv)
+	for _, tc := range []struct {
+		argv []string
+		code int
+		sent string // the step text sent, or "" for nothing
+	}{
+		{[]string{"step", "87", "--", "--check", "S1"}, 2, ""},
+		{[]string{"step", "87", "--", "--uncheck", "S1"}, 2, ""},
+		{[]string{"step", "87", "--", "--check=S1"}, 0, "--check=S1"},
+		{[]string{"step", "87", "--", "--check"}, 0, "--check"},
+	} {
+		got := Rewrite(append([]string{}, tc.argv...))
+		want := append([]string{"step", "add"}, tc.argv[1:]...)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Rewrite(%q) = %q, want %q", tc.argv, got, want)
+		}
+		before := len(seen())
+		r := runGo(tc.argv)
+		calls := seen()[before:]
+		if r.code != tc.code {
+			t.Errorf("fz %q: %+v, want exit %d", tc.argv, r, tc.code)
+		}
+		switch {
+		case tc.sent == "" && len(calls) != 0:
+			t.Errorf("fz %q sent %+v", tc.argv, calls)
+		case tc.sent != "" && (len(calls) != 1 || calls[0].method != http.MethodPost || calls[0].path != "/1/cards/87/steps" ||
+			!strings.Contains(calls[0].body, `"content":"`+tc.sent+`"`)):
+			t.Errorf("fz %q sent %+v, want one step add of %q", tc.argv, calls, tc.sent)
+		}
 	}
 }

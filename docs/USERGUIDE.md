@@ -759,6 +759,9 @@ The full list is `boards`, `board-create`, `columns`, `cards`, `show`,
 numbered forms of `step` and `comment`. The global flags can come first, in
 any of their forms, such as `fz --json=true cards`.
 
+In the numbered `step` form, words after `--` are step text.
+`fz step 87 -- --check` adds a step named `--check` and ticks nothing.
+
 ## Drafts
 
 A draft is one Markdown file per card. Write it in any editor, check it,
