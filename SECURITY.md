@@ -41,7 +41,8 @@ except for localhost.
 
 - A next-page link in a Link header is followed only when it points at that
   same server. A link to any other server is an error, and nothing is sent
-  to it. A list longer than 1,000 pages is an error too.
+  to it. A list longer than 1,000 pages is an error too, and so is a list
+  whose pages pass 256 MiB together.
 - A redirect from https to http is never followed. A redirect to another
   scheme, host or port is followed without the token. A write is never
   redirected; `fz` reports the redirect and stops.

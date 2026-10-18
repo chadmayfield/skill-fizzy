@@ -483,3 +483,30 @@ func TestConcurrentAuth(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// One list may not pass maxListBytes in all its pages together. The cap is
+// 256 MiB; the test lowers it so it can run small.
+func TestListByteCap(t *testing.T) {
+	if maxListBytes != 256<<20 {
+		t.Errorf("maxListBytes = %d, want 256 MiB", maxListBytes)
+	}
+	old := maxListBytes
+	maxListBytes = 1000
+	t.Cleanup(func() { maxListBytes = old })
+	var hits atomic.Int32
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := hits.Add(1)
+		w.Header().Set("Link", fmt.Sprintf(`<%s/1/tags?page=%d>; rel="next"`, srv.URL, n+1))
+		fmt.Fprint(w, "["+strings.Repeat(`"hinge",`, 40)+`"gate"]`)
+	}))
+	defer srv.Close()
+	c, _, _ := newTestClient(t, srv, false)
+	items, err := c.GetAll("/tags")
+	if err == nil || !strings.Contains(err.Error(), "fz stopped") || items != nil {
+		t.Errorf("items=%d err=%v", len(items), err)
+	}
+	if got := hits.Load(); got != 4 {
+		t.Errorf("%d requests, want 4: the page that passes the cap is the last", got)
+	}
+}
