@@ -110,7 +110,10 @@ func TestWebhookCreate(t *testing.T) {
 	srv, calls := webhookServer(t, testWebhook, 200)
 	parityEnv(t, srv)
 	r := runGo([]string{"webhook", "create", "B1", "--name", "Gate alerts", "--url", "https://hooks.example.com/gate", "--actions", "card_closed,comment_created", "--yes"})
-	if r.code != 0 || r.stdout != "webhook created: H1\nsigning secret: s3cret\n" || !strings.Contains(r.stderr, "save the signing secret now; fz hides it from list and show") {
+	// The secret goes to stderr with the warning, so stdout can be logged or
+	// piped without it.
+	if r.code != 0 || r.stdout != "webhook created: H1\n" ||
+		!strings.HasSuffix(r.stderr, "save the signing secret now; fz hides it from list and show\nsigning secret: s3cret\n") {
 		t.Fatalf("got %+v", r)
 	}
 	w := writes(calls())

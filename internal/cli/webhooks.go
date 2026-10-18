@@ -49,7 +49,7 @@ func addWebhookCommands(root *cobra.Command) {
 		Short: "create a webhook (needs --yes)",
 		Long: "Create a webhook that sends the listed actions to a URL. The URL must be https, or http for localhost. " +
 			"It cannot change after creation. An empty or blank name exits 2 and sends nothing. A repeated action is sent once. Prints the board, the URL and the actions and refuses without --yes. " +
-			"The reply includes the signing secret. Create prints it once, in text and with --json, and list and show hide it afterwards.",
+			"The reply includes the signing secret. Create prints it once, to stderr next to the warning to save it, so stdout stays free of it. With --json it is in the JSON on stdout, because a script needs it, and the warning goes to stderr. List and show hide it afterwards.",
 		Example: examples(`fz webhook create Gate --name "Hinge alerts" --url https://fizzy.example.com/hook --actions card_closed,comment_created --yes`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(webhookCreate),
@@ -276,8 +276,12 @@ func webhookCreate(c *cmdContext, a []string) error {
 	}
 	text := "webhook created: " + orNone(h.ID)
 	if h.SigningSecret != "" {
+		// The secret goes to stderr, so stdout can be logged without it.
+		// With --json it stays in the JSON, because a script needs it.
 		fmt.Fprintln(c.errw(), "save the signing secret now; fz hides it from list and show")
-		text += "\nsigning secret: " + h.SigningSecret
+		if flagValue(c.cmd, "json") != "true" {
+			fmt.Fprintln(c.errw(), "signing secret: "+h.SigningSecret)
+		}
 	}
 	if h.Raw() != nil {
 		return emit(c.cmd, h.Raw(), text)

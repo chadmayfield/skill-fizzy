@@ -679,7 +679,10 @@ fz webhook activate Gate 03abc123def456ghi789jkl0mn
   `comment_created`.
 - `create`, `edit` and `delete` print what they would do and refuse without
   `--yes`.
-- `webhook create` prints the signing secret once. Save it then.
+- `webhook create` prints the signing secret once. Save it then. In text
+  it goes to stderr, after the warning to save it, so stdout holds only the
+  webhook id. With `--json` it is in the JSON on stdout, and the warning
+  goes to stderr.
 - `webhook activate` turns a deactivated webhook back on. It sends nothing
   when the webhook is already active.
 
