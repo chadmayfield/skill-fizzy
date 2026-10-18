@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,7 +21,13 @@ func TestRewrite(t *testing.T) {
 		{[]string{"tag", "5", "buy"}, []string{"card", "tag", "5", "buy"}},
 		{[]string{"tag", "87", "list"}, []string{"card", "tag", "87", "list"}},
 		{[]string{"tag", "--remove", "87", "buy"}, []string{"card", "tag", "87", "buy", "--remove"}},
-		{[]string{"tag", "87", "--remove", "buy"}, []string{"card", "tag", "87", "buy", "--remove"}},
+		{[]string{"tag", "87", "--remove", "buy"}, []string{"card", "tag", "87", "--remove", "buy"}},
+		{[]string{"tag", "87", "buy", "--config", "f"}, []string{"card", "tag", "87", "buy", "--config", "f"}},
+		{[]string{"tag", "--config", "f", "87", "buy"}, []string{"card", "tag", "87", "buy", "--config", "f"}},
+		{[]string{"tag", "--config=f", "--remove", "87", "buy"}, []string{"card", "tag", "87", "buy", "--config=f", "--remove"}},
+		{[]string{"tag", "--config", "f", "list"}, []string{"tag", "--config", "f", "list"}},
+		{[]string{"tag", "--json", "list"}, []string{"tag", "--json", "list"}},
+		{[]string{"tag", "list"}, []string{"tag", "list"}},
 		{[]string{"tag", "87", "buy", "--remove"}, []string{"card", "tag", "87", "buy", "--remove"}},
 		{[]string{"--dry-run", "tag", "--remove", "87", "buy"}, []string{"--dry-run", "card", "tag", "87", "buy", "--remove"}},
 		{[]string{"delete", "5", "--yes"}, []string{"card", "delete", "5", "--yes"}},
@@ -149,6 +156,24 @@ func TestOldTagNamedList(t *testing.T) {
 		t.Fatalf("got %+v", r)
 	}
 	if w := extraWrites(calls()); len(w) != 1 || w[0].path != "/1/cards/87/taggings" {
+		t.Errorf("writes %+v", w)
+	}
+}
+
+// A value flag after the old tag line keeps its value.
+func TestOldTagWithConfigFlag(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"tags":[]}`)
+	cfg := filepath.Join(t.TempDir(), "none.json")
+	for _, args := range [][]string{
+		{"tag", "87", "buy", "--config", cfg},
+		{"tag", "--config", cfg, "87", "buy"},
+	} {
+		r := runGo(args)
+		if r.code != 0 {
+			t.Fatalf("%q: got %+v", args, r)
+		}
+	}
+	if w := extraWrites(calls()); len(w) != 2 {
 		t.Errorf("writes %+v", w)
 	}
 }
