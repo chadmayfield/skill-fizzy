@@ -9,7 +9,7 @@ func CheckIDs(ids ...string) error {
 	for _, id := range ids {
 		switch id {
 		case "", ".", "..":
-			return refusef("%s is not an id; an id cannot be empty, \".\" or \"..\"", pyRepr(id))
+			return refusef("%s is not an id; an id cannot be empty, \".\" or \"..\"", PyRepr(id))
 		}
 	}
 	return nil

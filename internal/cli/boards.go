@@ -69,7 +69,7 @@ func boardList(c *cmdContext, _ []string) error {
 		if b.AutoPostponePeriodInDays != nil {
 			days = strconv.Itoa(*b.AutoPostponePeriodInDays)
 		}
-		lines[i] = fmt.Sprintf("%s  %s  (postpone %sd)", b.ID, b.Name, days)
+		lines[i] = fmt.Sprintf("%s  %s  (postpone %sd)", line(b.ID), line(b.Name), days)
 	}
 	return emit(c.cmd, rawList(boards), strings.Join(lines, "\n"))
 }
@@ -136,7 +136,7 @@ func columnList(c *cmdContext, a []string) error {
 	}
 	names := make([]string, len(cols))
 	for i, col := range cols {
-		names[i] = col.Name
+		names[i] = line(col.Name)
 	}
 	return emit(c.cmd, rawList(cols), "Not now → Maybe? → "+strings.Join(names, " → ")+" → Done")
 }

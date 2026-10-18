@@ -49,7 +49,10 @@ make install
 ```
 
 That builds `fz` and copies it to `~/.local/bin`, creating the folder if it
-is missing. Check the install with `fz --version`.
+is missing. Check the install with `fz --version`. A build from `make`
+prints the version, then the commit and the build date, such as
+`v1.2.0 (commit 0123456, built 2026-10-17T00:00:00Z)` after the name. A plain `go build`
+or `go install` prints the version Go records, without the commit and date.
 
 ### Install from a release
 
@@ -198,6 +201,13 @@ place, such as assigning a user who is assigned, the line is
 `dry-run: nothing sent; no change needed`. With `--json` they add
 `"dry_run": true` to their output. The fz 0.1 commands print the same text
 and JSON as the Python fz did.
+
+Text output never passes on a terminal escape. Card titles, descriptions,
+names and other text from the server can hold escape sequences, which a
+terminal could act on, for example to overwrite a line or set the
+clipboard. `fz` removes escape sequences, carriage returns and other
+control characters before it prints. A title, a name or a step stays on its
+own line. `--json` prints the server's text as it came, escaped as JSON.
 
 ### Exit status
 
@@ -361,6 +371,13 @@ A new card lands in Maybe? unless `--column` names another lane. A
 description is Markdown, given with `--description` or read from a file with
 `--description-file`.
 
+`fz` checks `--column` before it creates the card. A column that does not
+exist, a name two columns share, or a reserved name sends nothing. A tag
+given twice is sent once. If a call after the create fails, such as the
+tagging, the error names the new card's number, in the message or in the
+request path. Finish that card by hand rather than creating it again. If Fizzy's reply to the create has no `Location`
+header, `fz` cannot tell the card's number, so it says so and exits 1.
+
 Edit:
 
 ```sh
@@ -399,7 +416,10 @@ fz card reopen 87
 
 `--to` takes a column name, or `maybe`, `not-now` or `done`. An exact column
 name wins. A name that two columns share in any case, with no exact match,
-exits 2. `--board` moves the card to another board.
+exits 2. `--board` moves the card to another board. With `--board`, `--to`
+names a column on that board, and `fz` checks it before the card moves, so a
+bad `--to` sends nothing. Give `--to`, `--board` or both. With neither, `fz`
+exits 2.
 
 `card close` closes a card. It sends the same call as `--to done`, but it
 never reads the board's columns. A card that is already closed needs no
@@ -567,6 +587,13 @@ This uploads a file through Fizzy's direct upload and prints its
 to embed the `signed_id` instead, but that renders as a broken attachment.
 Drafts upload their images for you, so most people never need this command.
 
+The file must be a regular file of at most 100 MiB. A missing file, a
+folder, a device or a larger file exits 2 and sends nothing, in a dry run
+too. `fz` reads the file as it sends it, so a large file does not fill
+memory. The storage URL that Fizzy names must be an https URL, or a path
+that starts with a single `/`, which goes to your configured server. Any
+other URL is refused before the file is sent.
+
 ### Tags and people
 
 ```sh
@@ -721,6 +748,11 @@ This writes one man page per command, such as `fz.1` and `fz-card-list.1`,
 into `DIR/man1`. The default DIR is `~/.local/share/man`. It needs no config
 file.
 
+If a page path is a symlink, `fz man` writes nothing and exits 1. After
+writing, it removes each `fz.1` or `fz-*.1` file in `DIR/man1` that it did
+not write, such as the page of a command that no longer exists, and prints
+its path. Other files in the folder are left alone.
+
 ### Shell completion
 
 ```sh
@@ -758,6 +790,9 @@ The full list is `boards`, `board-create`, `columns`, `cards`, `show`,
 `create`, `move`, `reopen`, `golden`, `delete` and `tag`, plus the
 numbered forms of `step` and `comment`. The global flags can come first, in
 any of their forms, such as `fz --json=true cards`.
+
+In the numbered `step` form, words after `--` are step text.
+`fz step 87 -- --check` adds a step named `--check` and ticks nothing.
 
 ## Drafts
 
@@ -1008,8 +1043,8 @@ Follow the fizzy-cards skill's rules for moving cards and ticking steps.
 
 A card title is text that anyone with access to the board can write, and it
 lands in an AI agent's context. So the hook marks titles as data. It prints
-the line about data before the first title. It removes control characters
-from each title, then prints the title as a JSON string, so quotes and
+the line about data before the first title. It removes escape sequences
+and control characters from each title, then prints the title as a JSON string, so quotes and
 backslashes come out escaped. The star marks a golden card.
 
 ### The repos map
@@ -1028,8 +1063,10 @@ Inside a git worktree, the main checkout's folder name is tried first. Then
 each folder in the path is tried, from the deepest up. The first name found
 in the map wins.
 
-A folder that is not in the map prints nothing and reads no config. Any
-failure also prints nothing and exits 0, so the hook never blocks a session.
+A folder that is not in the map, or whose entry has an empty board, prints
+nothing and reads no config. Any failure at run time also prints nothing and
+exits 0, so the hook never blocks a session. A usage error, such as an
+unknown flag, exits 2.
 That covers a missing map, a config error, a network error and the 3 second
 time limit, which includes the cleanup, so the hook never runs longer. At the time limit, the hook also kills a token command that is
 still running, along with every process it started. The token command runs
@@ -1112,7 +1149,9 @@ HTTP status the server returned. A status of 300 or above means the write
 failed. A status of 0 means the write got no reply, for example after a
 timeout or a dropped connection, so the server may or may not have applied
 it. Check in Fizzy before you run it again. The log never holds the token or
-the request and response bodies. A dry run sends nothing, so it logs nothing.
+the request and response bodies. For the upload of a file's bytes, `path` is
+the storage host only, because the storage path can carry a signed key. A dry
+run sends nothing, so it logs nothing.
 
 `fz` creates the log with mode 0600, so only you can read it, and sets an
 existing log to 0600.

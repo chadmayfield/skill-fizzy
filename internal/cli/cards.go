@@ -3,7 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"slices"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -61,9 +61,11 @@ func addCardCommands(root *cobra.Command) {
 	}
 
 	create := &cobra.Command{
-		Use:     "create BOARD TITLE",
-		Short:   "create a card",
-		Long:    "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing.",
+		Use:   "create BOARD TITLE",
+		Short: "create a card",
+		Long: "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing. " +
+			"fz checks --column before the create, so a missing, shared or reserved column name sends nothing. A tag given twice is sent once. " +
+			"If a call after the create fails, the error names the new card number.",
 		Example: examples(`fz card create Home "Fix the gate"`, `fz card create Home "Fix the gate" --column Next --tag buy`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardCreate),
@@ -76,7 +78,9 @@ func addCardCommands(root *cobra.Command) {
 	move := &cobra.Command{
 		Use:   "move NUMBER",
 		Short: "move a card to a column or another board",
-		Long: "Move a card. --to takes a column name, or maybe, not-now or done. --board moves it to another board.\n\n" +
+		Long: "Move a card. --to takes a column name, or maybe, not-now or done. --board moves it to another board. " +
+			"With --board, --to names a column on that board, and fz checks it before the card moves. " +
+			"Give --to, --board or both; with neither, fz exits 2.\n\n" +
 			"If the board has a column of its own named Done, Maybe, Maybe? or Not now, --to with that name is refused, because it could mean the column or the keyword. Give --to the column id to move the card into that column, or rename the column to use the keyword.",
 		Example: examples("fz card move 87 --to Now", "fz card move 87 --to done", "fz card move 87 --board Home --to Next"),
 		Args:    args(cobra.ExactArgs(1)),
@@ -251,12 +255,23 @@ func cardShow(c *cmdContext, a []string) error {
 	}
 	w := c.out()
 	fmt.Fprintln(w, cardLine(card))
-	fmt.Fprintf(w, "board: %s   url: %s\n", card.Board.Name, rawString(card.Raw(), "url"))
+	// The line leaves out a missing board or url rather than print an
+	// empty name or None.
+	var where []string
+	if name := line(card.Board.Name); name != "" {
+		where = append(where, "board: "+name)
+	}
+	if u := rawString(card.Raw(), "url"); u != "None" {
+		where = append(where, "url: "+line(u))
+	}
+	if len(where) > 0 {
+		fmt.Fprintln(w, strings.Join(where, "   "))
+	}
 	if card.Description != "" {
 		fmt.Fprintln(w, "\n"+pyStrip(card.Description))
 	}
 	for _, s := range card.Steps {
-		fmt.Fprintf(w, "  [%s] %s\n", tick(s.Completed), s.Content)
+		fmt.Fprintf(w, "  [%s] %s\n", tick(s.Completed), line(s.Content))
 	}
 	return nil
 }
@@ -303,6 +318,14 @@ func cardCreate(c *cmdContext, a []string) error {
 			return usagef("--tag cannot be empty")
 		}
 	}
+	desc, _ := fl.GetString("description")
+	if file, _ := fl.GetString("description-file"); file != "" {
+		d, err := readDescriptionFile(file)
+		if err != nil {
+			return err
+		}
+		desc = d
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
@@ -311,22 +334,29 @@ func cardCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	desc, _ := fl.GetString("description")
-	if file, _ := fl.GetString("description-file"); file != "" {
-		raw, err := os.ReadFile(file)
-		if err != nil {
-			return err
-		}
-		desc = strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n")
-	}
 	html := ""
 	if desc != "" {
 		html = markdown.ToHTML(desc)
 	}
+	// Check --column before the create, so a bad one sends nothing. Maybe?
+	// is where a new card lands, so it needs no move, but it is still
+	// refused when a custom column has that name.
 	col, _ := fl.GetString("column")
-	if col != "" && !isMaybe(col) {
-		if err := fz.CheckMoveTarget(b.ID, col); err != nil {
+	var target *fizzy.MoveTarget
+	if col != "" {
+		t, err := fz.ResolveMoveTarget(b.ID, col)
+		if err != nil {
 			return err
+		}
+		if !t.IsMaybe() {
+			target = &t
+		}
+	}
+	// Fizzy's tag call toggles, so a tag given twice is sent once.
+	var titles []string
+	for _, t := range tags {
+		if title := fizzy.TagTitle(t); !slices.Contains(titles, title) {
+			titles = append(titles, title)
 		}
 	}
 	n, err := fz.CreateCard(b.ID, a[1], html, "")
@@ -334,15 +364,34 @@ func cardCreate(c *cmdContext, a []string) error {
 		return err
 	}
 	if n != 0 {
-		if col != "" && !isMaybe(col) {
-			if err := fz.MoveCard(n, col, b.ID); err != nil {
-				return err
-			}
+		var left []string
+		if target != nil {
+			left = append(left, "the move to "+col)
 		}
-		for _, t := range tags {
-			if _, err := fz.AddTag(n, t); err != nil {
+		for _, t := range titles {
+			left = append(left, "the tag "+t)
+		}
+		// unfinished turns a refusal after the create into an error that
+		// names the new card and what is left, and exits 1, because the
+		// card exists. An API error is returned as it is, as the Python fz
+		// printed it.
+		unfinished := func(err error) error {
+			if !fizzy.IsRefusal(err) {
 				return err
 			}
+			return fmt.Errorf("card #%d was created on %s, but %s did not finish: %v", n, b.Name, strings.Join(left, ", "), err)
+		}
+		if target != nil {
+			if err := fz.MoveCardTo(n, *target); err != nil {
+				return unfinished(err)
+			}
+			left = left[1:]
+		}
+		for _, t := range titles {
+			if _, err := fz.AddTag(n, t); err != nil {
+				return unfinished(err)
+			}
+			left = left[1:]
 		}
 	}
 	text := "dry-run: card not created"
@@ -365,27 +414,35 @@ func cardMove(c *cmdContext, a []string) error {
 		return err
 	}
 	to, _ := fl.GetString("to")
-	// boardID is the board the card ends up on, or "" to read it from the
-	// card. A --to that the target board makes ambiguous is refused before
-	// the card changes board.
-	boardID := ""
-	if name, _ := fl.GetString("board"); name != "" {
-		b, err := fz.Board(name)
+	name, _ := fl.GetString("board")
+	if to == "" && name == "" {
+		return usagef("card move needs --to, --board or both")
+	}
+	if name == "" {
+		if err := fz.MoveCard(n, to, ""); err != nil {
+			return err
+		}
+		return emit(c.cmd, obj{{"number", n}}, fmt.Sprintf("card #%d moved", n))
+	}
+	// --to is looked up on the target board, and checked before the card
+	// changes board, so a refusal sends nothing.
+	b, err := fz.Board(name)
+	if err != nil {
+		return err
+	}
+	var target *fizzy.MoveTarget
+	if to != "" {
+		t, err := fz.ResolveMoveTarget(b.ID, to)
 		if err != nil {
 			return err
 		}
-		boardID = b.ID
-		if to != "" {
-			if err := fz.CheckMoveTarget(boardID, to); err != nil {
-				return err
-			}
-		}
-		if err := fz.MoveCardToBoard(n, b.ID); err != nil {
-			return err
-		}
+		target = &t
 	}
-	if to != "" {
-		if err := fz.MoveCard(n, to, boardID); err != nil {
+	if err := fz.MoveCardToBoard(n, b.ID); err != nil {
+		return err
+	}
+	if target != nil {
+		if err := fz.MoveCardTo(n, *target); err != nil {
 			return err
 		}
 	}
@@ -490,7 +547,7 @@ func cardDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to delete: %s (board %s)\n", cardLine(card), card.Board.Name)
+	fmt.Fprintf(c.errw(), "about to delete: %s (board %s)\n", cardLine(card), line(card.Board.Name))
 	if !yes {
 		return refuse(c)
 	}

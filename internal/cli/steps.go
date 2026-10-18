@@ -40,7 +40,7 @@ func addStepCommands(root *cobra.Command) {
 	edit := &cobra.Command{
 		Use:     "edit NUMBER STEP_ID CONTENT",
 		Short:   "change a step's text",
-		Long:    "Replace the text of one step.",
+		Long:    "Replace the text of one step. Empty or blank text exits 2 and sends nothing.",
 		Example: examples(`fz step edit 87 03abc123def456ghi789jkl0mn "Order two hinges"`),
 		Args:    args(cobra.ExactArgs(3)),
 		RunE:    action(stepEdit),
@@ -120,7 +120,7 @@ func stepList(c *cmdContext, a []string) error {
 	}
 	lines := make([]string, len(card.Steps))
 	for i, s := range card.Steps {
-		lines[i] = fmt.Sprintf("[%s] %s  %s", tick(s.Completed), s.ID, s.Content)
+		lines[i] = fmt.Sprintf("[%s] %s  %s", tick(s.Completed), line(s.ID), line(s.Content))
 	}
 	text := strings.Join(lines, "\n")
 	if text == "" {
@@ -132,6 +132,9 @@ func stepList(c *cmdContext, a []string) error {
 func stepEdit(c *cmdContext, a []string) error {
 	n, err := cardNumber(a[0])
 	if err != nil {
+		return err
+	}
+	if err := checkName("the step text", a[2]); err != nil {
 		return err
 	}
 	fz, err := c.api()
@@ -182,7 +185,7 @@ func stepDelete(c *cmdContext, a []string) error {
 		preview := fmt.Sprintf("about to delete step %s, which card #%d does not list", a[1], n)
 		for _, s := range card.Steps {
 			if s.ID == a[1] {
-				preview = fmt.Sprintf("about to delete step: [%s] %s  %s (card #%d)", tick(s.Completed), s.ID, s.Content, n)
+				preview = fmt.Sprintf("about to delete step: [%s] %s  %s (card #%d)", tick(s.Completed), line(s.ID), line(s.Content), n)
 				break
 			}
 		}

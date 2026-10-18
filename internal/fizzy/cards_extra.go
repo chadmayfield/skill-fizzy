@@ -175,11 +175,11 @@ func (f *Fizzy) FindTag(name string) (Tag, error) {
 	case n == 1:
 		return t, nil
 	case n > 1:
-		return Tag{}, refusef("%d tags are named %s; use the exact title", n, pyRepr(name))
+		return Tag{}, refusef("%d tags are named %s; use the exact title", n, PyRepr(name))
 	}
 	titles := make([]string, len(tags))
 	for i, t := range tags {
 		titles[i] = t.Title
 	}
-	return Tag{}, fmt.Errorf("no tag %s (have: %s)", pyRepr(name), strings.Join(titles, ", "))
+	return Tag{}, fmt.Errorf("no tag %s (have: %s)", PyRepr(name), strings.Join(titles, ", "))
 }

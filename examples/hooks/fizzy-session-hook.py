@@ -48,13 +48,24 @@ def run(*args):
     return out.strip()
 
 
+# Terminal escape sequences, matched the way fz's config.TerminalLine
+# matches them: CSI to its final byte, OSC, DCS, SOS, PM and APC to BEL or
+# the string terminator, and any other ESC with the character after it.
+ESCAPES = re.compile(
+    r"(?:\x1b\[|\x9b)[^\x40-\x7e]*[\x40-\x7e]?"
+    r"|(?:\x1b[\]PX^_]|[\x90\x9d\x9e\x9f])(?:[^\x07\x9c\x1b]|\x1b(?!\\))*(?:\x07|\x9c|\x1b\\)?"
+    r"|\x1b[\s\S]?"
+)
+
+
 def clean(text):
-    """Drop control characters and line separators from server text.
+    """Drop escape sequences, control characters and line separators.
 
     The output goes into the session context, so a card title must not be
     able to start a new line or send a terminal escape.
     """
-    return "".join(ch for ch in str(text) if unicodedata.category(ch) not in ("Cc", "Zl", "Zp"))
+    text = ESCAPES.sub("", str(text))
+    return "".join(ch for ch in text if unicodedata.category(ch) not in ("Cc", "Zl", "Zp"))
 
 
 def card_number(value):

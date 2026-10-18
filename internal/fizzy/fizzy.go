@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -31,6 +32,7 @@ import (
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
 // AutoPostponeDays are the auto-postpone periods Fizzy accepts.
@@ -92,11 +94,11 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 	case 0:
 		names := make([]string, len(boards))
 		for i, b := range boards {
-			names[i] = b.Name
+			names[i] = config.TerminalLine(b.Name)
 		}
-		return Board{}, fmt.Errorf("no board named %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
+		return Board{}, fmt.Errorf("no board named %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 	}
-	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), pyRepr(nameOrID))
+	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), PyRepr(nameOrID))
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
@@ -131,10 +133,10 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (st
 		return id, nil
 	}
 	if id == "" {
-		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", pyRepr(name), strings.Join(lost, " and "))
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", PyRepr(name), strings.Join(lost, " and "))
 	}
 	if err := CheckIDs(id); err != nil {
-		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", pyRepr(name), err, strings.Join(lost, " and "))
+		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", PyRepr(name), err, strings.Join(lost, " and "))
 	}
 	if postponeDays != 0 {
 		if _, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
@@ -177,13 +179,16 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	case n == 1:
 		return c, nil
 	case n > 1:
-		return Column{}, refusef("%d columns are named %s; use the column id", n, pyRepr(nameOrID))
+		return Column{}, refusef("%d columns are named %s; use the column id", n, PyRepr(nameOrID))
+	}
+	if len(cols) == 0 {
+		return Column{}, fmt.Errorf("no column %s (no custom columns)", PyRepr(nameOrID))
 	}
 	names := make([]string, len(cols))
 	for i, c := range cols {
-		names[i] = c.Name
+		names[i] = config.TerminalLine(c.Name)
 	}
-	return Column{}, fmt.Errorf("no column %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
+	return Column{}, fmt.Errorf("no column %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 }
 
 // pickByName returns the one item whose name is want, or failing that the
@@ -264,7 +269,23 @@ func (f *Fizzy) Card(n int) (Card, error) {
 	return c, err
 }
 
-// CreateCard creates a card and returns its number, 0 in dry-run mode.
+// created POSTs body and returns the new object's id from the Location
+// header, or "" in dry-run mode. A reply with no Location is an error: the
+// object exists, but fz cannot name it. what names the object.
+func (f *Fizzy) created(path string, body any, what string) (string, error) {
+	status, hdr, _, err := f.C.Do(http.MethodPost, path, body)
+	if err != nil || status == 0 {
+		return "", err
+	}
+	id := client.IDFromLocation(hdr.Get("Location"))
+	if id == "" {
+		return "", fmt.Errorf("Fizzy created the %s but sent no Location header, so fz cannot tell its id", what)
+	}
+	return id, nil
+}
+
+// CreateCard creates a card and returns its number, 0 in dry-run mode. A
+// reply with no Location is an error.
 func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error) {
 	if err := CheckIDs(boardID); err != nil {
 		return 0, err
@@ -274,7 +295,7 @@ func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error)
 		Description string `json:"description,omitempty"`
 		Status      string `json:"status,omitempty"`
 	}{title, descHTML, status}
-	id, err := f.C.Create("/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body))
+	id, err := f.created("/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body), "card")
 	if err != nil || id == "" {
 		return 0, err
 	}
@@ -297,7 +318,6 @@ func (f *Fizzy) UpdateCard(n int, fields CardFields) error {
 // MoveCard moves a card to maybe, not-now, done, or a column of the card's
 // board. boardID may be empty; the card is fetched to find its board.
 func (f *Fizzy) MoveCard(n int, target, boardID string) error {
-	p := "/cards/" + strconv.Itoa(n)
 	if boardID == "" {
 		c, err := f.Card(n)
 		if err != nil {
@@ -305,27 +325,58 @@ func (f *Fizzy) MoveCard(n int, target, boardID string) error {
 		}
 		boardID = c.Board.ID
 	}
-	if err := f.CheckMoveTarget(boardID, target); err != nil {
-		return err
-	}
-	switch moveKeyword(target) {
-	case maybe:
-		_, err := f.C.Write(http.MethodDelete, p+"/triage", nil)
-		return err
-	case notNow:
-		_, err := f.C.Write(http.MethodPost, p+"/not_now", nil)
-		return err
-	case done:
-		_, err := f.C.Write(http.MethodPost, p+"/closure", nil)
-		return err
-	}
-	col, err := f.Column(boardID, target)
+	t, err := f.ResolveMoveTarget(boardID, target)
 	if err != nil {
 		return err
 	}
-	_, err = f.C.Write(http.MethodPost, p+"/triage", struct {
-		ColumnID string `json:"column_id"`
-	}{col.ID})
+	return f.MoveCardTo(n, t)
+}
+
+// MoveTarget is a checked place to move a card to: a move keyword, or a
+// column on one board. ResolveMoveTarget makes one.
+type MoveTarget struct {
+	keyword  string // maybe, notNow or done; "" for a column
+	columnID string
+}
+
+// IsMaybe reports whether the target is the Maybe? keyword, where a new
+// card already is.
+func (t MoveTarget) IsMaybe() bool { return t.keyword == maybe }
+
+// ResolveMoveTarget checks target against the board's columns and sends
+// nothing. A keyword that a custom column is also named, a column name two
+// columns share, and a name no column has are each an error, so a caller
+// can check every target before its first write.
+func (f *Fizzy) ResolveMoveTarget(boardID, target string) (MoveTarget, error) {
+	if err := f.CheckMoveTarget(boardID, target); err != nil {
+		return MoveTarget{}, err
+	}
+	if kw := moveKeyword(target); kw != "" {
+		return MoveTarget{keyword: kw}, nil
+	}
+	col, err := f.Column(boardID, target)
+	if err != nil {
+		return MoveTarget{}, err
+	}
+	return MoveTarget{columnID: col.ID}, nil
+}
+
+// MoveCardTo moves a card to a target from ResolveMoveTarget.
+func (f *Fizzy) MoveCardTo(n int, t MoveTarget) error {
+	p := "/cards/" + strconv.Itoa(n)
+	var err error
+	switch t.keyword {
+	case maybe:
+		_, err = f.C.Write(http.MethodDelete, p+"/triage", nil)
+	case notNow:
+		_, err = f.C.Write(http.MethodPost, p+"/not_now", nil)
+	case done:
+		_, err = f.C.Write(http.MethodPost, p+"/closure", nil)
+	default:
+		_, err = f.C.Write(http.MethodPost, p+"/triage", struct {
+			ColumnID string `json:"column_id"`
+		}{t.columnID})
+	}
 	return err
 }
 
@@ -436,7 +487,7 @@ func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
 	// the toggle could remove one it has. card assign refuses the same way.
 	var keys map[string]json.RawMessage
 	if json.Unmarshal(c.Raw(), &keys) != nil || keys["tags"] == nil {
-		return false, refusef("card #%d has no tags list in Fizzy's reply, so fz cannot tell whether it has the tag %s", n, pyRepr(tag))
+		return false, refusef("card #%d has no tags list in Fizzy's reply, so fz cannot tell whether it has the tag %s", n, PyRepr(tag))
 	}
 	present := false
 	for _, t := range c.Tags {
@@ -463,12 +514,13 @@ func (f *Fizzy) Tags() ([]Tag, error) { return list[Tag](f.C, "/tags") }
 
 // -- steps and comments ----------------------------------------------------
 
-// AddStep adds a step and returns its id, empty in dry-run mode.
+// AddStep adds a step and returns its id, empty in dry-run mode. A reply
+// with no Location is an error.
 func (f *Fizzy) AddStep(n int, content string, done bool) (string, error) {
-	return f.C.Create("/cards/"+strconv.Itoa(n)+"/steps", wrap("step", struct {
+	return f.created("/cards/"+strconv.Itoa(n)+"/steps", wrap("step", struct {
 		Content   string `json:"content"`
 		Completed bool   `json:"completed"`
-	}{content, done}))
+	}{content, done}), "step")
 }
 
 // UpdateStep changes a step. It sends only the fields that are non-nil.
@@ -495,25 +547,82 @@ func (f *Fizzy) DeleteStep(n int, id string) error {
 	return err
 }
 
-// AddComment adds a comment and returns its id, empty in dry-run mode.
+// AddComment adds a comment and returns its id, empty in dry-run mode. A
+// reply with no Location is an error.
 func (f *Fizzy) AddComment(n int, bodyHTML string) (string, error) {
-	return f.C.Create("/cards/"+strconv.Itoa(n)+"/comments", wrap("comment", struct {
+	return f.created("/cards/"+strconv.Itoa(n)+"/comments", wrap("comment", struct {
 		Body string `json:"body"`
-	}{bodyHTML}))
+	}{bodyHTML}), "comment")
 }
 
 // -- uploads (ActiveStorage direct upload) ---------------------------------
+
+// MaxUploadSize is the largest file Upload sends, 100 MiB.
+const MaxUploadSize = 100 << 20
+
+// storageURL checks the storage URL from a direct upload reply and returns
+// the absolute URL to PUT the file to. It takes an absolute https URL, a URL
+// on the configured server, or a path that starts with a single slash, which
+// resolves against the configured server's origin. A disk service sends such
+// a path, and it already carries any account prefix. Anything else, such as
+// //host, @host, a relative path or another scheme, is refused.
+func (f *Fizzy) storageURL(raw string) (string, error) {
+	bad := refusef("Fizzy sent a storage URL fz will not use; it takes an https URL or a path that starts with /")
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", bad
+	}
+	origin, err := url.Parse(f.C.URL("", false))
+	if err != nil || origin.Host == "" {
+		return "", bad
+	}
+	origin = &url.URL{Scheme: origin.Scheme, Host: origin.Host}
+	switch {
+	case u.IsAbs():
+		sameServer := strings.EqualFold(u.Scheme, origin.Scheme) && strings.EqualFold(u.Host, origin.Host)
+		if u.Host == "" || u.User != nil || (!strings.EqualFold(u.Scheme, "https") && !sameServer) {
+			return "", bad
+		}
+		return u.String(), nil
+	case strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") && u.Host == "" && u.User == nil:
+		return origin.ResolveReference(u).String(), nil
+	}
+	return "", bad
+}
 
 // Upload sends a file and returns the sgid to embed as
 // <action-text-attachment sgid=...>. In dry-run mode it prints the blob
 // request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
 // it returns signed_id and prints a warning on the client's output.
+//
+// A path that is not a regular file, or a file over MaxUploadSize, is
+// refused before anything is read or sent, in dry-run mode too. The file is
+// read twice, once for the checksum and once as the PUT body, and never
+// held in memory whole.
 func (f *Fizzy) Upload(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	fi, err := os.Stat(path)
 	if err != nil {
 		return "", err
 	}
-	sum := md5.Sum(data) //nolint:gosec // ActiveStorage requires MD5.
+	if !fi.Mode().IsRegular() {
+		return "", refusef("%s is not a regular file", PyRepr(path))
+	}
+	if fi.Size() > MaxUploadSize {
+		return "", refusef("%s is %d bytes; fz uploads files up to 100 MiB (%d bytes)", PyRepr(path), fi.Size(), MaxUploadSize)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	h := md5.New() //nolint:gosec // ActiveStorage requires MD5.
+	size, err := io.Copy(h, io.LimitReader(file, MaxUploadSize+1))
+	if err != nil {
+		return "", err
+	}
+	if size != fi.Size() {
+		return "", fmt.Errorf("%s changed size while fz read it", PyRepr(path))
+	}
 	name := filepath.Base(path)
 	ctype := "application/octet-stream"
 	if t := mime.TypeByExtension(filepath.Ext(name)); t != "" {
@@ -523,10 +632,10 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	}
 	blob := wrap("blob", struct {
 		Filename    string `json:"filename"`
-		ByteSize    int    `json:"byte_size"`
+		ByteSize    int64  `json:"byte_size"`
 		Checksum    string `json:"checksum"`
 		ContentType string `json:"content_type"`
-	}{name, len(data), base64.StdEncoding.EncodeToString(sum[:]), ctype})
+	}{name, size, base64.StdEncoding.EncodeToString(h.Sum(nil)), ctype})
 	status, _, payload, err := f.C.Do(http.MethodPost, "/rails/active_storage/direct_uploads", blob)
 	if err != nil {
 		return "", err
@@ -551,11 +660,16 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	if info.SignedID == "" && info.AttachableSgid == "" {
 		return "", errors.New("direct upload reply has no signed_id or attachable_sgid")
 	}
-	// The storage URL is absolute for cloud services; a disk service may
-	// return a site-relative path, which already carries any account prefix
-	// it needs.
-	_, _, _, err = f.C.Do(http.MethodPut, info.DirectUpload.URL, nil,
-		client.Raw(data), client.Headers(info.DirectUpload.Headers), client.NoAuth(), client.NotAccountScoped(), client.Upload())
+	storage, err := f.storageURL(info.DirectUpload.URL)
+	if err != nil {
+		return "", err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	_, _, _, err = f.C.Do(http.MethodPut, storage, nil,
+		client.Stream(file, size), client.Headers(info.DirectUpload.Headers), client.NoAuth(), client.NotAccountScoped(),
+		client.Upload(), client.LogHost())
 	if err != nil {
 		return "", err
 	}

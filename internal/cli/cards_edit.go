@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,7 +20,7 @@ func addCardEditCommand(root *cobra.Command) {
 	edit := &cobra.Command{
 		Use:   "edit NUMBER [OLD NEW]",
 		Short: "change a card's title, description or status",
-		Long: "Change a card. A new description replaces the whole thing, including embedded images. " +
+		Long: "Change a card. An empty or blank --title exits 2 and sends nothing. A new description replaces the whole thing, including embedded images. " +
 			"fz refuses a new description that is empty or only whitespace, or a --replace that leaves it so, unless --allow-empty is given. " +
 			"--replace swaps one phrase in the current description and leaves the rest alone. " +
 			"Give the phrase and its replacement after the number. The phrase must not be empty. " +
@@ -81,7 +79,11 @@ func cardEdit(c *cmdContext, a []string) error {
 
 	var fields fizzy.CardFields
 	var changed []string
-	if title, _ := fl.GetString("title"); title != "" {
+	if fl.Changed("title") {
+		title, _ := fl.GetString("title")
+		if err := checkName("the card title", title); err != nil {
+			return err
+		}
 		fields.Title = &title
 		changed = append(changed, "title")
 	}
@@ -91,11 +93,10 @@ func cardEdit(c *cmdContext, a []string) error {
 		md = &d
 	}
 	if file, _ := fl.GetString("description-file"); file != "" {
-		raw, err := os.ReadFile(file)
+		d, err := readDescriptionFile(file)
 		if err != nil {
 			return err
 		}
-		d := strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n")
 		md = &d
 	}
 	allowEmpty, _ := fl.GetBool("allow-empty")
@@ -104,6 +105,8 @@ func cardEdit(c *cmdContext, a []string) error {
 		return usagef("--allow-empty only goes with --description, --description-file or --replace")
 	case md != nil && strings.TrimSpace(*md) == "" && !allowEmpty:
 		return usagef("the new description is empty; add --allow-empty to clear it")
+	case md != nil && replace:
+		return usagef("use --replace or a new description, not both")
 	}
 	if md != nil {
 		html := markdown.ToHTML(*md)
@@ -115,15 +118,18 @@ func cardEdit(c *cmdContext, a []string) error {
 		return err
 	}
 	if replace {
-		if fields.Description != nil {
-			return errors.New("use --replace or a new description, not both")
-		}
 		card, err := fz.Card(number)
 		if err != nil {
 			return err
 		}
-		html, err := richtext.ReplaceText(richtext.UnwrapActionText(card.DescriptionHTML), a[1], a[2], all)
+		src := richtext.UnwrapActionText(card.DescriptionHTML)
+		html, err := richtext.ReplaceText(src, a[1], a[2], all)
 		if err != nil {
+			// A phrase that matches more than once is a refusal, exit 2:
+			// it succeeds with --all.
+			if _, again := richtext.ReplaceText(src, a[1], a[2], true); !all && again == nil {
+				return fizzy.Refuse(err.Error())
+			}
 			return err
 		}
 		if emptyDescription(html) && !allowEmpty {

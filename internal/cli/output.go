@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"unicode"
@@ -177,11 +178,16 @@ func orNone(s string) string {
 	return s
 }
 
-// cardLine formats a card the way the Python _card_line does.
+// line cleans server text that must stay on one line, such as a title or
+// a name: config.TerminalLine.
+func line(s string) string { return config.TerminalLine(s) }
+
+// cardLine formats a card the way the Python _card_line does. Server text
+// is kept to the line, so a title cannot fake another card's line.
 func cardLine(c fizzy.Card) string {
 	state := "maybe"
 	if c.Column != nil && c.Column.Name != "" {
-		state = c.Column.Name
+		state = line(c.Column.Name)
 	}
 	if c.Closed {
 		state = "done"
@@ -192,9 +198,9 @@ func cardLine(c fizzy.Card) string {
 	}
 	tags := ""
 	if len(c.Tags) > 0 {
-		tags = " #" + strings.Join(c.Tags, " #")
+		tags = " #" + line(strings.Join(c.Tags, " #"))
 	}
-	return fmt.Sprintf("#%-5d [%s] %s%s%s", c.Number, state, c.Title, gold, tags)
+	return fmt.Sprintf("#%-5d [%s] %s%s%s", c.Number, state, line(c.Title), gold, tags)
 }
 
 // pyBool formats a bool the way Python prints one.
@@ -210,39 +216,9 @@ func pyStrip(s string) string {
 	return strings.TrimFunc(s, func(r rune) bool { return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f) })
 }
 
-// pyRepr formats a string like Python's repr: single quotes, unless the
-// string holds a single quote and no double quote.
-func pyRepr(s string) string {
-	q := '\''
-	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
-		q = '"'
-	}
-	var b strings.Builder
-	b.WriteRune(q)
-	for _, r := range s {
-		switch {
-		case r == q || r == '\\':
-			b.WriteRune('\\')
-			b.WriteRune(r)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r == ' ' || (r != unicode.ReplacementChar && unicode.IsPrint(r)):
-			b.WriteRune(r)
-		case r < 0x100:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		case r < 0x10000:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			fmt.Fprintf(&b, `\U%08x`, r)
-		}
-	}
-	b.WriteRune(q)
-	return b.String()
-}
+// pyRepr formats a string like Python's repr. It is fizzy.PyRepr, so fz
+// has one copy.
+func pyRepr(s string) string { return fizzy.PyRepr(s) }
 
 // exitCode ends a command with a code after it has printed its own message.
 type exitCode int
@@ -259,6 +235,17 @@ func checkName(what, name string) error {
 		return usagef("%s cannot be empty", what)
 	}
 	return nil
+}
+
+// readDescriptionFile reads the Markdown file a --description-file flag
+// names, with Windows and old Mac line ends turned into newlines. A file
+// that cannot be read is a usage error.
+func readDescriptionFile(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", usagef("argument --description-file: %v", err)
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n"), nil
 }
 
 // cardNumber parses a card number argument.

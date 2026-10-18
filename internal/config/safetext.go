@@ -6,11 +6,39 @@ import (
 )
 
 // SafeText makes text from a server or a command safe to print on a
-// terminal. It removes escape sequences (CSI, OSC and two-byte ESC forms, in
-// their 7-bit and 8-bit spellings) and every other control character. Tabs,
-// carriage returns and newlines become spaces. The result is trimmed and cut
-// to at most max runes.
+// terminal, on one line. It cleans s as TerminalText does, with tabs,
+// carriage returns and newlines turned into spaces. The result is trimmed
+// and cut to at most max runes.
 func SafeText(s string, max int) string {
+	out := strings.TrimSpace(clean(s, spaceBreaks))
+	if r := []rune(out); len(r) > max {
+		out = strings.TrimSpace(string(r[:max]))
+	}
+	return out
+}
+
+// TerminalText makes server text safe to print on a terminal. It removes
+// escape sequences (CSI, OSC and two-byte ESC forms, in their 7-bit and
+// 8-bit spellings), every control character but newline and tab, and the
+// line and paragraph separators U+2028 and U+2029. A carriage return is
+// removed, so a line cannot be overwritten.
+func TerminalText(s string) string { return clean(s, keepBreaks) }
+
+// TerminalLine cleans s as TerminalText does and removes newlines and tabs
+// too, for text that must stay on its line, such as a card title.
+func TerminalLine(s string) string { return clean(s, dropBreaks) }
+
+// breaks says what clean does with tabs, newlines and carriage returns.
+type breaks int
+
+const (
+	keepBreaks  breaks = iota // keep tabs and newlines, drop carriage returns
+	dropBreaks                // drop all three
+	spaceBreaks               // turn each into a space
+)
+
+// clean is the one function behind SafeText, TerminalText and TerminalLine.
+func clean(s string, mode breaks) string {
 	var b strings.Builder
 	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
@@ -46,15 +74,16 @@ func SafeText(s string, max int) string {
 			// Two-byte escape: drop ESC and the byte after it.
 			i++
 		case r == '\t' || r == '\n' || r == '\r':
-			b.WriteRune(' ')
-		case unicode.IsControl(r):
+			switch {
+			case mode == spaceBreaks:
+				b.WriteRune(' ')
+			case mode == keepBreaks && r != '\r':
+				b.WriteRune(r)
+			}
+		case unicode.IsControl(r), r == '\u2028', r == '\u2029':
 		default:
 			b.WriteRune(r)
 		}
 	}
-	out := strings.TrimSpace(b.String())
-	if r := []rune(out); len(r) > max {
-		out = strings.TrimSpace(string(r[:max]))
-	}
-	return out
+	return b.String()
 }

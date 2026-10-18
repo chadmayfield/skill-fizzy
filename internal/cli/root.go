@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
@@ -73,8 +74,8 @@ func NewRoot() *cobra.Command {
 func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 	args = Rewrite(args)
 	root.SetArgs(args)
-	root.SetOut(out)
-	root.SetErr(errw)
+	root.SetOut(terminalWriter{out})
+	root.SetErr(terminalWriter{errw})
 	err := unknownSubcommand(root, args)
 	if err == nil {
 		err = root.Execute()
@@ -91,6 +92,20 @@ func run(root *cobra.Command, args []string, out, errw io.Writer) int {
 		return 2
 	}
 	return 1
+}
+
+// terminalWriter passes everything fz prints through config.TerminalText,
+// so no text from the server can send a terminal escape or overwrite a
+// line. JSON output passes unchanged: it holds only escaped ASCII. Each
+// write is cleaned on its own; fz writes each line, or each whole output,
+// in one call.
+type terminalWriter struct{ w io.Writer }
+
+func (t terminalWriter) Write(p []byte) (int, error) {
+	if _, err := io.WriteString(t.w, config.TerminalText(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // unknownSubcommand reports "fz card nope" as a usage error. Cobra only
@@ -118,8 +133,7 @@ func unknownSubcommand(root *cobra.Command, args []string) error {
 
 // Execute runs fz with the process arguments and returns the exit code.
 func Execute(version, commit, date string) int {
-	_, _ = commit, date
 	root := NewRoot()
-	root.Version = resolveVersion(version, debug.ReadBuildInfo)
+	setVersion(root, resolveVersion(version, debug.ReadBuildInfo), commit, date)
 	return run(root, os.Args[1:], os.Stdout, os.Stderr)
 }
