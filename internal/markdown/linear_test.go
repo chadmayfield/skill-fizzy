@@ -11,9 +11,11 @@ import (
 func TestToHTMLLinear(t *testing.T) {
 	const size = 1 << 20
 	for name, unit := range map[string]string{
-		"open brackets":       "[",
-		"labels without urls": "[a]",
-		"links without ends":  "[a](https://",
+		"open brackets":                "[",
+		"labels without urls":          "[a]",
+		"links without ends":           "[a](https://",
+		"stars that never close":       ".*a",
+		"underscores that never close": "._a",
 	} {
 		in := strings.Repeat(unit, size/len(unit))
 		start := time.Now()
