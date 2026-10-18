@@ -4,11 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
-	"time"
-	// The embedded zone database lets user timezone check names on a system
-	// without zoneinfo files.
-	_ "time/tzdata"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -66,7 +63,7 @@ func addPeopleCommands(root *cobra.Command) {
 	}, edit, &cobra.Command{
 		Use:     "timezone NAME",
 		Short:   "set your timezone",
-		Long:    "Set your timezone, which Fizzy uses for times in notification emails. NAME is an IANA name such as America/Denver. fz checks that the name exists before sending it; the server also checks its case.",
+		Long:    "Set your timezone, which Fizzy uses for times in notification emails. NAME is an IANA name such as America/Denver. fz checks the name, case included, against Go's list of zones before sending it, so the check is the same on every system.",
 		Example: examples("fz user timezone America/Denver"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userTimezone),
@@ -220,16 +217,17 @@ func userTimezone(c *cmdContext, a []string) error {
 	return emit(c.cmd, c.dry(obj{{"timezone_name", name}}), c.wrote("timezone set to "+name, "set timezone to "+name))
 }
 
-// validTimezone reports whether time.LoadLocation knows name. It also
-// rejects "" (UTC to LoadLocation), "Local" and the posixrules and Factory
-// files, which the server would not know. Case is left to the server.
+// validTimezone reports whether name is a zone in tzNames, Go's embedded
+// zone list, matched with its exact case. The check reads no files, so it
+// gives the same answer on every system, including macOS, whose file system
+// ignores case. Factory is refused too: it is in the list but names no
+// place, so the server would not know it.
 func validTimezone(name string) bool {
-	switch name {
-	case "", "Local", "posixrules", "Factory":
+	if name == "Factory" {
 		return false
 	}
-	_, err := time.LoadLocation(name)
-	return err == nil
+	_, found := slices.BinarySearch(tzNames, name)
+	return found
 }
 
 func whoami(c *cmdContext, _ []string) error {

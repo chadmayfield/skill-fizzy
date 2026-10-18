@@ -157,7 +157,10 @@ func TestUserTimezone(t *testing.T) {
 
 func TestUserTimezoneRejectsBadNames(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
-	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "posixrules", "Factory"} {
+	// A name in the wrong case is refused on every system, even where the
+	// file system ignores case.
+	for _, name := range []string{"Mars/Base", "", "Local", "../etc", "posixrules", "Factory",
+		"america/denver", "AMERICA/DENVER", "Etc/gmt+7", "utc", "zone.tab", "+VERSION", "posix/America/Denver", "right/UTC"} {
 		r := runGo([]string{"user", "timezone", name})
 		if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: ") {
 			t.Errorf("%q: got %+v", name, r)
@@ -170,12 +173,13 @@ func TestUserTimezoneRejectsBadNames(t *testing.T) {
 
 func TestUserTimezoneAcceptsExactNames(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"PATCH /1/my/timezone": ""})
-	for _, name := range []string{"America/Denver", "Europe/London", "America/Argentina/Buenos_Aires", "UTC"} {
+	names := []string{"America/Denver", "Europe/London", "America/Argentina/Buenos_Aires", "UTC", "EST", "US/Mountain", "Etc/GMT+7"}
+	for _, name := range names {
 		if r := runGo([]string{"user", "timezone", name}); r.code != 0 {
 			t.Errorf("%q: got %+v", name, r)
 		}
 	}
-	if len(calls()) != 4 {
+	if len(calls()) != len(names) {
 		t.Errorf("calls = %q", callList(calls()))
 	}
 }

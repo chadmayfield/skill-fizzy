@@ -588,8 +588,9 @@ fz user timezone America/Denver
 When the user already has that name, it prints that no change is needed,
 exits 0 and sends nothing, with or without `--yes`.
 `user timezone` takes an IANA name, which Fizzy uses for times in
-notification emails. `fz` checks the name exists before sending it, and the
-server checks its case.
+notification emails. Before sending it, `fz` checks the name against the
+list of zones built into Go, case included, so `america/denver` exits 2 on
+every system.
 
 ### Notifications and activity
 
