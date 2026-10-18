@@ -448,8 +448,11 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 	if err != nil {
 		return 0, err
 	}
+	// The column is resolved before the create, so a column the board
+	// lacks sends nothing.
+	var target fizzy.MoveTarget
 	if !isMaybe(d.Column) {
-		if err := fz.CheckMoveTarget(board.ID, d.Column); err != nil {
+		if target, err = fz.ResolveMoveTarget(board.ID, d.Column); err != nil {
 			return 0, err
 		}
 	}
@@ -544,7 +547,7 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}})
 	}
 	if !isMaybe(d.Column) {
-		calls = append(calls, call{"moving it to " + d.Column, "the move to " + d.Column, func() error { return fz.MoveCard(n, d.Column, board.ID) }})
+		calls = append(calls, call{"moving it to " + d.Column, "the move to " + d.Column, func() error { return fz.MoveCardTo(n, target) }})
 	}
 	if d.Golden {
 		calls = append(calls, call{"marking it golden", "the golden mark", func() error { return fz.SetGolden(n, true) }})
@@ -657,9 +660,9 @@ func draftApply(c *cmdContext, a []string) error {
 		}
 		defer unlock()
 	}
-	// Validate every draft first: a parse error, a missing image or a draft
-	// fz could not write card: back into stops the batch before any card is
-	// created.
+	// Validate every draft first: a parse error, a missing image, an image
+	// Upload would refuse or a draft fz could not write card: back into
+	// stops the batch before any card is created.
 	var drafts []*draft.Draft
 	for _, p := range paths {
 		d, err := parseDraft(p)
@@ -676,6 +679,15 @@ func draftApply(c *cmdContext, a []string) error {
 		if d.Card == 0 || update {
 			if err := d.CheckImages(cfg.InboxPath()); err != nil {
 				return refuseImage(err)
+			}
+			for _, img := range d.Images() {
+				path, err := d.ResolveImage(img, cfg.InboxPath())
+				if err != nil {
+					return refuseImage(err)
+				}
+				if _, err := fizzy.CheckUpload(path); err != nil {
+					return err
+				}
 			}
 		}
 		if d.Card == 0 || update {
@@ -702,6 +714,23 @@ func draftApply(c *cmdContext, a []string) error {
 		// A conflict is a refusal, so it exits 2.
 		if len(refused) > 0 {
 			return exitCode(2)
+		}
+	}
+	// Resolve every board and column next, still before any write, so a
+	// name a later draft gets wrong stops the batch before an earlier draft
+	// makes its card.
+	for _, d := range drafts {
+		if d.Card != 0 && !update {
+			continue
+		}
+		board, err := fz.Board(d.Board)
+		if err != nil {
+			return fmt.Errorf("%s: %w", filepath.Base(d.Path), err)
+		}
+		if !isMaybe(d.Column) {
+			if _, err := fz.ResolveMoveTarget(board.ID, d.Column); err != nil {
+				return fmt.Errorf("%s: %w", filepath.Base(d.Path), err)
+			}
 		}
 	}
 	// summary has one line per draft for the report printed if the run

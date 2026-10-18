@@ -254,7 +254,7 @@ prints the `fz board edit` and `fz column create` commands that finish the
 rest. It exits 1. Run those commands rather than the create again, which
 would make a second board.
 
-A board is named by its name or its id in every board command. Case does not matter, but a name that matches exactly wins. A name that two boards share ignoring case, with neither an exact match, exits 2; use the board id.
+A board is named by its name or its id in every board command. Case does not matter, but a name that matches exactly wins. A name that two boards share exactly, or share ignoring case with neither an exact match, exits 2; use the board id.
 
 Show and edit:
 
@@ -394,7 +394,8 @@ fz card create Home "Fix the gate" --description-file gate.md
 
 A new card lands in Maybe? unless `--column` names another lane. A
 description is Markdown, given with `--description` or read from a file with
-`--description-file`. A file larger than 4 MiB exits 2 and sends nothing.
+`--description-file`. A file larger than 4 MiB, or a path that is not a
+regular file, such as a named pipe, exits 2 and sends nothing.
 
 `fz` checks `--column` before it creates the card. A column that does not
 exist, a name two columns share, or a reserved name sends nothing. A tag
@@ -443,8 +444,8 @@ fz card reopen 87
 ```
 
 `--to` takes a column name, or `maybe`, `not-now` or `done`. An exact column
-name wins. A name that two columns share in any case, with no exact match,
-exits 2. `--board` moves the card to another board. With `--board`, `--to`
+name wins. A name that two columns share exactly, or share in any case with
+no exact match, exits 2. `--board` moves the card to another board. With `--board`, `--to`
 names a column on that board, and `fz` checks it before the card moves, so a
 bad `--to` sends nothing. Give `--to`, `--board` or both. With neither, `fz`
 exits 2.
@@ -832,6 +833,8 @@ In the numbered `step` form, words after `--` are step text.
 A draft is one Markdown file per card. Write it in any editor, check it,
 preview it, then apply it to create the card. `fz` reads a draft of at most
 4 MiB. A larger one exits 2 in check, preview and apply, and nothing is sent.
+A path that is not a regular file, such as a named pipe, exits 1 in all
+three, and `fz` does not wait for a writer.
 
 ### The format
 
@@ -974,8 +977,11 @@ fz draft apply ~/.fizzy-inbox/drafts/
   It sends nothing. It reads the config file for the inbox setting, so a
   config file that does not parse, or that `fz` refuses, stops it with
   exit 1.
-- `apply` parses every draft, finds its images and checks that it can
-  rewrite the draft file before it creates anything. A read-only draft, or
+- `apply` parses every draft, finds its images, checks that each image is
+  a regular file of at most 100 MiB, finds every draft's board and column,
+  and checks that it can rewrite the draft file, all before it creates
+  anything. A column that a later draft gets wrong stops the run before an
+  earlier draft makes its card. A read-only draft, or
   one in a read-only folder, stops the run with exit 1 and nothing is sent.
   A draft with more than one hard link stops it with exit 2, because the
   rewrite would split the links. Copy it to a file of its own. A draft that
@@ -1044,6 +1050,11 @@ How steps are matched:
 
 `--prune` deletes those extra card steps if they are unticked, and removes the
 extra tags. Ticked steps always stay. A closed card is never reopened.
+
+The draft's column is checked before anything is sent, even for a closed
+card, so a column the board lacks stops the update and nothing changes. The
+card's column is compared by id. With columns named Next and NEXT, a draft
+that says NEXT moves a card out of Next.
 
 The title, description and images are sent only when something in them
 changed. If the draft's title, body and image files are as they were at the

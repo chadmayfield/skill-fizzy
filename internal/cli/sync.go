@@ -151,13 +151,18 @@ func syncDraftHashed(fz *fizzy.Fizzy, d *draft.Draft, inbox, dh string, prune, f
 		return report, err
 	}
 	// After a board move the card's old column says nothing about where it
-	// lands, so the column is always set on the new board.
+	// lands, so the column is always set on the new board. The target is
+	// resolved before the first write, so a column the board lacks sends
+	// nothing. Lanes alone cannot tell Next from NEXT, so a card in a
+	// column whose name is not exactly the draft's is checked by column id.
 	moveBoard := card.Board.ID != board.ID
-	moveColumn := !card.Closed && (moveBoard || cardLane(card) != lane(d.Column))
-	if moveColumn {
-		if err := fz.CheckMoveTarget(board.ID, d.Column); err != nil {
+	moveColumn := false
+	var target fizzy.MoveTarget
+	if !card.Closed && (moveBoard || cardLane(card) != lane(d.Column) || (card.Column != nil && card.Column.Name != d.Column)) {
+		if target, err = fz.ResolveMoveTarget(board.ID, d.Column); err != nil {
 			return report, err
 		}
+		moveColumn = moveBoard || !target.Holds(card)
 	}
 	// When neither the draft's title, body and images nor the card's title
 	// and description changed since the last sync, there is nothing to
@@ -258,7 +263,7 @@ func syncDraftHashed(fz *fizzy.Fizzy, d *draft.Draft, inbox, dh string, prune, f
 	case card.Closed:
 		add("card is closed; column left alone")
 	case moveColumn:
-		if err := fz.MoveCard(d.Card, d.Column, board.ID); err != nil {
+		if err := fz.MoveCardTo(d.Card, target); err != nil {
 			return report, err
 		}
 		add("moved to " + d.Column)

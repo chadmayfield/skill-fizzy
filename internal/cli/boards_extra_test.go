@@ -173,6 +173,23 @@ func TestBoardDeleteWithYes(t *testing.T) {
 	}
 }
 
+// Two boards with the same exact name are ambiguous, so even with --yes
+// board delete refuses and sends nothing.
+func TestBoardDeleteRefusesDuplicateName(t *testing.T) {
+	srv, calls := recordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/1/boards" {
+			io.WriteString(w, `[{"id":"b1","name":"Home"},{"id":"b2","name":"Home"}]`)
+			return
+		}
+		w.WriteHeader(204)
+	})
+	editEnv(t, srv)
+	r := runGo([]string{"board", "delete", "Home", "--yes"})
+	if r.code != 2 || !strings.Contains(r.stderr, "2 boards are named 'Home'; use the board id") || len(writes(calls())) != 0 {
+		t.Fatalf("got %+v, writes %+v", r, writes(calls()))
+	}
+}
+
 func TestBoardPublish(t *testing.T) {
 	srv, calls := bxServer(t, false)
 	editEnv(t, srv)

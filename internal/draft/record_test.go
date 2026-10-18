@@ -206,3 +206,32 @@ func TestCheckWritable(t *testing.T) {
 		t.Error("a folder passed as a draft")
 	}
 }
+
+// A key Parse accepts with spaces before its colon, or in another case, is
+// the same key when a rewrite drops it, so ClearCreating and RecordCard
+// remove it and Parse no longer sees it.
+func TestRewriteDropsKeysAsParseReadsThem(t *testing.T) {
+	dir := t.TempDir()
+	p := writeFile(t, dir, "gate.md", "---\nboard: Home\ncreating : pending\n---\n# Fix the gate\n")
+	if err := ClearCreating(p); err != nil {
+		t.Fatal(err)
+	}
+	d, err := Parse(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := d.Meta[CreatingKey]; ok {
+		t.Errorf("creating: is still there: %q", d.Meta[CreatingKey])
+	}
+	p = writeFile(t, dir, "hinge.md", "---\nboard: Home\n  Card :5\nCREATING: pending\n---\n# Oil the hinge\n")
+	if err := RecordCard(p, 9); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "---\nboard: Home\ncard: 9\n---\n# Oil the hinge\n"; string(b) != want {
+		t.Errorf("got %q, want %q", b, want)
+	}
+}

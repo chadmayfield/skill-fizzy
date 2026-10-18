@@ -72,8 +72,8 @@ func wrap(key string, v any) map[string]any { return map[string]any{key: v} }
 func (f *Fizzy) Boards() ([]Board, error) { return list[Board](f.C, "/boards") }
 
 // Board finds a board by id, then by exact name, then by name ignoring
-// case. A name that two boards share ignoring case, with no exact match, is
-// a Refusal.
+// case. A name that two boards share exactly, or share ignoring case with
+// no exact match, is a Refusal.
 func (f *Fizzy) Board(nameOrID string) (Board, error) {
 	boards, err := f.Boards()
 	if err != nil {
@@ -200,8 +200,8 @@ func (f *Fizzy) Columns(boardID string) ([]Column, error) {
 }
 
 // Column finds a column by id, then by exact name, then by name ignoring
-// case. A name that two columns share ignoring case, with no exact match,
-// is a Refusal.
+// case. A name that two columns share exactly, or share ignoring case with
+// no exact match, is a Refusal.
 func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	cols, err := f.Columns(boardID)
 	if err != nil {
@@ -230,14 +230,23 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 }
 
 // pickByName returns the one item whose name is want, or failing that the
-// one whose name matches ignoring case, and how many matched. An exact match
-// wins over any number of case-insensitive ones.
+// one whose name matches ignoring case, and how many matched. One exact
+// match wins over any number of case-insensitive ones. Two exact matches
+// return the count, so a caller never acts on the first of them.
 func pickByName[T any](items []T, want string, name func(T) string) (T, int) {
 	var zero T
+	var exact []T
 	for _, it := range items {
 		if name(it) == want {
-			return it, 1
+			exact = append(exact, it)
 		}
+	}
+	switch len(exact) {
+	case 0:
+	case 1:
+		return exact[0], 1
+	default:
+		return zero, len(exact)
 	}
 	var found []T
 	for _, it := range items {
@@ -404,6 +413,21 @@ type MoveTarget struct {
 // IsMaybe reports whether the target is the Maybe? keyword, where a new
 // card already is.
 func (t MoveTarget) IsMaybe() bool { return t.keyword == maybe }
+
+// Holds reports whether card c is already at t. A column target compares
+// column ids, so two columns whose names differ only by case are told
+// apart.
+func (t MoveTarget) Holds(c Card) bool {
+	switch t.keyword {
+	case maybe:
+		return !c.Closed && c.Column == nil && !c.Postponed
+	case notNow:
+		return !c.Closed && c.Column == nil && c.Postponed
+	case done:
+		return c.Closed
+	}
+	return !c.Closed && c.Column != nil && c.Column.ID == t.columnID
+}
 
 // ResolveMoveTarget checks target against the board's columns and sends
 // nothing. A keyword that a custom column is also named, a column name two

@@ -535,6 +535,22 @@ func TestStorageErrorHasNoBody(t *testing.T) {
 	}
 }
 
+// A storage request that fails to connect names only the host. The signed
+// path can hold the signing key, so neither it nor the query is printed.
+func TestStorageNetworkErrorHasNoPath(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	c, _, _ := newTestClient(t, srv, false)
+	srv.Close()
+	_, _, _, err := c.Do(http.MethodPut, srv.URL+"/disk/HINGEKEY/gate.jpg?signature=GATESIG", nil,
+		Stream(strings.NewReader("jpg"), 3), NoAuth(), NotAccountScoped(), Upload(), LogHost())
+	if err == nil {
+		t.Fatal("want a connection error")
+	}
+	if msg := err.Error(); strings.Contains(msg, "HINGEKEY") || strings.Contains(msg, "GATESIG") || !strings.Contains(msg, strings.TrimPrefix(srv.URL, "http://")) {
+		t.Errorf("error %q", msg)
+	}
+}
+
 // One list read, all its pages together, has a time limit. A server that
 // answers each page slowly cannot hold fz for hours: past the limit the
 // read stops with an error, even in the middle of a page.

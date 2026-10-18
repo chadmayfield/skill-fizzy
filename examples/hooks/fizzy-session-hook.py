@@ -10,7 +10,9 @@ this hook must never get in the way of starting a session.
 import json
 import os
 import re
+import select
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -47,6 +49,40 @@ def run(*args):
     if proc.returncode != 0:
         raise subprocess.CalledProcessError(proc.returncode, args)
     return out.strip()
+
+
+def read_stdin():
+    """Read stdin to its end, waiting no later than DEADLINE.
+
+    Claude Code closes stdin after the session JSON, but a stdin left open
+    must not hold the hook past its limit. More than 1 MiB is an error.
+    """
+    fd = sys.stdin.fileno()
+    chunks, size = [], 0
+    while True:
+        left = DEADLINE - time.monotonic()
+        if left <= 0 or not select.select([fd], [], [], left)[0]:
+            raise TimeoutError("stdin was not closed in time")
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            return b"".join(chunks)
+        size += len(chunk)
+        if size > 1 << 20:
+            raise ValueError("stdin is larger than 1 MiB")
+        chunks.append(chunk)
+
+
+def read_map():
+    """Load the repos map. A path that is not a regular file is an error.
+
+    The open does not block, so a named pipe at the map's path cannot hold
+    the hook.
+    """
+    fd = os.open(MAP, os.O_RDONLY | os.O_NONBLOCK)
+    with os.fdopen(fd) as f:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError(f"{MAP} is not a regular file")
+        return json.load(f)
 
 
 # Terminal escape sequences, matched the way fz's config.TerminalLine
@@ -118,11 +154,10 @@ def main():
     global DEADLINE
     DEADLINE = time.monotonic() + TIMEOUT
     try:
-        cwd = json.load(sys.stdin).get("cwd") or os.getcwd()
+        cwd = json.loads(read_stdin()).get("cwd") or os.getcwd()
     except Exception:
         cwd = os.getcwd()
-    with open(MAP) as f:
-        repos = json.load(f)
+    repos = read_map()
     entry = next((repos[n] for n in repo_names(cwd) if n in repos), None)
     if not entry:
         return

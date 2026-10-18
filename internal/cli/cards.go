@@ -74,7 +74,7 @@ func addCardCommands(root *cobra.Command) {
 		RunE:    action(cardCreate),
 	}
 	create.Flags().String("description", "", "description as Markdown")
-	create.Flags().String("description-file", "", "read the Markdown description from a file of at most 4 MiB")
+	create.Flags().String("description-file", "", "read the Markdown description from a regular file of at most 4 MiB")
 	create.Flags().String("column", "", "column name, or maybe (default)")
 	create.Flags().StringArray("tag", nil, "tag to add; repeat for more")
 
