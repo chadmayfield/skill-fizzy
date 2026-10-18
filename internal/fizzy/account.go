@@ -281,12 +281,18 @@ func (f *Fizzy) Notifications() ([]Notification, error) {
 
 // ReadNotification marks a notification read.
 func (f *Fizzy) ReadNotification(id string) error {
+	if err := CheckIDs(id); err != nil {
+		return err
+	}
 	_, err := f.C.Write(http.MethodPost, "/notifications/"+url.PathEscape(id)+"/reading", nil)
 	return err
 }
 
 // UnreadNotification marks a notification unread.
 func (f *Fizzy) UnreadNotification(id string) error {
+	if err := CheckIDs(id); err != nil {
+		return err
+	}
 	_, err := f.C.Write(http.MethodDelete, "/notifications/"+url.PathEscape(id)+"/reading", nil)
 	return err
 }
@@ -395,6 +401,9 @@ func (f *Fizzy) StartMyExport() (Export, error) {
 
 // AccountExport fetches an account export's status.
 func (f *Fizzy) AccountExport(id string) (Export, error) {
+	if err := CheckIDs(id); err != nil {
+		return Export{}, err
+	}
 	var e Export
 	err := f.C.Get("/account/exports/"+url.PathEscape(id), &e)
 	return e, err
@@ -402,6 +411,9 @@ func (f *Fizzy) AccountExport(id string) (Export, error) {
 
 // MyExport fetches the status of one of the current user's data exports.
 func (f *Fizzy) MyExport(id string) (Export, error) {
+	if err := CheckIDs(id); err != nil {
+		return Export{}, err
+	}
 	var e Export
 	me, err := f.Me()
 	if err != nil {

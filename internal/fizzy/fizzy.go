@@ -124,7 +124,10 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
 
 // Columns lists a board's custom columns.
 func (f *Fizzy) Columns(boardID string) ([]Column, error) {
-	return list[Column](f.C, "/boards/"+boardID+"/columns")
+	if err := CheckIDs(boardID); err != nil {
+		return nil, err
+	}
+	return list[Column](f.C, "/boards/"+url.PathEscape(boardID)+"/columns")
 }
 
 // Column finds a column by id, or by name ignoring case.
@@ -147,6 +150,9 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 // value sent, and refuses an unknown one before anything is sent. An empty
 // color is left out.
 func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return "", err
+	}
 	body := struct {
 		Name  string `json:"name"`
 		Color string `json:"color,omitempty"`
@@ -158,12 +164,15 @@ func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
 		}
 		body.Color = v
 	}
-	return f.C.Create("/boards/"+boardID+"/columns", wrap("column", body))
+	return f.C.Create("/boards/"+url.PathEscape(boardID)+"/columns", wrap("column", body))
 }
 
 // ColumnCards lists the cards in one column, following every page.
 func (f *Fizzy) ColumnCards(boardID, columnID string) ([]Card, error) {
-	return list[Card](f.C, "/boards/"+boardID+"/columns/"+columnID+"/cards")
+	if err := CheckIDs(boardID, columnID); err != nil {
+		return nil, err
+	}
+	return list[Card](f.C, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID)+"/cards")
 }
 
 // -- cards ----------------------------------------------------------------
@@ -195,12 +204,15 @@ func (f *Fizzy) Card(n int) (Card, error) {
 
 // CreateCard creates a card and returns its number, 0 in dry-run mode.
 func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return 0, err
+	}
 	body := struct {
 		Title       string `json:"title"`
 		Description string `json:"description,omitempty"`
 		Status      string `json:"status,omitempty"`
 	}{title, descHTML, status}
-	id, err := f.C.Create("/boards/"+boardID+"/cards", wrap("card", body))
+	id, err := f.C.Create("/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body))
 	if err != nil || id == "" {
 		return 0, err
 	}
@@ -326,10 +338,13 @@ func (f *Fizzy) AddStep(n int, content string, done bool) (string, error) {
 
 // UpdateStep changes a step. It sends only the fields that are non-nil.
 func (f *Fizzy) UpdateStep(n int, id string, content *string, completed *bool) error {
+	if err := CheckIDs(id); err != nil {
+		return err
+	}
 	if content == nil && completed == nil {
 		return errors.New("nothing to update")
 	}
-	_, err := f.C.Write(http.MethodPut, "/cards/"+strconv.Itoa(n)+"/steps/"+id, wrap("step", struct {
+	_, err := f.C.Write(http.MethodPut, "/cards/"+strconv.Itoa(n)+"/steps/"+url.PathEscape(id), wrap("step", struct {
 		Content   *string `json:"content,omitempty"`
 		Completed *bool   `json:"completed,omitempty"`
 	}{content, completed}))
@@ -338,7 +353,10 @@ func (f *Fizzy) UpdateStep(n int, id string, content *string, completed *bool) e
 
 // DeleteStep deletes a step.
 func (f *Fizzy) DeleteStep(n int, id string) error {
-	_, err := f.C.Write(http.MethodDelete, "/cards/"+strconv.Itoa(n)+"/steps/"+id, nil)
+	if err := CheckIDs(id); err != nil {
+		return err
+	}
+	_, err := f.C.Write(http.MethodDelete, "/cards/"+strconv.Itoa(n)+"/steps/"+url.PathEscape(id), nil)
 	return err
 }
 

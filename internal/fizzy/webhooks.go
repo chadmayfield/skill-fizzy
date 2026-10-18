@@ -126,31 +126,48 @@ func CheckWebhookActions(actions []string) error {
 	return nil
 }
 
-func webhookPath(boardID, id string) string {
-	return "/boards/" + url.PathEscape(boardID) + "/webhooks/" + url.PathEscape(id)
+func webhookPath(boardID, id string) (string, error) {
+	if err := CheckIDs(boardID, id); err != nil {
+		return "", err
+	}
+	return "/boards/" + url.PathEscape(boardID) + "/webhooks/" + url.PathEscape(id), nil
 }
 
 // Webhooks lists a board's webhooks. Only account admins may.
 func (f *Fizzy) Webhooks(boardID string) ([]Webhook, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return nil, err
+	}
 	return list[Webhook](f.C, "/boards/"+url.PathEscape(boardID)+"/webhooks")
 }
 
 // Webhook fetches one webhook.
 func (f *Fizzy) Webhook(boardID, id string) (Webhook, error) {
 	var w Webhook
-	err := f.C.Get(webhookPath(boardID, id), &w)
+	p, err := webhookPath(boardID, id)
+	if err != nil {
+		return w, err
+	}
+	err = f.C.Get(p, &w)
 	return w, err
 }
 
 // WebhookDeliveries lists a webhook's deliveries. Only account admins may.
 func (f *Fizzy) WebhookDeliveries(boardID, id string) ([]WebhookDelivery, error) {
-	return list[WebhookDelivery](f.C, webhookPath(boardID, id)+"/deliveries")
+	p, err := webhookPath(boardID, id)
+	if err != nil {
+		return nil, err
+	}
+	return list[WebhookDelivery](f.C, p+"/deliveries")
 }
 
 // CreateWebhook validates the url and actions, then creates the webhook. It
 // returns the webhook the server sends back. In dry-run mode the result is
 // empty. When the reply has no body, only ID is filled, from Location.
 func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (Webhook, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return Webhook{}, err
+	}
 	if err := CheckWebhookURL(hookURL); err != nil {
 		return Webhook{}, err
 	}
@@ -179,6 +196,10 @@ func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (
 // nil actions are not sent. The url cannot change after creation. The result
 // is empty in dry-run mode.
 func (f *Fizzy) UpdateWebhook(boardID, id string, name *string, actions []string) (Webhook, error) {
+	p, err := webhookPath(boardID, id)
+	if err != nil {
+		return Webhook{}, err
+	}
 	if name == nil && actions == nil {
 		return Webhook{}, refusef("nothing to update")
 	}
@@ -190,7 +211,7 @@ func (f *Fizzy) UpdateWebhook(boardID, id string, name *string, actions []string
 			return Webhook{}, err
 		}
 	}
-	payload, err := f.C.Write(http.MethodPatch, webhookPath(boardID, id), wrap("webhook", struct {
+	payload, err := f.C.Write(http.MethodPatch, p, wrap("webhook", struct {
 		Name    *string  `json:"name,omitempty"`
 		Actions []string `json:"subscribed_actions,omitempty"`
 	}{name, actions}))
@@ -203,7 +224,11 @@ func (f *Fizzy) UpdateWebhook(boardID, id string, name *string, actions []string
 
 // DeleteWebhook deletes a webhook.
 func (f *Fizzy) DeleteWebhook(boardID, id string) error {
-	_, err := f.C.Write(http.MethodDelete, webhookPath(boardID, id), nil)
+	p, err := webhookPath(boardID, id)
+	if err != nil {
+		return err
+	}
+	_, err = f.C.Write(http.MethodDelete, p, nil)
 	return err
 }
 
@@ -217,6 +242,10 @@ func (f *Fizzy) ActivateWebhook(boardID, id string) (bool, error) {
 	if w.Active {
 		return false, nil
 	}
-	_, err = f.C.Write(http.MethodPost, webhookPath(boardID, id)+"/activation", nil)
+	p, err := webhookPath(boardID, id)
+	if err != nil {
+		return false, err
+	}
+	_, err = f.C.Write(http.MethodPost, p+"/activation", nil)
 	return err == nil, err
 }

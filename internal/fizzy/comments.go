@@ -70,8 +70,11 @@ func (r *Reaction) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func commentPath(n int, id string) string {
-	return "/cards/" + strconv.Itoa(n) + "/comments/" + url.PathEscape(id)
+func commentPath(n int, id string) (string, error) {
+	if err := CheckIDs(id); err != nil {
+		return "", err
+	}
+	return "/cards/" + strconv.Itoa(n) + "/comments/" + url.PathEscape(id), nil
 }
 
 // Comments lists a card's comments, oldest first.
@@ -82,13 +85,21 @@ func (f *Fizzy) Comments(n int) ([]Comment, error) {
 // Comment fetches one comment.
 func (f *Fizzy) Comment(n int, id string) (Comment, error) {
 	var c Comment
-	err := f.C.Get(commentPath(n, id), &c)
+	p, err := commentPath(n, id)
+	if err != nil {
+		return c, err
+	}
+	err = f.C.Get(p, &c)
 	return c, err
 }
 
 // EditComment replaces a comment's body. Only the comment's creator can.
 func (f *Fizzy) EditComment(n int, id, bodyHTML string) error {
-	_, err := f.C.Write(http.MethodPut, commentPath(n, id), wrap("comment", struct {
+	p, err := commentPath(n, id)
+	if err != nil {
+		return err
+	}
+	_, err = f.C.Write(http.MethodPut, p, wrap("comment", struct {
 		Body string `json:"body"`
 	}{bodyHTML}))
 	return err
@@ -96,25 +107,44 @@ func (f *Fizzy) EditComment(n int, id, bodyHTML string) error {
 
 // DeleteComment deletes a comment. Only the comment's creator can.
 func (f *Fizzy) DeleteComment(n int, id string) error {
-	_, err := f.C.Write(http.MethodDelete, commentPath(n, id), nil)
+	p, err := commentPath(n, id)
+	if err != nil {
+		return err
+	}
+	_, err = f.C.Write(http.MethodDelete, p, nil)
 	return err
 }
 
 // CommentReactions lists the reactions on a comment.
 func (f *Fizzy) CommentReactions(n int, id string) ([]Reaction, error) {
-	return list[Reaction](f.C, commentPath(n, id)+"/reactions")
+	p, err := commentPath(n, id)
+	if err != nil {
+		return nil, err
+	}
+	return list[Reaction](f.C, p+"/reactions")
 }
 
 // ReactToComment adds a reaction and returns its id, empty in dry-run mode
 // or when the server sends no Location.
 func (f *Fizzy) ReactToComment(n int, id, content string) (string, error) {
-	return f.C.Create(commentPath(n, id)+"/reactions", wrap("reaction", struct {
+	p, err := commentPath(n, id)
+	if err != nil {
+		return "", err
+	}
+	return f.C.Create(p+"/reactions", wrap("reaction", struct {
 		Content string `json:"content"`
 	}{content}))
 }
 
 // DeleteCommentReaction removes a reaction from a comment.
 func (f *Fizzy) DeleteCommentReaction(n int, id, reactionID string) error {
-	_, err := f.C.Write(http.MethodDelete, commentPath(n, id)+"/reactions/"+url.PathEscape(reactionID), nil)
+	p, err := commentPath(n, id)
+	if err != nil {
+		return err
+	}
+	if err := CheckIDs(reactionID); err != nil {
+		return err
+	}
+	_, err = f.C.Write(http.MethodDelete, p+"/reactions/"+url.PathEscape(reactionID), nil)
 	return err
 }

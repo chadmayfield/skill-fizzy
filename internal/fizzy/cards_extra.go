@@ -168,6 +168,9 @@ func (f *Fizzy) AddBoost(n int, text string) (json.RawMessage, error) {
 
 // RemoveBoost removes one of the current user's boosts from a card.
 func (f *Fizzy) RemoveBoost(n int, id string) error {
+	if err := CheckIDs(id); err != nil {
+		return err
+	}
 	return f.cardWrite(http.MethodDelete, n, "/reactions/"+url.PathEscape(id))
 }
 

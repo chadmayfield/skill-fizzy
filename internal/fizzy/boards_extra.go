@@ -45,6 +45,9 @@ func (b *BoardInfo) UnmarshalJSON(data []byte) error {
 
 // BoardDetail fetches one board by id.
 func (f *Fizzy) BoardDetail(boardID string) (BoardInfo, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return BoardInfo{}, err
+	}
 	var b BoardInfo
 	err := f.C.Get("/boards/"+url.PathEscape(boardID), &b)
 	return b, err
@@ -60,6 +63,9 @@ type BoardFields struct {
 // UpdateBoard changes the fields that are set. The public description is
 // sent as given, so the caller converts Markdown first.
 func (f *Fizzy) UpdateBoard(boardID string, fields BoardFields) error {
+	if err := CheckIDs(boardID); err != nil {
+		return err
+	}
 	if fields == (BoardFields{}) {
 		return refusef("nothing to update")
 	}
@@ -73,6 +79,9 @@ func (f *Fizzy) UpdateBoard(boardID string, fields BoardFields) error {
 // SetBoardAccess opens a board to every user, or limits it to userIDs. The
 // list replaces the whole set of users who have access.
 func (f *Fizzy) SetBoardAccess(boardID string, all bool, userIDs []string) error {
+	if err := CheckIDs(boardID); err != nil {
+		return err
+	}
 	var body any
 	if all {
 		body = wrap("board", struct {
@@ -91,6 +100,9 @@ func (f *Fizzy) SetBoardAccess(boardID string, all bool, userIDs []string) error
 // PublishBoard publishes a board and returns its public link, empty in
 // dry-run mode.
 func (f *Fizzy) PublishBoard(boardID string) (string, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return "", err
+	}
 	raw, err := f.C.Write(http.MethodPost, "/boards/"+url.PathEscape(boardID)+"/publication", nil)
 	if err != nil || raw == nil {
 		return "", err
@@ -104,12 +116,18 @@ func (f *Fizzy) PublishBoard(boardID string) (string, error) {
 
 // UnpublishBoard removes a board's public link.
 func (f *Fizzy) UnpublishBoard(boardID string) error {
+	if err := CheckIDs(boardID); err != nil {
+		return err
+	}
 	_, err := f.C.Write(http.MethodDelete, "/boards/"+url.PathEscape(boardID)+"/publication", nil)
 	return err
 }
 
 // DeleteBoard deletes a board and its cards.
 func (f *Fizzy) DeleteBoard(boardID string) error {
+	if err := CheckIDs(boardID); err != nil {
+		return err
+	}
 	_, err := f.C.Write(http.MethodDelete, "/boards/"+url.PathEscape(boardID), nil)
 	return err
 }
@@ -150,6 +168,9 @@ type BoardAccess struct {
 
 // BoardAccesses reads who can reach a board, following every page.
 func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
+	if err := CheckIDs(boardID); err != nil {
+		return BoardAccess{}, err
+	}
 	var out BoardAccess
 	next := f.C.URL("/boards/"+url.PathEscape(boardID)+"/accesses", true)
 	seen := map[string]bool{}
@@ -216,6 +237,9 @@ func ColumnColorValue(color string) (string, error) {
 
 // GetColumn fetches one column by id.
 func (f *Fizzy) GetColumn(boardID, columnID string) (Column, error) {
+	if err := CheckIDs(boardID, columnID); err != nil {
+		return Column{}, err
+	}
 	var c Column
 	err := f.C.Get("/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID), &c)
 	return c, err
@@ -230,6 +254,9 @@ type ColumnFields struct {
 
 // UpdateColumn changes a column's name or color.
 func (f *Fizzy) UpdateColumn(boardID, columnID string, fields ColumnFields) error {
+	if err := CheckIDs(boardID, columnID); err != nil {
+		return err
+	}
 	if fields == (ColumnFields{}) {
 		return refusef("nothing to update")
 	}
@@ -250,6 +277,9 @@ func (f *Fizzy) UpdateColumn(boardID, columnID string, fields ColumnFields) erro
 
 // DeleteColumn deletes a column.
 func (f *Fizzy) DeleteColumn(boardID, columnID string) error {
+	if err := CheckIDs(boardID, columnID); err != nil {
+		return err
+	}
 	_, err := f.C.Write(http.MethodDelete, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID), nil)
 	return err
 }

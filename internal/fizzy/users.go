@@ -42,6 +42,9 @@ func (f *Fizzy) Users() ([]User, error) { return list[User](f.C, "/users") }
 
 // User fetches one user by id.
 func (f *Fizzy) User(id string) (User, error) {
+	if err := CheckIDs(id); err != nil {
+		return User{}, err
+	}
 	var u User
 	err := f.C.Get("/users/"+url.PathEscape(id), &u)
 	return u, err
@@ -50,6 +53,9 @@ func (f *Fizzy) User(id string) (User, error) {
 // RenameUser changes a user's display name and returns the updated user,
 // which is empty in dry-run mode.
 func (f *Fizzy) RenameUser(id, name string) (User, error) {
+	if err := CheckIDs(id); err != nil {
+		return User{}, err
+	}
 	raw, err := f.C.Write(http.MethodPut, "/users/"+url.PathEscape(id), wrap("user", struct {
 		Name string `json:"name"`
 	}{name}))
