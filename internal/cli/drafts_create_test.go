@@ -103,6 +103,10 @@ func TestApplyCreateUnknownOutcome(t *testing.T) {
 			w.WriteHeader(http.StatusFound)
 		},
 		"303 with no location": func(w http.ResponseWriter, r *http.Request, u string) { w.WriteHeader(http.StatusSeeOther) },
+		"location naming card 0": func(w http.ResponseWriter, r *http.Request, u string) {
+			w.Header().Set("Location", u+"/1/cards/0")
+			w.WriteHeader(http.StatusCreated)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv, creates := createServer(t, create)

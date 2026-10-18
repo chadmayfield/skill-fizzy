@@ -651,6 +651,10 @@ func (f *Fizzy) storageURL(raw string) (string, error) {
 	return "", bad
 }
 
+// statUpload is os.Stat. A test replaces it to make a file seem to change
+// size while fz reads it.
+var statUpload = os.Stat
+
 // Upload sends a file and returns the sgid to embed as
 // <action-text-attachment sgid=...>. In dry-run mode it prints the blob
 // request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
@@ -661,7 +665,7 @@ func (f *Fizzy) storageURL(raw string) (string, error) {
 // read twice, once for the checksum and once as the PUT body, and never
 // held in memory whole.
 func (f *Fizzy) Upload(path string) (string, error) {
-	fi, err := os.Stat(path)
+	fi, err := statUpload(path)
 	if err != nil {
 		return "", err
 	}

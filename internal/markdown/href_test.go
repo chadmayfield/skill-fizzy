@@ -31,6 +31,9 @@ func TestBareURLCannotLeaveHref(t *testing.T) {
 		`http://x.example/<b>x</b>`:                `<p><a href="http://x.example/">http://x.example/</a>&lt;b&gt;x&lt;/b&gt;</p>`,
 		`http://x.example/a>b`:                     `<p><a href="http://x.example/a">http://x.example/a</a>&gt;b</p>`,
 		`see http://x.example/a"b and more`:        `<p>see <a href="http://x.example/a">http://x.example/a</a>"b and more</p>`,
+		// A quote in a Markdown link's URL is escaped inside the href, so
+		// it cannot end the attribute.
+		`[x](https://e.example/a"onmouseover="alert(1))`: `<p><a href="https://e.example/a&quot;onmouseover=&quot;alert(1">x</a>)</p>`,
 	} {
 		got := ToHTML(in)
 		if got != want {
