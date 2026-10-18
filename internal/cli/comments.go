@@ -10,7 +10,7 @@ func init() { register(addCommentCommands) }
 func addCommentCommands(root *cobra.Command) {
 	g := &cobra.Command{
 		Use:   "comment",
-		Short: "comment on a card",
+		Short: "add, list, show, edit and delete comments, and react to them",
 		Long:  "Work with a card's comments. Text is Markdown.",
 	}
 	root.AddCommand(g)

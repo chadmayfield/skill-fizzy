@@ -59,12 +59,14 @@ dist: ## Build release archives and checksums.txt in dist/
 		echo "build $$name"; \
 		mkdir -p $(DIST)/$$name; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$$name/$(BINARY) ./cmd/fz; \
+		mkdir -p $(DIST)/$$name/docs; \
 		cp LICENSE README.md $(DIST)/$$name/; \
-		chmod 755 $(DIST)/$$name $(DIST)/$$name/$(BINARY); \
-		chmod 644 $(DIST)/$$name/LICENSE $(DIST)/$$name/README.md; \
-		touch -d '$(DATE)' $(DIST)/$$name/* $(DIST)/$$name; \
+		cp docs/USERGUIDE.md $(DIST)/$$name/docs/; \
+		chmod 755 $(DIST)/$$name $(DIST)/$$name/docs $(DIST)/$$name/$(BINARY); \
+		chmod 644 $(DIST)/$$name/LICENSE $(DIST)/$$name/README.md $(DIST)/$$name/docs/USERGUIDE.md; \
+		touch -d '$(DATE)' $(DIST)/$$name/docs/USERGUIDE.md $(DIST)/$$name/* $(DIST)/$$name; \
 		(cd $(DIST) && COPYFILE_DISABLE=1 tar --format=ustar $$owner --no-recursion -cf $$name.tar \
-			$$name $$name/LICENSE $$name/README.md $$name/$(BINARY)); \
+			$$name $$name/LICENSE $$name/README.md $$name/docs $$name/docs/USERGUIDE.md $$name/$(BINARY)); \
 		gzip -n -9 $(DIST)/$$name.tar; \
 	done
 	@cd $(DIST) && if command -v sha256sum >/dev/null 2>&1; then sha256sum *.tar.gz; else shasum -a 256 *.tar.gz; fi > checksums.txt

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
 // User is a person on the account.
@@ -90,18 +92,10 @@ func (f *Fizzy) MatchUser(s string, idPassthrough bool) (UserMatch, error) {
 	return matchUser(users, s, idPassthrough)
 }
 
-// MatchUsers resolves each spec with the MatchUser rules, reading the user
-// list once. It drops a user named twice and keeps the first order. A spec
-// that matches nobody, or more than one user, is a Refusal.
-func (f *Fizzy) MatchUsers(specs []string) ([]UserMatch, error) {
-	users, err := f.Users()
-	if err != nil {
-		return nil, err
-	}
-	return MatchUsersIn(users, specs)
-}
-
-// MatchUsersIn is MatchUsers over a user list the caller already holds.
+// MatchUsersIn resolves each spec with the MatchUser rules, over a user
+// list the caller already holds. It drops a user named twice and keeps the
+// first order. A spec that matches nobody, or more than one user, is a
+// Refusal.
 func MatchUsersIn(users []User, specs []string) ([]UserMatch, error) {
 	var out []UserMatch
 	seen := map[string]bool{}
@@ -152,7 +146,7 @@ func matchUser(users []User, s string, idPassthrough bool) (UserMatch, error) {
 	}
 	names := make([]string, len(users))
 	for i, u := range users {
-		names[i] = u.Name
+		names[i] = config.TerminalLine(u.Name)
 	}
 	return UserMatch{}, refusef("no user %s (have: %s)", PyRepr(s), strings.Join(names, ", "))
 }

@@ -14,7 +14,7 @@ func init() { register(addBoardCommands) }
 func addBoardCommands(root *cobra.Command) {
 	g := &cobra.Command{
 		Use:   "board",
-		Short: "list and create boards",
+		Short: "list, show, create, edit, publish and delete boards, and set access",
 		Long:  "Work with boards. A board is named or given by id.",
 	}
 	root.AddCommand(g)
@@ -40,7 +40,7 @@ func addBoardCommands(root *cobra.Command) {
 
 	cg := &cobra.Command{
 		Use:   "column",
-		Short: "list a board's columns",
+		Short: "list, show, create, edit and delete columns, and list their cards",
 		Long:  "Work with columns. Not now, Maybe? and Done are fixed; only custom columns change.",
 	}
 	root.AddCommand(cg)

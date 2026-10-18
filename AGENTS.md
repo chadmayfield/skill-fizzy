@@ -65,7 +65,9 @@ change the guide and the command's help text in the same commit.
   `.github/workflows/release.yml` first runs `scripts/release-guard.sh`, which fails any other tag name or a commit not on `origin/main`, and records the kind in `GITHUB_OUTPUT`.
   The guard rejects leading zeros, line breaks, and a suffix with an empty or zero-padded numeric part, such as `-rc.01` or `-a..b`.
   It then runs the tests, runs `make dist` and publishes the GitHub release. A tag with a suffix is published as a prerelease.
-  The release job turns off setup-go's cache, so it builds with empty Go caches.
+  The workflow has two jobs. `build` runs the guard, the tests and `make dist` with read-only contents, and uploads the archives.
+  `publish` runs no repo code: it downloads those archives, attests them and creates the release, and only it has the write, id-token and attestation scopes.
+  The build job turns off setup-go's cache, so it builds with empty Go caches.
   The archives are attested only while the repository is public. On the private repository that step is skipped.
 - `make dist` is reproducible. The build date is `SOURCE_DATE_EPOCH` if set, else the commit time, never the clock. The archives carry that time, owner 0 and sorted names.
 - CI runs the gofmt check, `go vet`, the race tests, the release build test with `FZ_TEST_DIST=1`, a build and `govulncheck` v1.9.0. A govulncheck finding fails the build.
@@ -177,6 +179,9 @@ the docs catch up. `fz help <noun>` must name a real command.
 ### Git
 
 - Feature work happens on a branch and merges to `main` by pull request. Never commit to `main` directly.
+  This rule, and the trailer rule under [Commits](#commits), apply from the Go port onward.
+  The first four commits on `main` and the GitHub merge of the Go port predate them.
+  Since then, one merge went to `main` without a pull request: `cc90bdb`, the plan-2 merge.
 - Never commit these paths: `.superpowers/`, any `superpowers/` folder,
   `docs/plans/`, `docs/specs/`, `CLAUDE.local.md`,
   `.claude/settings.local.json` and `.claude/worktrees/`. They hold private
@@ -185,7 +190,8 @@ the docs catch up. `fz help <noun>` must name a real command.
 
 ## Commits
 
-Every commit ends with a co-author trailer for the model that wrote it.
+From the Go port onward, every commit ends with a co-author trailer for
+the model that wrote it.
 
     Co-Authored-By: <the model that wrote the commit> <noreply@anthropic.com or the vendor's address>
 

@@ -448,6 +448,11 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 		return resp.StatusCode, resp.Header, nil, fmt.Errorf("%s %s: the response is larger than 32 MiB", method, logPath)
 	}
 	if resp.StatusCode >= 300 {
+		// A storage service's error reply can echo signing details, so for
+		// a request logged by host only the status is kept.
+		if o.logHost {
+			return resp.StatusCode, resp.Header, nil, &APIError{resp.StatusCode, method, logPath, ""}
+		}
 		return resp.StatusCode, resp.Header, payload, &APIError{resp.StatusCode, method, logPath, string(payload)}
 	}
 	return resp.StatusCode, resp.Header, payload, nil
@@ -508,6 +513,11 @@ func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
 // MaxPages caps how many pages one list may follow.
 const MaxPages = 1000
 
+// maxListBytes caps the bytes of all the pages of one list together, so a
+// server cannot fill memory with 1,000 pages of MaxBody each. It is a
+// variable so a test can lower it.
+var maxListBytes = 256 << 20
+
 // EachPage GETs the account-scoped path and then each rel="next" page,
 // passing every non-empty payload to fn. An empty body is an empty page and
 // is skipped. fn returns true to stop early.
@@ -516,10 +526,11 @@ const MaxPages = 1000
 // and port. A link that starts with one "/" resolves against the configured
 // origin as it stands, with no account prefix added. Any other link, a link
 // seen before, and a page past MaxPages are errors, and nothing is sent for
-// them.
+// them. So is a list whose pages pass 256 MiB together.
 func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err error)) error {
 	next := c.URL(path, true)
 	seen := map[string]bool{}
+	total := 0
 	for pages := 0; next != ""; pages++ {
 		if pages == MaxPages {
 			return fmt.Errorf("pagination: more than %d pages; fz stopped", MaxPages)
@@ -531,6 +542,9 @@ func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err e
 		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
 		if err != nil {
 			return err
+		}
+		if total += len(payload); total > maxListBytes {
+			return fmt.Errorf("pagination: the list is over %d MiB; fz stopped", maxListBytes>>20)
 		}
 		if len(bytes.TrimSpace(payload)) > 0 {
 			stop, err := fn(payload)

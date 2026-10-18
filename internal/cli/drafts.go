@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -32,7 +33,10 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "check DRAFT...",
 		Short: "validate drafts, and --links",
 		Long: "Parse each draft, resolve its images, and with --links fetch every link outside code. " +
-			"A link to a loopback, private, link-local or unspecified address, or one that redirects there, is skipped and printed as skipped (local address).",
+			"It needs no server URL or account. " +
+			"An image must be a path relative to the draft's folder or the inbox that stays inside one of them after symlinks are resolved; " +
+			"any other image is refused with exit 2. " +
+			"A link to a loopback, private, link-local, multicast, unspecified or other special-purpose address, such as 100.64.0.0/10, or one that redirects there, is skipped and printed as skipped (local address).",
 		Example: examples("fz draft check ~/.fizzy-inbox/drafts/", "fz draft check gate.md --links"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftCheck),
@@ -41,7 +45,7 @@ func addDraftCommands(root *cobra.Command) {
 	preview := &cobra.Command{
 		Use:     "preview DRAFT...",
 		Short:   "show the card a draft would make",
-		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing.",
+		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing. An image path outside the draft's folder and the inbox is refused with exit 2.",
 		Example: examples("fz draft preview gate.md"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftPreview),
@@ -50,7 +54,9 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "apply DRAFT...",
 		Short: "create cards from drafts, or --update them",
 		Long: "Create a card for each draft and write card: N and synced: back into it. " +
-			"card: N is written right after the create, before any step, tag, move or golden call, so a draft never makes a second card. " +
+			"Just before the create, fz writes creating: and the time into the draft. card: N replaces it right after the create, before any step, tag, move or golden call. " +
+			"If fz cannot tell whether the create reached Fizzy, as after a timeout, the line stays and fz exits 1 and names the board to check. " +
+			"A draft that still has creating: is refused with exit 2 until you replace the line with card: N or delete it, so a draft never makes a second card. " +
 			"If a later call fails, fz names the card and what was not sent; fz draft apply --update FILE finishes it. " +
 			"Drafts that already have card: are skipped, unless --update is given.\n\n" +
 			"With --update, a draft with card: N pushes its board, title, description, tags, column, golden mark and steps to card N. " +
@@ -93,17 +99,29 @@ func pyPath(p string) string {
 }
 
 // draftPaths expands targets: a folder becomes its *.md files in name order.
-// A draft named more than once, by any path or through a symlink, is kept
-// once, where it first appears.
+// A draft named more than once, by any path, through a symlink or through
+// a second hard link, is kept once, where it first appears.
 func draftPaths(targets []string) ([]string, error) {
 	var paths []string
 	seen := map[string]bool{}
+	var files []os.FileInfo
 	add := func(p string) {
 		key := draftKey(p)
-		if !seen[key] {
-			seen[key] = true
-			paths = append(paths, p)
+		if seen[key] {
+			return
 		}
+		seen[key] = true
+		// os.SameFile compares the device and inode, so it also catches a
+		// hard link, which has a path of its own.
+		if st, err := os.Stat(p); err == nil {
+			for _, f := range files {
+				if os.SameFile(f, st) {
+					return
+				}
+			}
+			files = append(files, st)
+		}
+		paths = append(paths, p)
 	}
 	for _, t := range targets {
 		p := pyPath(config.ExpandTilde(t))
@@ -142,10 +160,62 @@ var errLocalAddress = errors.New("local address")
 
 // linkDialBlocked reports whether a link check may not connect to a. It is
 // a variable so tests can let it reach their loopback servers.
-var linkDialBlocked = func(a netip.AddrPort) bool {
-	ip := a.Addr().Unmap()
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
+var linkDialBlocked = func(a netip.AddrPort) bool { return linkAddrBlocked(a.Addr()) }
+
+// linkBlockedPrefixes are the special-purpose ranges a link check never
+// reaches, beyond the loopback, private, link-local, multicast and
+// unspecified ones netip names.
+var linkBlockedPrefixes = func() []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range []string{
+		"0.0.0.0/8",       // this network
+		"100.64.0.0/10",   // shared address space: CGNAT, Tailscale
+		"192.0.0.0/24",    // IETF protocol assignments
+		"192.0.2.0/24",    // documentation
+		"192.88.99.0/24",  // 6to4 relay anycast
+		"198.18.0.0/15",   // benchmarking
+		"198.51.100.0/24", // documentation
+		"203.0.113.0/24",  // documentation
+		"240.0.0.0/4",     // reserved, and the broadcast address
+		"::/96",           // IPv4-compatible
+		"64:ff9b:1::/48",  // local-use NAT64
+		"100::/64",        // discard only
+		"2001::/23",       // IETF protocol assignments, Teredo among them
+		"2001:db8::/32",   // documentation
+		"fec0::/10",       // site-local
+	} {
+		out = append(out, netip.MustParsePrefix(s))
+	}
+	return out
+}()
+
+var (
+	nat64Prefix = netip.MustParsePrefix("64:ff9b::/96")
+	sixToFour   = netip.MustParsePrefix("2002::/16")
+)
+
+// linkAddrBlocked reports whether ip is local, private or special-purpose.
+// A NAT64 or 6to4 address is judged by the IPv4 address inside it.
+func linkAddrBlocked(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+		return true
+	}
+	for _, p := range linkBlockedPrefixes {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	b := ip.As16()
+	switch {
+	case !ip.Is6():
+	case nat64Prefix.Contains(ip):
+		return linkAddrBlocked(netip.AddrFrom4([4]byte(b[12:16])))
+	case sixToFour.Contains(ip):
+		return linkAddrBlocked(netip.AddrFrom4([4]byte(b[2:6])))
+	}
+	return false
 }
 
 // linkClient is the HTTP client for draft check --links. It checks the
@@ -209,8 +279,17 @@ func checkLink(hc *http.Client, url string) linkStatus {
 	return linkStatus{code: resp.StatusCode}
 }
 
+// refuseImage turns an image target the draft package refuses into a
+// Refusal, so the command exits 2.
+func refuseImage(err error) error {
+	if errors.Is(err, draft.ErrImagePath) {
+		return fizzy.Refuse(err.Error())
+	}
+	return err
+}
+
 func draftCheck(c *cmdContext, a []string) error {
-	cfg, err := c.config()
+	inbox, err := c.inbox()
 	if err != nil {
 		return err
 	}
@@ -221,14 +300,17 @@ func draftCheck(c *cmdContext, a []string) error {
 	}
 	hc := linkClient()
 	w := c.out()
-	bad := 0
+	bad, refused := 0, 0
 	for _, p := range paths {
 		d, err := draft.Parse(p)
 		if err == nil {
-			err = d.CheckImages(cfg.InboxPath())
+			err = d.CheckImages(inbox)
 		}
 		if errors.Is(err, draft.ErrDraft) {
 			fmt.Fprintf(w, "✗ %s: %s\n", p, err)
+			if errors.Is(err, draft.ErrImagePath) {
+				refused++
+			}
 			bad++
 			continue
 		}
@@ -258,6 +340,11 @@ func draftCheck(c *cmdContext, a []string) error {
 			}
 		}
 	}
+	// A refused image path is a refusal, so it exits 2, as preview and
+	// apply do for it.
+	if refused > 0 {
+		return exitCode(2)
+	}
 	if bad > 0 {
 		return exitCode(1)
 	}
@@ -279,11 +366,18 @@ func draftPreview(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	inbox, err := c.inbox()
+	if err != nil {
+		return err
+	}
 	w := c.out()
 	for _, p := range paths {
 		d, err := parseDraft(p)
 		if err != nil {
 			return err
+		}
+		if err := d.CheckImagePaths(inbox); err != nil {
+			return refuseImage(err)
 		}
 		tags := strings.Join(d.Tags, ", ")
 		if tags == "" {
@@ -344,14 +438,20 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 			return 0, err
 		}
 	}
+	if !c.dryRun {
+		// creating: marks a create that may have reached Fizzy. It is
+		// replaced by card: on success and removed when the server
+		// refused the create; an unknown outcome leaves it, and the next
+		// apply refuses the draft, so it cannot make a second card.
+		if err := draft.RecordCreating(d.Path, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			return 0, fmt.Errorf("%s: fz could not write creating: into the draft (%v), so it sent no create", d.Path, err)
+		}
+	}
 	n, err := fz.CreateCard(board.ID, d.Title, d.DescriptionHTML(sgids), "")
-	if errors.Is(err, fizzy.ErrNoLocation) {
-		n, err = 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
 	if c.dryRun {
+		if err != nil {
+			return 0, err
+		}
 		for _, s := range d.Steps {
 			if _, err := fz.AddStep(0, s.Content, s.Done); err != nil {
 				return 0, err
@@ -368,9 +468,18 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}
 		return 0, nil
 	}
-	if n == 0 {
-		return 0, fmt.Errorf("%s: the server's reply to the create had no card number (no Location header), "+
-			"so a card may exist that the draft does not name; look on board %s before you apply it again", filepath.Base(d.Path), d.Board)
+	switch {
+	case errors.Is(err, fizzy.ErrNoLocation):
+		return 0, &createUnknown{fmt.Sprintf("%s: the server's reply to the create had no card number (%s), "+
+			"so a card may exist that the draft does not name", filepath.Base(d.Path), errorText(err)), d}
+	case err != nil && createNotSent(err):
+		if cerr := draft.ClearCreating(d.Path); cerr != nil {
+			return 0, fmt.Errorf("%w; no card was created, but fz could not remove the creating: line from %s (%v); delete it by hand", err, d.Path, cerr)
+		}
+		return 0, err
+	case err != nil:
+		return 0, &createUnknown{fmt.Sprintf("%s: the create may have reached Fizzy (%s), so a card may exist that the draft does not name",
+			filepath.Base(d.Path), errorText(err)), d}
 	}
 	if err := draft.RecordCard(d.Path, n); err != nil {
 		return n, fmt.Errorf("card #%d was created, but fz could not write card: %d into %s (%v); "+
@@ -419,6 +528,34 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}
 	}
 	return n, nil
+}
+
+// createUnknown is a card create whose outcome fz cannot tell: the request
+// may have reached Fizzy, and a card may exist. The creating: line stays in
+// the draft, so the next apply refuses it.
+type createUnknown struct {
+	what string
+	d    *draft.Draft
+}
+
+func (e *createUnknown) Error() string {
+	return fmt.Sprintf("%s. Look on board %s. The draft keeps its creating: line, so fz will not apply it again until you resolve it: "+
+		"if the card is there, replace that line with card: N; if it is not, delete the line. Then apply the draft again", e.what, e.d.Board)
+}
+
+// createNotSent reports whether a failed card create surely made no card:
+// the server refused it with a 3xx or 4xx, or the request never left fz.
+// Any other failure, such as a timeout, a reset or a 5xx, may have made one.
+func createNotSent(err error) bool {
+	var api *client.APIError
+	if errors.As(err, &api) {
+		return api.Status >= 300 && api.Status < 500
+	}
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" {
+		return true
+	}
+	return errors.Is(err, config.ErrConfig) || fizzy.IsRefusal(err)
 }
 
 // shellArg quotes a path for a command line the user can paste.
@@ -479,12 +616,21 @@ func draftApply(c *cmdContext, a []string) error {
 		if err != nil {
 			return err
 		}
+		if at, ok := d.Meta[draft.CreatingKey]; ok {
+			return fizzy.Refuse(fmt.Sprintf("%s: the draft has creating: %s, left by an apply whose create may have made its card. "+
+				"Look on board %s. If the card is there, replace the line with card: N; if it is not, delete the line. fz sends nothing until then",
+				p, at, d.Board))
+		}
 		if err := d.CheckImages(cfg.InboxPath()); err != nil {
-			return err
+			return refuseImage(err)
 		}
 		if d.Card == 0 || update {
 			if err := draft.CheckWritable(p); err != nil {
-				return fmt.Errorf("%s: fz cannot write card: and synced: back into this draft (%v), so it sends nothing", p, err)
+				msg := fmt.Sprintf("%s: fz cannot write card: and synced: back into this draft (%v), so it sends nothing", p, err)
+				if errors.Is(err, draft.ErrLinked) {
+					return fizzy.Refuse(msg)
+				}
+				return errors.New(msg)
 			}
 		}
 		drafts = append(drafts, d)
@@ -499,8 +645,9 @@ func draftApply(c *cmdContext, a []string) error {
 		for _, r := range refused {
 			fmt.Fprintf(c.errw(), "fz: %s\n", r)
 		}
+		// A conflict is a refusal, so it exits 2.
 		if len(refused) > 0 {
-			return exitCode(1)
+			return exitCode(2)
 		}
 	}
 	// summary has one line per draft for the report printed if the run
@@ -556,7 +703,11 @@ func draftApply(c *cmdContext, a []string) error {
 		}
 		n, err := applyDraft(c, fz, d, cfg.InboxPath())
 		var u *unfinished
+		var unknown *createUnknown
 		switch {
+		case errors.As(err, &unknown):
+			summary[i] = name + ": a card may exist, creating: kept"
+			return failApply(c, err, summary)
 		case errors.As(err, &u):
 			summary[i] = fmt.Sprintf("%s: card #%d, not finished", name, n)
 			// Record synced: from the card as it is now, so the retry with

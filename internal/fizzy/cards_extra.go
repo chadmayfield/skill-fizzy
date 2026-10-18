@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
 // MaxBoostChars is the longest boost Fizzy stores, in characters.
@@ -179,7 +181,7 @@ func (f *Fizzy) FindTag(name string) (Tag, error) {
 	}
 	titles := make([]string, len(tags))
 	for i, t := range tags {
-		titles[i] = t.Title
+		titles[i] = config.TerminalLine(t.Title)
 	}
 	return Tag{}, fmt.Errorf("no tag %s (have: %s)", PyRepr(name), strings.Join(titles, ", "))
 }

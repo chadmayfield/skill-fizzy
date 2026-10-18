@@ -230,3 +230,25 @@ func TestConfigKeyShapes(t *testing.T) {
 		t.Errorf("null and unknown keys: %+v %v", c, err)
 	}
 }
+
+// LoadInbox reads the inbox with no server settings, from FIZZY_INBOX, the
+// file, or the default.
+func TestLoadInbox(t *testing.T) {
+	isolate(t)
+	p := writeFile(t, `{"inbox":"~/gate-inbox"}`)
+	home, _ := os.UserHomeDir()
+	if got, err := LoadInbox(p); err != nil || got != filepath.Join(home, "gate-inbox") {
+		t.Errorf("file: %q %v", got, err)
+	}
+	t.Setenv("FIZZY_INBOX", "/tmp/hinge-inbox")
+	if got, err := LoadInbox(p); err != nil || got != "/tmp/hinge-inbox" {
+		t.Errorf("env: %q %v", got, err)
+	}
+	t.Setenv("FIZZY_INBOX", "")
+	if got, err := LoadInbox(filepath.Join(t.TempDir(), "none.json")); err != nil || got != filepath.Join(home, ".fizzy-inbox") {
+		t.Errorf("default: %q %v", got, err)
+	}
+	if _, err := LoadInbox(writeFile(t, `{"inbox":`)); !errors.Is(err, ErrConfig) {
+		t.Errorf("bad JSON: %v", err)
+	}
+}

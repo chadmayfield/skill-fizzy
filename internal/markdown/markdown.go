@@ -26,7 +26,7 @@ import (
 
 // ToHTML converts a draft body to HTML.
 func ToHTML(md string) string {
-	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+	lines := lines(md)
 	var out, para []string
 	listTag := "" // "ul" or "ol"
 
@@ -146,6 +146,41 @@ func ToHTML(md string) string {
 	flushPara()
 	closeList()
 	return strings.Join(out, "\n")
+}
+
+// lines splits md into lines the way ToHTML does: \r\n becomes \n, and only
+// \n ends a line.
+func lines(md string) []string {
+	return strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+}
+
+// TextLines returns the lines of md that ToHTML does not treat as code: it
+// splits lines as ToHTML does and leaves out each fenced code block, fences
+// included.
+func TextLines(md string) []string {
+	ls := lines(md)
+	var out []string
+	for i := 0; i < len(ls); i++ {
+		if strings.HasPrefix(strip(ls[i]), "```") {
+			for i++; i < len(ls) && !strings.HasPrefix(strip(ls[i]), "```"); i++ {
+			}
+			continue
+		}
+		out = append(out, ls[i])
+	}
+	return out
+}
+
+// ImageTargets returns the target of each line that ToHTML turns into an
+// <!--attach:target--> placeholder, in order.
+func ImageTargets(md string) []string {
+	out := []string{}
+	for _, line := range TextLines(md) {
+		if _, target, ok := ImageLine(line); ok {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 // ImageLine reports whether line is only an image, ![alt](target), and
@@ -342,10 +377,26 @@ func restoreCode(text string, codes []string) string {
 // \[([^\]]+)\]\((https?://[^)\s]+|mailto:[^)\s]+)\)
 func links(text string) string {
 	r := []rune(text)
+	// next[k] is the index of the first ] at or after k, and stop[k] the
+	// first ), space or NUL, or len(r). linkAt reads them instead of
+	// scanning ahead from every [, which made a line of brackets quadratic.
+	// A URL ends at a NUL, the start of a stashed code span, so the span's
+	// <code> tag cannot land inside the href.
+	next, stop := make([]int, len(r)+1), make([]int, len(r)+1)
+	next[len(r)], stop[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		next[k], stop[k] = next[k+1], stop[k+1]
+		if r[k] == ']' {
+			next[k] = k
+		}
+		if r[k] == ')' || r[k] == 0 || isSpace(r[k]) {
+			stop[k] = k
+		}
+	}
 	var b strings.Builder
 	for i := 0; i < len(r); {
 		if r[i] == '[' {
-			if end, label, url, ok := linkAt(r, i); ok {
+			if end, label, url, ok := linkAt(r, i, next, stop); ok {
 				b.WriteString(`<a href="` + hrefFrom(url, true) + `">` + label + "</a>")
 				i = end
 				continue
@@ -357,11 +408,8 @@ func links(text string) string {
 	return b.String()
 }
 
-func linkAt(r []rune, i int) (end int, label, url string, ok bool) {
-	j := i + 1
-	for j < len(r) && r[j] != ']' {
-		j++
-	}
+func linkAt(r []rune, i int, next, stop []int) (end int, label, url string, ok bool) {
+	j := next[i+1]
 	if j == i+1 || j+1 >= len(r) || r[j+1] != '(' {
 		return 0, "", "", false
 	}
@@ -370,10 +418,7 @@ func linkAt(r []rune, i int) (end int, label, url string, ok bool) {
 	if p < 0 {
 		return 0, "", "", false
 	}
-	q := p
-	for q < len(r) && r[q] != ')' && !isSpace(r[q]) {
-		q++
-	}
+	q := stop[p]
 	if q == p || q >= len(r) || r[q] != ')' {
 		return 0, "", "", false
 	}
@@ -444,8 +489,9 @@ func bareURLs(text string, codes *[]string) string {
 				q := p
 				// A URL ends at whitespace, a quote, or a < or > (escaped by
 				// now, or a tag that links added), so it cannot close the
-				// href attribute.
-				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'", r[q]) &&
+				// href attribute. It also ends at a NUL, where a stashed
+				// code span starts, so no <code> tag lands in the href.
+				for q < len(r) && !isSpace(r[q]) && !strings.ContainsRune("<\"'\x00", r[q]) &&
 					!hasPrefix(r, q, "&lt;") && !hasPrefix(r, q, "&gt;") {
 					q++
 				}

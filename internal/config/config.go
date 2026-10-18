@@ -175,42 +175,31 @@ func checkKeys(raw []byte, data map[string]any) error {
 	return nil
 }
 
+// readChecked checks the open config file f with checkFileInfo, on the
+// same handle, then reads it. Checking and reading one handle means the
+// file cannot be swapped between the two.
+func readChecked(f *os.File, path string) ([]byte, error) {
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+	}
+	if err := checkFileInfo(path, fi); err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+	}
+	return raw, nil
+}
+
 // Load reads the config file at path (or $FIZZY_CONFIG, or the default) and
 // applies environment overrides. A missing file is not an error.
 func Load(path string) (*Config, error) {
-	if path == "" {
-		path = os.Getenv("FIZZY_CONFIG")
+	data, path, err := readConfig(path)
+	if err != nil {
+		return nil, err
 	}
-	if path == "" {
-		path = DefaultConfigPath
-	}
-	path = ExpandTilde(path)
-
-	data := map[string]any{}
-	raw, err := os.ReadFile(path)
-	switch {
-	case err == nil:
-		if err := checkFileMode(path); err != nil {
-			return nil, err
-		}
-		dec := json.NewDecoder(bytes.NewReader(raw))
-		dec.UseNumber()
-		if err := dec.Decode(&data); err != nil {
-			return nil, fmt.Errorf("%w: %s: invalid JSON (%v)", ErrConfig, path, err)
-		}
-		if _, err := dec.Token(); err != io.EOF {
-			return nil, fmt.Errorf("%w: %s: invalid JSON (text after the JSON object)", ErrConfig, path)
-		}
-		if _, ok := data["token"]; ok {
-			return nil, fmt.Errorf("%w: %s: the config file cannot hold the token; give a command that prints it in token_cmd, or set FIZZY_TOKEN", ErrConfig, path)
-		}
-		if err := checkKeys(raw, data); err != nil {
-			return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
-		}
-	case !errors.Is(err, os.ErrNotExist):
-		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
-	}
-
 	pick := func(env, key string) string {
 		if v := os.Getenv(env); v != "" {
 			return v
@@ -248,4 +237,64 @@ func Load(path string) (*Config, error) {
 		cfg.RulesCard = n
 	}
 	return cfg, nil
+}
+
+// LoadInbox returns the inbox folder, with ~ expanded, from FIZZY_INBOX or
+// the config file at path, or the default. Unlike Load it needs no server
+// URL or account, for commands that never reach the server. A config file
+// that Load would refuse is refused here too.
+func LoadInbox(path string) (string, error) {
+	data, _, err := readConfig(path)
+	if err != nil {
+		return "", err
+	}
+	inbox := os.Getenv("FIZZY_INBOX")
+	if inbox == "" {
+		inbox = scalar(data["inbox"])
+	}
+	if inbox == "" {
+		inbox = DefaultInbox
+	}
+	return ExpandTilde(inbox), nil
+}
+
+// readConfig reads and checks the config file at path, or $FIZZY_CONFIG,
+// or the default, and returns its keys and the path it read. A missing
+// file gives no keys and no error.
+func readConfig(path string) (map[string]any, string, error) {
+	if path == "" {
+		path = os.Getenv("FIZZY_CONFIG")
+	}
+	if path == "" {
+		path = DefaultConfigPath
+	}
+	path = ExpandTilde(path)
+
+	data := map[string]any{}
+	f, err := os.Open(path)
+	switch {
+	case err == nil:
+		raw, err := readChecked(f, path)
+		f.Close()
+		if err != nil {
+			return nil, path, err
+		}
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		if err := dec.Decode(&data); err != nil {
+			return nil, path, fmt.Errorf("%w: %s: invalid JSON (%v)", ErrConfig, path, err)
+		}
+		if _, err := dec.Token(); err != io.EOF {
+			return nil, path, fmt.Errorf("%w: %s: invalid JSON (text after the JSON object)", ErrConfig, path)
+		}
+		if _, ok := data["token"]; ok {
+			return nil, path, fmt.Errorf("%w: %s: the config file cannot hold the token; give a command that prints it in token_cmd, or set FIZZY_TOKEN", ErrConfig, path)
+		}
+		if err := checkKeys(raw, data); err != nil {
+			return nil, path, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return nil, path, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+	}
+	return data, path, nil
 }

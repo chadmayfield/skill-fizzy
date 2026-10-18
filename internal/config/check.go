@@ -72,19 +72,23 @@ func checkAccount(account string) error {
 	return nil
 }
 
-// checkFileMode refuses a config file that people other than its owner can
-// write. The file names a command fz runs, so a writable file would let them
-// run commands as the user.
-func checkFileMode(path string) error {
+// currentUID returns the user fz runs as. A test replaces it.
+var currentUID = os.Getuid
+
+// checkFileInfo refuses a config file that people other than the user can
+// write: one with the group or other write bit, or, on Unix, one owned by
+// another user. The file names a command fz runs, so a writable file would
+// let them run commands as the user. fi comes from the open file, so the
+// file checked is the file read.
+func checkFileInfo(path string, fi os.FileInfo) error {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
-	fi, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
-	}
 	if fi.Mode().Perm()&0o022 != 0 {
 		return fmt.Errorf("%w: %s is writable by group or others, and it names a command fz runs; fix it with: chmod go-w %s", ErrConfig, path, path)
+	}
+	if uid, ok := fileUID(fi); ok && uid != currentUID() {
+		return fmt.Errorf("%w: %s is owned by another user, and it names a command fz runs; use a config file of your own", ErrConfig, path)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ func init() { register(addStepCommands) }
 func addStepCommands(root *cobra.Command) {
 	g := &cobra.Command{
 		Use:   "step",
-		Short: "add, list, edit and tick a card's steps",
+		Short: "add, list, edit, tick, untick and delete a card's steps",
 		Long:  "Work with the checklist on a card. Steps are addressed by id; fz step list shows them.",
 	}
 	root.AddCommand(g)

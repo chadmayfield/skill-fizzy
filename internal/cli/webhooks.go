@@ -22,7 +22,7 @@ func addWebhookCommands(root *cobra.Command) {
 		Short: "manage a board's webhooks (account admins only)",
 		Long: "Work with a board's webhooks. A webhook sends card data to an outside URL, so create, edit and delete need --yes and print the URL and actions first.\n\n" +
 			"Only account admins can use these commands. The server answers 403 to anyone else.\n\n" +
-			"The signing secret is shown once, when you create a webhook. List and show hide it, also with --json. Use show --reveal-secret to print it again.\n\n" +
+			"The signing secret is shown once, when you create a webhook. List and show hide it, also with --json. Use show --json --reveal-secret to print it again; text output never includes it.\n\n" +
 			"Actions: " + strings.Join(fizzy.WebhookActions, ", ") + ".",
 	}
 	root.AddCommand(g)

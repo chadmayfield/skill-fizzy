@@ -2,12 +2,18 @@ package draft
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
+
+// ErrLinked is matched by errors.Is when a draft has more than one hard
+// link. fz rewrites a draft by renaming a new file over it, which would
+// leave the other links with the old text, so it refuses.
+var ErrLinked = errors.New("the draft has more than one hard link, and fz would split them by rewriting it; copy it to a file of its own")
 
 // bom is the UTF-8 byte order mark. Parse skips it and RecordFields keeps it.
 const bom = "\xef\xbb\xbf"
@@ -114,12 +120,23 @@ func trimEnding(s string) string {
 }
 
 // RecordFields writes key: value lines into the front matter. An existing line
-// for the same key (any case) is dropped, the rest keep their order, and the
-// new lines go at the end in the order given. Every other byte of the file
+// for the same key (any case) is dropped, the rest keep their order, blank
+// lines included, and the new lines go after the last line with content, in
+// the order given. Every other byte of the file
 // stays as it was, including a BOM and the file's line endings, which the new
 // lines use too. The file is replaced by a rename, so a failed write leaves
 // the old draft whole. A symlink is followed and stays a symlink.
 func RecordFields(path string, fields ...KV) error {
+	keys := make([]string, len(fields))
+	for i, f := range fields {
+		keys[i] = f.Key
+	}
+	return rewriteFront(path, keys, fields)
+}
+
+// rewriteFront drops every front matter line whose key is in drop, any
+// case, and writes fields as RecordFields does.
+func rewriteFront(path string, drop []string, fields []KV) error {
 	src, err := readSource(path)
 	if err != nil {
 		return err
@@ -129,10 +146,10 @@ func RecordFields(path string, fields ...KV) error {
 		return errf("%s: missing front matter", path)
 	}
 	start, end := src.rawAt[m[2]], src.rawAt[m[3]]
-	drop := func(piece string) bool {
+	dropped := func(piece string) bool {
 		lower := strings.ToLower(pyStrip(trimEnding(piece)))
-		for _, f := range fields {
-			if strings.HasPrefix(lower, strings.ToLower(f.Key)+":") {
+		for _, k := range drop {
+			if strings.HasPrefix(lower, strings.ToLower(k)+":") {
 				return true
 			}
 		}
@@ -144,7 +161,7 @@ func RecordFields(path string, fields ...KV) error {
 		ending := line[len(body):]
 		var b strings.Builder
 		for _, piece := range subLines(body) {
-			if !drop(piece) {
+			if !dropped(piece) {
 				b.WriteString(piece)
 			}
 		}
@@ -153,19 +170,34 @@ func RecordFields(path string, fields ...KV) error {
 		}
 		kept = append(kept, b.String()+ending)
 	}
+	// The new lines go after the last line with content, so blank lines,
+	// such as one before the closing ---, stay where they are.
+	k := -1
+	for i, line := range kept {
+		if pyStrip(trimEnding(line)) != "" {
+			k = i
+		}
+	}
+	seq := append([]string(nil), kept[:k+1]...)
+	for _, f := range fields {
+		seq = append(seq, f.Key+": "+f.Value)
+	}
+	seq = append(seq, kept[k+1:]...)
+	// Every line but the last ends with its own ending, or the file's. The
+	// last has none, because the bytes after the front matter start with
+	// the ending before the closing ---.
 	eol := lineEnd(src.raw)
 	var out bytes.Buffer
 	out.Write(src.raw[:start])
-	front := strings.Join(kept, "")
-	// The last kept line's ending is dropped here, because the bytes after
-	// the front matter start with the ending before the closing ---.
-	front = strings.TrimSuffix(front, endingOf(front))
-	out.WriteString(front)
-	for i, f := range fields {
-		if i > 0 || front != "" {
-			out.WriteString(eol)
+	for i, line := range seq {
+		e := endingOf(line)
+		switch {
+		case i == len(seq)-1:
+			line = strings.TrimSuffix(line, e)
+		case e == "":
+			line += eol
 		}
-		out.WriteString(f.Key + ": " + f.Value)
+		out.WriteString(line)
 	}
 	out.Write(src.raw[end:])
 	return writeAtomic(path, out.Bytes())
@@ -186,7 +218,9 @@ func endingOf(s string) string {
 
 // writeAtomic replaces the file at path, or the file a symlink there points
 // to, with data: it writes a temp file in the same folder, syncs it, gives
-// it the old file's mode and renames it over the old file.
+// it the old file's mode, and its owner and group where the system allows,
+// and renames it over the old file. A file with more than one hard link is
+// refused with ErrLinked. ACLs and extended attributes are not copied.
 func writeAtomic(path string, data []byte) (err error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -195,6 +229,9 @@ func writeAtomic(path string, data []byte) (err error) {
 	st, err := os.Stat(real)
 	if err != nil {
 		return err
+	}
+	if linkCount(st) > 1 {
+		return fmt.Errorf("%s: %w", path, ErrLinked)
 	}
 	f, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".fz-*")
 	if err != nil {
@@ -207,6 +244,9 @@ func writeAtomic(path string, data []byte) (err error) {
 		}
 	}()
 	if _, err = f.Write(data); err != nil {
+		return err
+	}
+	if err = keepOwner(f, st); err != nil {
 		return err
 	}
 	if err = f.Chmod(st.Mode().Perm()); err != nil {
@@ -231,8 +271,10 @@ func writeAtomic(path string, data []byte) (err error) {
 }
 
 // CheckWritable fails unless RecordFields could rewrite the draft at path:
-// it must be a regular file (a symlink to one is fine) that fz can open for
-// writing, in a folder where fz can make the temp file. It changes nothing.
+// it must be a regular file (a symlink to one is fine) with one hard link,
+// that fz can open for writing, in a folder where fz can make the temp
+// file. A file with more than one hard link fails with ErrLinked. It
+// changes nothing.
 func CheckWritable(path string) error {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -244,6 +286,9 @@ func CheckWritable(path string) error {
 	}
 	if !st.Mode().IsRegular() {
 		return fmt.Errorf("%s is not a regular file", path)
+	}
+	if linkCount(st) > 1 {
+		return ErrLinked
 	}
 	f, err := os.OpenFile(real, os.O_WRONLY, 0)
 	if err != nil {
@@ -258,7 +303,23 @@ func CheckWritable(path string) error {
 	return os.Remove(tmp.Name())
 }
 
-// RecordCard writes card: n into the draft's front matter.
+// RecordCard writes card: n into the draft's front matter, in place of a
+// creating: line.
 func RecordCard(path string, n int) error {
-	return RecordFields(path, KV{"card", strconv.Itoa(n)})
+	return rewriteFront(path, []string{"card", CreatingKey}, []KV{{"card", strconv.Itoa(n)}})
+}
+
+// CreatingKey is the front matter key draft apply writes, with the time,
+// just before it sends a card create. It is replaced by card: when the
+// create succeeds. A draft that still has it may already have its card.
+const CreatingKey = "creating"
+
+// RecordCreating writes creating: at into the draft's front matter.
+func RecordCreating(path, at string) error {
+	return RecordFields(path, KV{CreatingKey, at})
+}
+
+// ClearCreating removes the creating: line from the draft's front matter.
+func ClearCreating(path string) error {
+	return rewriteFront(path, []string{CreatingKey}, nil)
 }

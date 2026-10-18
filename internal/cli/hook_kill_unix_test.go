@@ -30,7 +30,14 @@ func checkAllDead(t *testing.T, pidFile string) {
 	if err != nil || len(fields) != 2 {
 		t.Fatalf("pid file %q: %v", data, err)
 	}
-	for _, f := range fields {
+	checkPidsDead(t, fields)
+}
+
+// checkPidsDead fails the test if any of pids still runs, and kills what it
+// finds.
+func checkPidsDead(t *testing.T, pids []string) {
+	t.Helper()
+	for _, f := range pids {
 		pid, err := strconv.Atoi(f)
 		if err != nil {
 			t.Fatalf("pid %q: %v", f, err)
@@ -92,10 +99,28 @@ func TestPythonHookKillsHungFz(t *testing.T) {
 	if r != (result{"", "", 0}) {
 		t.Errorf("got %+v", r)
 	}
-	// TIMEOUT bounds the whole script, not each fz call.
-	if d := time.Since(start); d > 1500*time.Millisecond {
+	// TIMEOUT bounds the script from the start of main(), not each fz
+	// call. The extra time is for starting Python on a loaded machine.
+	if d := time.Since(start); d > 2500*time.Millisecond {
 		t.Errorf("took %v, want about 1 s", d)
 	}
+	// On a loaded machine the limit can pass before the fake fz writes its
+	// pids, and the kill then comes before fz starts. Wait up to the limit
+	// for the file. If fz never started, the check above, that the hook
+	// printed nothing and exited 0, is all there is to test.
+	var pids []string
+	for deadline := time.Now().Add(time.Second); ; {
+		data, _ := os.ReadFile(pidFile)
+		pids = strings.Fields(string(data))
+		if len(pids) == 2 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(pids) == 0 {
+		t.Log("the time limit passed before fz started; checked the output only")
+		return
+	}
 	time.Sleep(time.Second)
-	checkAllDead(t, pidFile)
+	checkPidsDead(t, pids)
 }

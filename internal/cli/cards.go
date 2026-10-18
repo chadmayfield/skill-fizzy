@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/markdown"
 	"github.com/spf13/cobra"
@@ -379,7 +380,7 @@ func cardCreate(c *cmdContext, a []string) error {
 			if !fizzy.IsRefusal(err) {
 				return err
 			}
-			return fmt.Errorf("card #%d was created on %s, but %s did not finish: %v", n, b.Name, strings.Join(left, ", "), err)
+			return fmt.Errorf("card #%d was created on %s, but %s did not finish: %v", n, config.TerminalLine(b.Name), strings.Join(left, ", "), err)
 		}
 		if target != nil {
 			if err := fz.MoveCardTo(n, *target); err != nil {
