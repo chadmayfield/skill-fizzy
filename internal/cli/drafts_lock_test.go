@@ -70,3 +70,21 @@ func TestApplyConcurrentMakesOneCard(t *testing.T) {
 		t.Errorf("%d creates, want 1: %+v", n, results)
 	}
 }
+
+// check and preview show a creating: line left by an unknown create
+// outcome. check exits 1 for it, so the problem shows before apply.
+func TestCheckAndPreviewShowCreating(t *testing.T) {
+	srv := newSyncServer(t)
+	_, drafts := imageEnv(t, srv)
+	p := filepath.Join(drafts, "gate.md")
+	writeFile(t, p, "---\nboard: Home\ncreating: 2026-10-18T00:00:00Z\n---\n# Fix the gate\n")
+	want := "creating: pending since 2026-10-18T00:00:00Z; resolve before apply\n"
+	r := runGo([]string{"draft", "check", p})
+	if r.code != 1 || !strings.Contains(r.stdout, want) {
+		t.Errorf("check: %+v", r)
+	}
+	r = runGo([]string{"draft", "preview", p})
+	if r.code != 0 || !strings.Contains(r.stdout, want) {
+		t.Errorf("preview: %+v", r)
+	}
+}

@@ -945,7 +945,9 @@ fz draft apply ~/.fizzy-inbox/drafts/
   and names the board to look on. A create the server refused, with a 4xx
   reply, made no card, so `fz` removes the line.
 - A draft that still has a `creating:` line is refused with exit 2, and
-  nothing is sent. Look on the board. If the card is there, replace the line
+  nothing is sent. `check` and `preview` print
+  `creating: pending since <time>; resolve before apply` for it, and `check`
+  exits 1. Look on the board. If the card is there, replace the line
   with `card: N`. If it is not, delete the line. Then apply the draft again.
   So the same draft never makes a second card.
 - While it runs, `apply` holds a lock file beside each draft it may write,

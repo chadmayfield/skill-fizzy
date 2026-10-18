@@ -325,6 +325,11 @@ func draftCheck(c *cmdContext, a []string) error {
 			line += fmt.Sprintf(" (already created: #%d)", d.Card)
 		}
 		fmt.Fprintln(w, line)
+		// apply refuses such a draft, so check fails it now.
+		if note := creatingNote(d); note != "" {
+			fmt.Fprintln(w, "    "+note)
+			bad++
+		}
 		if links {
 			for _, u := range d.Links() {
 				s := checkLink(hc, u)
@@ -351,6 +356,17 @@ func draftCheck(c *cmdContext, a []string) error {
 		return exitCode(1)
 	}
 	return nil
+}
+
+// creatingNote is the line check and preview print for a draft that still
+// has a creating: line, which apply refuses until the user resolves it, or
+// "" for a draft without one.
+func creatingNote(d *draft.Draft) string {
+	at, ok := d.Meta[draft.CreatingKey]
+	if !ok {
+		return ""
+	}
+	return "creating: pending since " + at + "; resolve before apply"
 }
 
 // parseDraft parses a draft for preview and apply. A front matter value fz
@@ -386,6 +402,9 @@ func draftPreview(c *cmdContext, a []string) error {
 			tags = "-"
 		}
 		fmt.Fprintf(w, "=== %s\nboard: %s   column: %s   tags: %s   golden: %s\n", d.Title, d.Board, d.Column, tags, pyBool(d.Golden))
+		if note := creatingNote(d); note != "" {
+			fmt.Fprintln(w, note)
+		}
 		fmt.Fprintln(w, d.DescriptionHTML(nil))
 		for _, s := range d.Steps {
 			fmt.Fprintf(w, "  [%s] %s\n", tick(s.Done), s.Content)
