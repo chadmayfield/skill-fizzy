@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 // A closed card is never moved, even when the draft names a column.
 func TestSyncLeavesClosedCardColumn(t *testing.T) {
 	text := strings.Replace(syncDraftText, "column: Maybe?\n", "column: Not now\n", 1)
