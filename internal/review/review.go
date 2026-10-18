@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
 
@@ -71,7 +72,7 @@ func short(cards []fizzy.Card) string {
 	}
 	parts := make([]string, len(cards))
 	for i, c := range cards {
-		parts[i] = fmt.Sprintf("#%d %s", c.Number, c.Title)
+		parts[i] = fmt.Sprintf("#%d %s", c.Number, config.TerminalLine(c.Title))
 	}
 	return strings.Join(parts, ", ")
 }
@@ -79,7 +80,7 @@ func short(cards []fizzy.Card) string {
 // FormatBoard prints one board's block. The last lane (nearest Done) is
 // listed in full, the other lanes are counted from right to left.
 func FormatBoard(r Result) string {
-	head := "== " + r.Board
+	head := "== " + config.TerminalLine(r.Board)
 	if r.PostponeDays != nil {
 		head += fmt.Sprintf(" (postpone %dd)", *r.PostponeDays)
 	}
@@ -87,15 +88,15 @@ func FormatBoard(r Result) string {
 	var counts []string
 	if n := len(r.Lanes); n > 0 {
 		last := r.Lanes[n-1]
-		lines = append(lines, fmt.Sprintf("%s (%d):", last.Name, len(last.Cards)))
+		lines = append(lines, fmt.Sprintf("%s (%d):", config.TerminalLine(last.Name), len(last.Cards)))
 		for _, c := range last.Cards {
-			lines = append(lines, fmt.Sprintf("  #%d %s", c.Number, c.Title))
+			lines = append(lines, fmt.Sprintf("  #%d %s", c.Number, config.TerminalLine(c.Title)))
 		}
 		if len(last.Cards) == 0 {
 			lines = append(lines, "  none")
 		}
 		for i := n - 2; i >= 0; i-- {
-			counts = append(counts, fmt.Sprintf("%s %d", r.Lanes[i].Name, len(r.Lanes[i].Cards)))
+			counts = append(counts, fmt.Sprintf("%s %d", config.TerminalLine(r.Lanes[i].Name), len(r.Lanes[i].Cards)))
 		}
 	}
 	counts = append(counts, fmt.Sprintf("Maybe? %d", len(r.Maybe)))

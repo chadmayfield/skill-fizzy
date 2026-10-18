@@ -103,14 +103,14 @@ func boardShow(c *cmdContext, a []string) error {
 		postpone = "postpone " + strconv.Itoa(*d.AutoPostponePeriodInDays) + "d"
 	}
 	lines := []string{
-		fmt.Sprintf("%s  %s  (%s)", d.ID, d.Name, postpone),
+		line(fmt.Sprintf("%s  %s  (%s)", d.ID, d.Name, postpone)),
 		"access: " + accessSummary(d),
 	}
 	if d.Creator.Name != "" {
-		lines = append(lines, "creator: "+d.Creator.Name)
+		lines = append(lines, "creator: "+line(d.Creator.Name))
 	}
 	if d.PublicURL != "" {
-		lines = append(lines, "public: "+d.PublicURL)
+		lines = append(lines, "public: "+line(d.PublicURL))
 	}
 	return emit(c.cmd, d.Raw(), strings.Join(lines, "\n"))
 }
@@ -171,8 +171,8 @@ func boardEdit(c *cmdContext, a []string) error {
 		return err
 	}
 	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"changed", changed}}),
-		c.wrote(fmt.Sprintf("board %s updated: %s", b.Name, strings.Join(changed, ", ")),
-			fmt.Sprintf("update board %s: %s", b.Name, strings.Join(changed, ", "))))
+		c.wrote(fmt.Sprintf("board %s updated: %s", line(b.Name), strings.Join(changed, ", ")),
+			fmt.Sprintf("update board %s: %s", line(b.Name), strings.Join(changed, ", "))))
 }
 
 func plural(n int, one, many string) string {
@@ -206,7 +206,7 @@ func boardDelete(c *cmdContext, a []string) error {
 	}
 	names := make([]string, len(cols))
 	for i, col := range cols {
-		names[i] = col.Name
+		names[i] = line(col.Name)
 	}
 	listed := "none"
 	if len(names) > 0 {
@@ -214,14 +214,14 @@ func boardDelete(c *cmdContext, a []string) error {
 	}
 	// Fizzy's API docs list "all" as the default filter but do not say
 	// which cards it holds, so the count carries the filter's name.
-	fmt.Fprintf(c.errw(), "about to delete board %s (%s): cards by Fizzy's filters: all %d, closed %d, not now %d; custom columns: %s\n", b.Name, b.ID, counts[0], counts[1], counts[2], listed)
+	fmt.Fprintf(c.errw(), "about to delete board %s (%s): cards by Fizzy's filters: all %d, closed %d, not now %d; custom columns: %s\n", line(b.Name), line(b.ID), counts[0], counts[1], counts[2], listed)
 	if !yes {
 		return refuse(c)
 	}
 	if err := fz.DeleteBoard(b.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, c.dry(obj{{"deleted", b.ID}}), c.wrote(fmt.Sprintf("board %s deleted", b.Name), "delete board "+b.Name))
+	return emit(c.cmd, c.dry(obj{{"deleted", b.ID}}), c.wrote(fmt.Sprintf("board %s deleted", line(b.Name)), "delete board "+line(b.Name)))
 }
 
 func boardPublish(c *cmdContext, a []string) error {
@@ -234,7 +234,7 @@ func boardPublish(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to publish board %s (%s): anyone with the link can read it without logging in\n", b.Name, b.ID)
+	fmt.Fprintf(c.errw(), "about to publish board %s (%s): anyone with the link can read it without logging in\n", line(b.Name), line(b.ID))
 	if !yes {
 		return refuse(c)
 	}
@@ -243,7 +243,7 @@ func boardPublish(c *cmdContext, a []string) error {
 		return err
 	}
 	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"public_url", orNull(link)}}),
-		c.wrote(fmt.Sprintf("board %s published: %s", b.Name, orNone(link)), "publish board "+b.Name))
+		c.wrote(fmt.Sprintf("board %s published: %s", line(b.Name), line(orNone(link))), "publish board "+line(b.Name)))
 }
 
 func boardUnpublish(c *cmdContext, a []string) error {
@@ -258,7 +258,7 @@ func boardUnpublish(c *cmdContext, a []string) error {
 	if err := fz.UnpublishBoard(b.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"published", false}}), c.wrote(fmt.Sprintf("board %s unpublished", b.Name), "unpublish board "+b.Name))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"published", false}}), c.wrote(fmt.Sprintf("board %s unpublished", line(b.Name)), "unpublish board "+line(b.Name)))
 }
 
 func boardAccess(c *cmdContext, a []string) error {
@@ -308,7 +308,7 @@ func boardAccess(c *cmdContext, a []string) error {
 		}
 		for _, u := range matched {
 			ids = append(ids, u.ID)
-			named = append(named, fmt.Sprintf("%s (%s)", u.Name, u.ID))
+			named = append(named, line(fmt.Sprintf("%s (%s)", u.Name, u.ID)))
 		}
 	}
 	d, err := fz.BoardDetail(b.ID)
@@ -317,14 +317,14 @@ func boardAccess(c *cmdContext, a []string) error {
 	}
 	if all && d.AllAccess {
 		return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", true}, {"changed", false}}),
-			noChange(c, fmt.Sprintf("board %s already gives all users access; no change needed", b.Name)))
+			noChange(c, fmt.Sprintf("board %s already gives all users access; no change needed", line(b.Name))))
 	}
 	if !all && !d.AllAccess && d.UserIDs != nil && sameIDs(ids, d.UserIDs) {
 		return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", false}, {"user_ids", ids}, {"changed", false}}),
-			noChange(c, fmt.Sprintf("board %s already gives access to exactly these users; no change needed", b.Name)))
+			noChange(c, fmt.Sprintf("board %s already gives access to exactly these users; no change needed", line(b.Name))))
 	}
 	w := c.errw()
-	fmt.Fprintf(w, "about to change access to board %s (%s)\n  now: %s\n", b.Name, b.ID, accessSummary(d))
+	fmt.Fprintf(w, "about to change access to board %s (%s)\n  now: %s\n", line(b.Name), line(b.ID), accessSummary(d))
 	if all {
 		fmt.Fprintln(w, "  new: all users")
 	} else {
@@ -342,7 +342,7 @@ func boardAccess(c *cmdContext, a []string) error {
 	if !all {
 		to = plural(len(ids), "user", "users")
 	}
-	text := c.wrote(fmt.Sprintf("board %s access set to %s", b.Name, to), fmt.Sprintf("set board %s access to %s", b.Name, to))
+	text := c.wrote(fmt.Sprintf("board %s access set to %s", line(b.Name), to), fmt.Sprintf("set board %s access to %s", line(b.Name), to))
 	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}), text)
 }
 
@@ -383,9 +383,9 @@ func accessChanges(w io.Writer, d fizzy.BoardInfo, users []fizzy.User, ids []str
 	}
 	label := func(id string) string {
 		if n := names[id]; n != "" {
-			return fmt.Sprintf("%s (%s)", n, id)
+			return line(fmt.Sprintf("%s (%s)", n, id))
 		}
-		return id
+		return line(id)
 	}
 	var keeps, gains, loses []string
 	for _, id := range ids {
@@ -428,7 +428,7 @@ func boardAccessList(c *cmdContext, fz *fizzy.Fizzy, b fizzy.Board) error {
 		case u.HasAccess:
 			state = "access"
 		}
-		lines = append(lines, fmt.Sprintf("%s  (%s)  %s", u.Name, u.Role, state))
+		lines = append(lines, line(fmt.Sprintf("%s  (%s)  %s", u.Name, u.Role, state)))
 	}
 	return emit(c.cmd, obj{{"board_id", acc.BoardID}, {"all_access", acc.AllAccess}, {"users", rawList(acc.Users)}},
 		strings.Join(lines, "\n"))

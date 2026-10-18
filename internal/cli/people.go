@@ -85,15 +85,15 @@ const userArgHelp = "USER is a user id, a name or an email, matched as card assi
 	"A name two users share, or a USER that matches nobody, exits 2. An id that matches no active user is still tried, so a deactivated user's id works."
 
 func userLine(u fizzy.User) string {
-	line := u.ID + "  " + u.Name
+	text := u.ID + "  " + u.Name
 	if u.EmailAddress != "" {
-		line += " <" + u.EmailAddress + ">"
+		text += " <" + u.EmailAddress + ">"
 	}
-	line += " " + u.Role
+	text += " " + u.Role
 	if !u.Active {
-		line += " (inactive)"
+		text += " (inactive)"
 	}
-	return line
+	return line(text)
 }
 
 func tagList(c *cmdContext, _ []string) error {
@@ -105,7 +105,7 @@ func tagList(c *cmdContext, _ []string) error {
 	if err != nil {
 		return err
 	}
-	text := listText(tags, func(t fizzy.Tag) string { return t.ID + "  #" + t.Title }, "(no tags)")
+	text := listText(tags, func(t fizzy.Tag) string { return line(t.ID + "  #" + t.Title) }, "(no tags)")
 	return emit(c.cmd, rawList(tags), text)
 }
 
@@ -144,7 +144,7 @@ func userShow(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, u.Raw(), userLine(u)+"\nurl: "+u.URL)
+	return emit(c.cmd, u.Raw(), userLine(u)+"\nurl: "+line(u.URL))
 }
 
 func userEdit(c *cmdContext, a []string) error {
@@ -170,7 +170,7 @@ func userEdit(c *cmdContext, a []string) error {
 		return emit(c.cmd, c.dry(obj{{"id", u.ID}, {"name", name}, {"changed", false}}),
 			noChange(c, fmt.Sprintf("user %s is already named %s; no change needed", u.ID, name)))
 	}
-	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", u.ID, u.Name, name)
+	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", line(u.ID), line(u.Name), name)
 	if !yes {
 		return refuse(c)
 	}
@@ -237,7 +237,7 @@ func whoami(c *cmdContext, _ []string) error {
 		if u.EmailAddress != "" {
 			who += " <" + u.EmailAddress + ">"
 		}
-		return fmt.Sprintf("%s %s  %s  %s %s", mark, slug, a.Name, who, u.Role)
+		return line(fmt.Sprintf("%s %s  %s  %s %s", mark, slug, a.Name, who, u.Role))
 	}, "(no accounts)")
 	return emit(c.cmd, id.Raw(), text)
 }

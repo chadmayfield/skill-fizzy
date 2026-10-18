@@ -99,7 +99,7 @@ func columnShow(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, col.Raw(), fmt.Sprintf("%s  %s  (color %s)", col.ID, col.Name, colorLabel(col)))
+	return emit(c.cmd, col.Raw(), line(fmt.Sprintf("%s  %s  (color %s)", col.ID, col.Name, colorLabel(col))))
 }
 
 func columnCreate(c *cmdContext, a []string) error {
@@ -165,8 +165,8 @@ func columnEdit(c *cmdContext, a []string) error {
 	}
 	slices.Sort(changed)
 	return emit(c.cmd, c.dry(obj{{"id", col.ID}, {"changed", changed}}),
-		c.wrote(fmt.Sprintf("column %s updated: %s", col.Name, strings.Join(changed, ", ")),
-			fmt.Sprintf("update column %s: %s", col.Name, strings.Join(changed, ", "))))
+		c.wrote(fmt.Sprintf("column %s updated: %s", line(col.Name), strings.Join(changed, ", ")),
+			fmt.Sprintf("update column %s: %s", line(col.Name), strings.Join(changed, ", "))))
 }
 
 func columnDelete(c *cmdContext, a []string) error {
@@ -179,14 +179,14 @@ func columnDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to delete column %s (%s) on board %s: %s\n", col.Name, col.ID, b.Name, plural(len(cards), "open card", "open cards"))
+	fmt.Fprintf(c.errw(), "about to delete column %s (%s) on board %s: %s\n", line(col.Name), line(col.ID), line(b.Name), plural(len(cards), "open card", "open cards"))
 	if !yes {
 		return refuse(c)
 	}
 	if err := fz.DeleteColumn(b.ID, col.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, c.dry(obj{{"deleted", col.ID}}), c.wrote(fmt.Sprintf("column %s deleted", col.Name), "delete column "+col.Name))
+	return emit(c.cmd, c.dry(obj{{"deleted", col.ID}}), c.wrote(fmt.Sprintf("column %s deleted", line(col.Name)), "delete column "+line(col.Name)))
 }
 
 func columnCards(c *cmdContext, a []string) error {

@@ -398,7 +398,7 @@ func cardCreate(c *cmdContext, a []string) error {
 	text := "dry-run: card not created"
 	var number any
 	if n != 0 {
-		text = fmt.Sprintf("card #%d created on %s", n, b.Name)
+		text = fmt.Sprintf("card #%d created on %s", n, line(b.Name))
 		number = n
 	}
 	return emit(c.cmd, obj{{"number", number}}, text)

@@ -191,6 +191,20 @@ func orNone(s string) string {
 // a name: config.TerminalLine.
 func line(s string) string { return config.TerminalLine(s) }
 
+// body cleans server text that may run over several lines, such as a
+// comment body. It keeps the newlines and indents every line after the
+// first by two spaces, so no line from the server starts at column 0.
+// Trailing newlines are dropped.
+func body(s string) string {
+	lines := strings.Split(strings.TrimRight(config.TerminalText(s), "\n"), "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] != "" {
+			lines[i] = "  " + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // cardLine formats a card the way the Python _card_line does. Server text
 // is kept to the line, so a title cannot fake another card's line.
 func cardLine(c fizzy.Card) string {

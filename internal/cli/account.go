@@ -85,7 +85,7 @@ func accountShow(c *cmdContext, _ []string) error {
 		return err
 	}
 	text := fmt.Sprintf("%s  %s\ncards: %d\nauto-postpone: %s\ncreated: %s",
-		a.Name, a.ID, a.CardsCount, postponeText(a.AutoPostponePeriodInDays), a.CreatedAt)
+		line(a.Name), line(a.ID), a.CardsCount, postponeText(a.AutoPostponePeriodInDays), line(a.CreatedAt))
 	return emit(c.cmd, a.Raw(), text)
 }
 
@@ -111,10 +111,10 @@ func accountPostpone(c *cmdContext, a []string) error {
 		from = strconv.Itoa(*cur.AutoPostponePeriodInDays)
 		if *cur.AutoPostponePeriodInDays == days {
 			return emit(c.cmd, c.dry(obj{{"auto_postpone_period_in_days", days}, {"changed", false}}),
-				noChange(c, fmt.Sprintf("the auto-postpone period of %s is already %d days; no change needed", cur.Name, days)))
+				noChange(c, fmt.Sprintf("the auto-postpone period of %s is already %d days; no change needed", line(cur.Name), days)))
 		}
 	}
-	fmt.Fprintf(c.errw(), "about to change the auto-postpone period of %s from %s to %d days\n", cur.Name, from, days)
+	fmt.Fprintf(c.errw(), "about to change the auto-postpone period of %s from %s to %d days\n", line(cur.Name), from, days)
 	if !yes {
 		return refuse(c)
 	}
@@ -130,7 +130,7 @@ func accountPostpone(c *cmdContext, a []string) error {
 }
 
 func exportLine(e fizzy.Export) string {
-	return strings.TrimSpace(strings.Join([]string{e.ID, e.Status, e.CreatedAt, e.DownloadURL}, " "))
+	return line(strings.TrimSpace(strings.Join([]string{e.ID, e.Status, e.CreatedAt, e.DownloadURL}, " ")))
 }
 
 // emitStarted prints a new export, or a dry-run note when none was made.
