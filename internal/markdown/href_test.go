@@ -35,3 +35,22 @@ func TestBareURLCannotLeaveHref(t *testing.T) {
 		}
 	}
 }
+
+// TestNoEmphasisInsideURL checks that * and _ in a URL stay as they are,
+// in the href and in a bare URL's text, while a link label still gets
+// emphasis.
+func TestNoEmphasisInsideURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://a.example/*x*/y":           `<p><a href="https://a.example/*x*/y">https://a.example/*x*/y</a></p>`,
+		"https://a.example/_x_/y":           `<p><a href="https://a.example/_x_/y">https://a.example/_x_/y</a></p>`,
+		"https://a.example/**x**/y":         `<p><a href="https://a.example/**x**/y">https://a.example/**x**/y</a></p>`,
+		"[see](https://a.example/_a_/b)":    `<p><a href="https://a.example/_a_/b">see</a></p>`,
+		"[see](https://a.example/*a*/b)":    `<p><a href="https://a.example/*a*/b">see</a></p>`,
+		"[**gate**](https://a.example/x)":   `<p><a href="https://a.example/x"><strong>gate</strong></a></p>`,
+		"*oil* https://a.example/_x_ _now_": `<p><em>oil</em> <a href="https://a.example/_x_">https://a.example/_x_</a> <em>now</em></p>`,
+	} {
+		if got := ToHTML(in); got != want {
+			t.Errorf("ToHTML(%q)\n got  %s\n want %s", in, got, want)
+		}
+	}
+}
