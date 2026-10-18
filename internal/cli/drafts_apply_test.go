@@ -96,3 +96,163 @@ func TestApplyNamesOneDraftOnce(t *testing.T) {
 		t.Errorf("%d creates for one draft: %q", n, srv.writes())
 	}
 }
+
+const hingeDraft = "---\nboard: Home\ncolumn: Now\ntags: oil\n---\n# Oil the hinge\n\nOnce a year.\n\n## Steps\n- [ ] Buy oil\n"
+
+// TestApplyFailedStepThenRetry is the duplicate-card case: a 500 on the
+// first step, then a retry. Exactly one card is created, and the retry
+// with --update finishes the steps.
+func TestApplyFailedStepThenRetry(t *testing.T) {
+	srv := newSyncServer(t)
+	path := filepath.Join(t.TempDir(), "hinge.md")
+	writeFile(t, path, hingeDraft)
+	srv.failNext("POST /1/cards/90/steps", 1)
+	got := syncRun(t, srv, "draft", "apply", path)
+	if got.code != 1 {
+		t.Fatalf("exit %d, want 1: %s", got.code, got.stderr)
+	}
+	for _, want := range []string{"card #90", "adding its steps failed", "fz draft apply --update " + path} {
+		if !strings.Contains(got.stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, got.stderr)
+		}
+	}
+	text := syncReadDraft(t, path)
+	if !strings.Contains(text, "\ncard: 90\n") || !strings.Contains(text, "\nsynced: sha256:") {
+		t.Fatalf("draft after the failed apply:\n%s", text)
+	}
+	// Nothing after the failed step was sent.
+	for _, w := range srv.writes() {
+		if strings.Contains(w, "/taggings") || strings.Contains(w, "/triage") {
+			t.Errorf("sent %q after the failed step", w)
+		}
+	}
+
+	again := syncRun(t, srv, "draft", "apply", path)
+	if again.code != 0 || !strings.Contains(again.stdout, "skip hinge.md: already card #90") {
+		t.Errorf("plain retry: %+v", again)
+	}
+	retry := syncRun(t, srv, "draft", "apply", "--update", path)
+	if retry.code != 0 {
+		t.Fatalf("retry with --update: exit %d: %s", retry.code, retry.stderr)
+	}
+	if n := srv.creates(); n != 1 {
+		t.Errorf("%d creates, want 1: %q", n, srv.writes())
+	}
+	steps := 0
+	for _, w := range srv.writes() {
+		if w == "POST /1/cards/90/steps" {
+			steps++
+		}
+	}
+	if steps != 2 || !strings.Contains(retry.stdout, "#90 step added: Buy oil") {
+		t.Errorf("step posts = %d, stdout %q", steps, retry.stdout)
+	}
+}
+
+func TestApplyFailureAfterCreateNamesTheCard(t *testing.T) {
+	for call, what := range map[string]string{
+		"POST /1/cards/90/taggings": "adding its tags failed",
+		"POST /1/cards/90/triage":   "moving it to Now failed",
+		"POST /1/cards/90/goldness": "marking it golden failed",
+	} {
+		t.Run(call, func(t *testing.T) {
+			srv := newSyncServer(t)
+			srv.edit(func(c *cardState) {})
+			path := filepath.Join(t.TempDir(), "hinge.md")
+			writeFile(t, path, strings.Replace(hingeDraft, "tags: oil\n", "tags: oil\ngolden: true\n", 1))
+			srv.mu.Lock()
+			srv.columns = `[{"id":"c-now","name":"Now"}]`
+			srv.mu.Unlock()
+			srv.failNext(call, 1)
+			got := syncRun(t, srv, "draft", "apply", path)
+			if got.code != 1 || !strings.Contains(got.stderr, "card #90") || !strings.Contains(got.stderr, what) ||
+				!strings.Contains(got.stderr, "fz draft apply --update "+path) {
+				t.Errorf("code %d stderr %q", got.code, got.stderr)
+			}
+			if !strings.Contains(syncReadDraft(t, path), "\ncard: 90\n") {
+				t.Errorf("no card: line")
+			}
+		})
+	}
+}
+
+func TestApplyRefusesUnwritableDraft(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hinge.md")
+	writeFile(t, path, hingeDraft)
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	got := syncRun(t, srv, "draft", "apply", path)
+	if got.code != 1 || !strings.Contains(got.stderr, "hinge.md") || !strings.Contains(got.stderr, "cannot write card:") {
+		t.Errorf("code %d stderr %q", got.code, got.stderr)
+	}
+	if w := srv.writes(); len(w) != 0 {
+		t.Errorf("writes reached the server: %q", w)
+	}
+
+	// A read-only folder blocks the temp file the rewrite needs.
+	locked := filepath.Join(t.TempDir(), "locked")
+	if err := os.Mkdir(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(locked, "gate.md")
+	writeFile(t, other, hingeDraft)
+	if err := os.Chmod(locked, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	ok := filepath.Join(dir, "latch.md")
+	writeFile(t, ok, "---\nboard: Home\n---\n# Fix the latch\n")
+	got = syncRun(t, srv, "draft", "apply", ok, other)
+	if got.code != 1 || !strings.Contains(got.stderr, "cannot write card:") {
+		t.Errorf("code %d stderr %q", got.code, got.stderr)
+	}
+	if w := srv.writes(); len(w) != 0 {
+		t.Errorf("writes reached the server: %q", w)
+	}
+}
+
+func TestApplyNoLocationIsAnError(t *testing.T) {
+	srv := newSyncServer(t)
+	srv.mu.Lock()
+	srv.noLocation = true
+	srv.mu.Unlock()
+	path := filepath.Join(t.TempDir(), "hinge.md")
+	writeFile(t, path, hingeDraft)
+	got := syncRun(t, srv, "draft", "apply", path)
+	if got.code != 1 || !strings.Contains(got.stderr, "no card number") || strings.Contains(got.stdout+got.stderr, "dry-run") {
+		t.Errorf("code %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if w := srv.writes(); len(w) != 1 || !strings.HasSuffix(w[0], "/cards") {
+		t.Errorf("writes after the create: %q", w)
+	}
+}
+
+func TestApplyBatchStopsAndSummarizes(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), hingeDraft)
+	writeFile(t, filepath.Join(dir, "c.md"), "---\nboard: Home\n---\n# Fix the latch\n")
+	srv.failNext("POST /1/cards/90/steps", 1)
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code != 1 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	for _, want := range []string{"a.md: card #90\n", "b.md: card #90, not finished\n", "c.md: not reached\n"} {
+		if !strings.Contains(got.stderr, want) {
+			t.Errorf("summary lacks %q:\n%s", want, got.stderr)
+		}
+	}
+	if n := srv.creates(); n != 2 {
+		t.Errorf("%d creates in the first run, want 2", n)
+	}
+	if again := syncRun(t, srv, "draft", "apply", dir); again.code != 0 {
+		t.Fatalf("second run: %+v", again)
+	}
+	if n := srv.creates(); n != 3 {
+		t.Errorf("%d creates for 3 drafts, want 3: %q", n, srv.writes())
+	}
+}

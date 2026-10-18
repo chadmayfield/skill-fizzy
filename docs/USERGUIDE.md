@@ -837,9 +837,16 @@ fz draft apply ~/.fizzy-inbox/drafts/
   every link and reports its status. Those fetches carry no token.
 - `preview` prints the title, board, column, tags, description HTML and steps.
   It sends nothing.
-- `apply` parses every draft and finds its images before it creates
-  anything. Then it creates one card per draft and writes `card: N` into the
-  draft, so the same draft never makes a second card.
+- `apply` parses every draft, finds its images and checks that it can
+  rewrite the draft file before it creates anything. A read-only draft, or
+  one in a read-only folder, stops the run with exit 1 and nothing is sent.
+- Then it creates one card per draft. It writes `card: N` into the draft
+  right after the create, before it adds steps or tags, moves the card or
+  marks it golden, so the same draft never makes a second card.
+- If one of those later calls fails, `apply` exits 1. The message names the
+  card, says what was not sent, and gives the command that finishes it,
+  `fz draft apply --update FILE`. A run over several drafts stops at the
+  first failure and lists each draft and its card.
 - A draft that already has `card:` is skipped, unless you pass `--update`.
 - Each command takes files, folders or both. A folder means the `.md` files
   directly inside it. A draft named twice, by another path or through a

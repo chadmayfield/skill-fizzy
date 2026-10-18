@@ -76,6 +76,21 @@ type syncServer struct {
 	calls   []string
 	state   cardState
 	columns string
+	// fail maps "METHOD /path" to how many more times that request gets
+	// an HTTP 500 before it succeeds.
+	fail map[string]int
+	// noLocation makes the card create reply 201 with no Location header.
+	noLocation bool
+}
+
+// failNext makes the next n requests "METHOD /path" fail with HTTP 500.
+func (s *syncServer) failNext(call string, n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fail == nil {
+		s.fail = map[string]int{}
+	}
+	s.fail[call] = n
 }
 
 func newSyncServer(t *testing.T) *syncServer {
@@ -109,7 +124,12 @@ func newSyncServer(t *testing.T) *syncServer {
 		io.WriteString(w, `{}`)
 	})
 	mux.HandleFunc("POST /1/boards/{id}/cards", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Location", s.URL+"/1/cards/90.json")
+		s.mu.Lock()
+		noLocation := s.noLocation
+		s.mu.Unlock()
+		if !noLocation {
+			w.Header().Set("Location", s.URL+"/1/cards/90.json")
+		}
 		w.WriteHeader(http.StatusCreated)
 	})
 	mux.HandleFunc("POST /1/cards/{n}/steps", func(w http.ResponseWriter, r *http.Request) {
@@ -124,9 +144,18 @@ func newSyncServer(t *testing.T) *syncServer {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := r.Method + " " + r.URL.Path
 		s.mu.Lock()
-		s.calls = append(s.calls, r.Method+" "+r.URL.Path)
+		s.calls = append(s.calls, call)
+		failing := s.fail[call] > 0
+		if failing {
+			s.fail[call]--
+		}
 		s.mu.Unlock()
+		if failing {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
 		mux.ServeHTTP(w, r)
 	}))
 	t.Cleanup(s.Close)
