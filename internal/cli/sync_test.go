@@ -81,6 +81,9 @@ type syncServer struct {
 	fail map[string]int
 	// noLocation makes the card create reply 201 with no Location header.
 	noLocation bool
+	// afterWrite changes the served card after a write "METHOD /path"
+	// succeeds, the way the real server would.
+	afterWrite map[string]func(*cardState)
 }
 
 // failNext makes the next n requests "METHOD /path" fail with HTTP 500.
@@ -157,6 +160,11 @@ func newSyncServer(t *testing.T) *syncServer {
 			return
 		}
 		mux.ServeHTTP(w, r)
+		s.mu.Lock()
+		if f := s.afterWrite[call]; f != nil {
+			f(&s.state)
+		}
+		s.mu.Unlock()
 	}))
 	t.Cleanup(s.Close)
 	return s
@@ -249,7 +257,7 @@ func syncHas(list []string, s string) bool {
 
 func TestSyncAddsTicksAndKeepsExtras(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
-	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +277,7 @@ func TestSyncAddsTicksAndKeepsExtras(t *testing.T) {
 
 func TestSyncPruneDeletesOnlyUnticked(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
-	if _, err := syncDraft(fz, d, cfg.InboxPath(), true, false); err != nil {
+	if _, err := syncDraft(fz, d, cfg.InboxPath(), true, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	var deletes []string
@@ -288,7 +296,7 @@ func TestSyncRefusesFizzySideEdits(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv, fz, cfg, d := syncFixture(t, syncDraftText)
 			srv.edit(edit)
-			_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+			_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 			want := "gate.md: card #87 changed in Fizzy since the last sync; check it, then rerun with --force"
 			if err == nil || err.Error() != want {
 				t.Fatalf("err = %v, want %q", err, want)
@@ -303,7 +311,7 @@ func TestSyncRefusesFizzySideEdits(t *testing.T) {
 func TestSyncForceOverridesChangedCard(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
 	srv.edit(fizzyEdits["description"])
-	if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true); err != nil {
+	if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !syncHas(srv.writes(), "PUT /1/cards/87") {
@@ -314,7 +322,7 @@ func TestSyncForceOverridesChangedCard(t *testing.T) {
 func TestSyncMissingSyncedNeedsForce(t *testing.T) {
 	text := strings.Replace(syncDraftText, "synced: FINGERPRINT\n", "", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
-	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	want := "gate.md: no synced: line, so changes made in Fizzy cannot be detected; rerun with --force"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v, want %q", err, want)
@@ -333,14 +341,14 @@ func TestSyncUnknownSyncedNeedsForce(t *testing.T) {
 	} {
 		text := strings.Replace(syncDraftText, "FINGERPRINT", value, 1)
 		srv, fz, cfg, d := syncFixture(t, text)
-		_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+		_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 		if err == nil || err.Error() != want {
 			t.Errorf("%s: err = %v, want %q", value, err, want)
 		}
 		if w := srv.writes(); len(w) != 0 {
 			t.Errorf("%s: writes reached the server: %q", value, w)
 		}
-		if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true); err != nil {
+		if _, err := syncDraft(fz, d, cfg.InboxPath(), false, true, nil); err != nil {
 			t.Errorf("%s: --force: %v", value, err)
 		}
 	}
@@ -349,7 +357,7 @@ func TestSyncUnknownSyncedNeedsForce(t *testing.T) {
 func TestSyncPruneRemovesMissingTags(t *testing.T) {
 	text := strings.Replace(syncDraftText, "tags: buy\n", "tags: hinge\n", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
-	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +377,7 @@ func TestSyncPruneRemovesMissingTags(t *testing.T) {
 func TestSyncMovesColumnAndGolden(t *testing.T) {
 	text := strings.Replace(syncDraftText, "column: Maybe?\n", "column: Not now\ngolden: true\n", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
-	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +416,7 @@ func TestSyncLaneTellsNotNowFromMaybe(t *testing.T) {
 				t.Fatal(err)
 			}
 			fz := &fizzy.Fizzy{C: client.New(cfg, false, io.Discard)}
-			report, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+			report, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -621,7 +629,7 @@ func TestSyncPruneKeepsTagWrittenDifferently(t *testing.T) {
 	// "#Buy" normalizes to the same tag as "buy", so the fingerprint, and
 	// with it the guard, does not see a change.
 	srv.edit(func(c *cardState) { c.tags = `["#Buy"]` })
-	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -752,7 +760,7 @@ func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
 	text = strings.Replace(text, "Gate latches.\n", "Gate latches.\n\n![the gap](gap.png)\n", 1)
 	srv, fz, cfg, d := syncFixture(t, text)
 	writeFile(t, filepath.Join(filepath.Dir(d.Path), "gap.png"), "png")
-	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err == nil {
 		t.Fatal("an incomplete upload reply did not fail the sync")
 	}
@@ -768,7 +776,7 @@ func TestSyncFailedUploadWritesNothingElse(t *testing.T) {
 func TestSyncReportsExtraCardTagWithoutPrune(t *testing.T) {
 	srv, fz, cfg, d := syncFixture(t, syncDraftText)
 	srv.edit(func(st *cardState) { st.tags = `["buy","extra"]` })
-	report, err := syncDraft(fz, d, cfg.InboxPath(), false, true)
+	report, err := syncDraft(fz, d, cfg.InboxPath(), false, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

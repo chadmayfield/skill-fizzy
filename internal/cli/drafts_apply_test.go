@@ -256,3 +256,67 @@ func TestApplyBatchStopsAndSummarizes(t *testing.T) {
 		t.Errorf("%d creates for 3 drafts, want 3: %q", n, srv.writes())
 	}
 }
+
+// TestApplyUpdatePartialFailure checks a --update that fails after some
+// writes went through: those writes are printed, synced: is recorded from
+// a fresh read, and the next --update needs no --force and sends the rest.
+func TestApplyUpdatePartialFailure(t *testing.T) {
+	srv := newSyncServer(t)
+	srv.afterWrite = map[string]func(*cardState){
+		"PUT /1/cards/87": func(c *cardState) { c.desc = "<p>Gate latches.</p><p>Sent by fz.</p>" },
+	}
+	path := filepath.Join(t.TempDir(), "gate.md")
+	writeFile(t, path, srv.draft(t, syncDraftText))
+	srv.failNext("POST /1/cards/87/steps", 1)
+	got := syncRun(t, srv, "draft", "apply", "--update", path)
+	if got.code != 1 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	if got.stdout != "#87 title and description sent\n" {
+		t.Errorf("stdout = %q", got.stdout)
+	}
+	for _, want := range []string{"card #87", "HTTP 500", "fz draft apply --update " + path} {
+		if !strings.Contains(got.stderr, want) {
+			t.Errorf("stderr lacks %q:\n%s", want, got.stderr)
+		}
+	}
+	if text := syncReadDraft(t, path); !strings.Contains(text, "\nsynced: "+srv.fingerprint(t)+"\n") {
+		t.Errorf("synced: is not the fresh fingerprint %s:\n%s", srv.fingerprint(t), text)
+	}
+	retry := syncRun(t, srv, "draft", "apply", "--update", path)
+	if retry.code != 0 || !strings.Contains(retry.stdout, "#87 step added: Order the hinge\n") {
+		t.Errorf("retry without --force: %+v", retry)
+	}
+}
+
+// TestApplyUpdateRefusalRecordsNothing checks that a refusal before any
+// write never re-records synced:, which would turn the guard off.
+func TestApplyUpdateRefusalRecordsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	srv.columns = `[{"id":"c-done","name":"Done"}]`
+	path := filepath.Join(t.TempDir(), "gate.md")
+	text := srv.draft(t, strings.Replace(syncDraftText, "column: Maybe?\n", "column: Done\n", 1))
+	writeFile(t, path, text)
+	got := syncRun(t, srv, "draft", "apply", "--update", path)
+	if got.code != 2 {
+		t.Fatalf("exit %d: %s", got.code, got.stderr)
+	}
+	if w := srv.writes(); len(w) != 0 {
+		t.Errorf("writes: %q", w)
+	}
+	if syncReadDraft(t, path) != text {
+		t.Error("a refused update changed the draft")
+	}
+}
+
+func TestApplyHelpDoesNotPairPruneWithForce(t *testing.T) {
+	cmd, _, err := NewRoot().Find([]string{"draft", "apply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(cmd.Example, "\n") {
+		if strings.Contains(line, "--prune") && strings.Contains(line, "--force") {
+			t.Errorf("example pairs --prune with --force: %q", line)
+		}
+	}
+}

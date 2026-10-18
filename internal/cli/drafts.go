@@ -60,7 +60,7 @@ func addDraftCommands(root *cobra.Command) {
 			"If the card changed in Fizzy since then, or the draft has no synced: fingerprint, --update refuses that draft unless --force is given. " +
 			"The refusal names the fields that changed when synced-fields: is there.",
 		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
-			"fz draft apply --update gate.md", "fz draft apply --update --prune --force gate.md"),
+			"fz draft apply --update gate.md", "fz draft apply --update --prune gate.md"),
 		Args: args(cobra.MinimumNArgs(1)),
 		RunE: action(draftApply),
 	}
@@ -471,16 +471,32 @@ func draftApply(c *cmdContext, a []string) error {
 				fmt.Fprintf(w, "skip %s: already card #%d (use --update to push changes)\n", name, d.Card)
 				continue
 			}
-			report, err := syncDraft(fz, d, cfg.InboxPath(), prune, force)
-			if err != nil {
-				summary[i] = fmt.Sprintf("%s: card #%d, update not finished", name, d.Card)
-				return failApply(c, err, summary)
-			}
-			for _, line := range report {
+			say := func(line string) {
 				if c.dryRun {
 					line = dryRunLine(line)
 				}
 				fmt.Fprintf(w, "#%d %s\n", d.Card, line)
+			}
+			_, err := syncDraft(fz, d, cfg.InboxPath(), prune, force, say)
+			var partial *partialSync
+			if errors.As(err, &partial) && !c.dryRun {
+				summary[i] = fmt.Sprintf("%s: card #%d, update not finished", name, d.Card)
+				// The writes printed above went through. Record synced: from
+				// the card as it is now, so the retry needs no --force; the
+				// draft's changes not yet sent still differ from the card,
+				// so the retry sends them.
+				finish := "fz draft apply --update " + shellArg(d.Path)
+				msg := fmt.Errorf("card #%d: the update stopped partway: %w\nfz: synced: is recorded from the card as it is now. Finish it with: %s",
+					d.Card, err, finish)
+				if rerr := recordSynced(fz, d.Path, d.Card); rerr != nil {
+					msg = fmt.Errorf("card #%d: the update stopped partway: %w\nfz: reading the card back failed (%s), so synced: is unchanged; check the card, then finish it with: %s --force",
+						d.Card, err, errorText(rerr), finish)
+				}
+				return failApply(c, msg, summary)
+			}
+			if err != nil {
+				summary[i] = fmt.Sprintf("%s: card #%d, not updated", name, d.Card)
+				return failApply(c, err, summary)
 			}
 			if !c.dryRun {
 				if err := recordSynced(fz, d.Path, d.Card); err != nil {

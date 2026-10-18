@@ -908,6 +908,11 @@ something other than a fingerprint, because it cannot tell what changed.
 `apply --update` checks every draft before it writes anything, so one refused
 draft stops the whole run and nothing is half applied.
 
+If a write fails partway through an update, `fz` has already printed each
+write that went through. It reads the card again, records `synced:` and
+`synced-fields:` from that read and exits 1. Run `fz draft apply --update
+FILE` again to send the rest. It needs no `--force`.
+
 ## The skill
 
 The fizzy-cards skill lets Claude Code build cards with you. It needs only

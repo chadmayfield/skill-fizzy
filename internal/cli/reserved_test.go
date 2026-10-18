@@ -106,7 +106,7 @@ func TestSyncToReservedColumnNameRefuses(t *testing.T) {
 	srv.mu.Lock()
 	srv.columns = `[{"id":"c-done","name":"Done"}]`
 	srv.mu.Unlock()
-	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false)
+	_, err := syncDraft(fz, d, cfg.InboxPath(), false, false, nil)
 	if err == nil || !strings.Contains(err.Error(), "the board has a column named 'Done'") {
 		t.Errorf("err = %v", err)
 	}
