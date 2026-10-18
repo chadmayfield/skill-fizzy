@@ -29,7 +29,7 @@ func addBoardCommands(root *cobra.Command) {
 	create := &cobra.Command{
 		Use:     "create NAME",
 		Short:   "create a board",
-		Long:    "Create a board, then set its auto-postpone period and custom columns.",
+		Long:    "Create a board, then set its auto-postpone period and custom columns. An empty or blank name exits 2 and sends nothing.",
 		Example: examples("fz board create Garden --postpone 365 --columns Later,Next,Now"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardCreate),
@@ -93,6 +93,10 @@ func postponeDays(c *cmdContext) (int, error) {
 }
 
 func boardCreate(c *cmdContext, a []string) error {
+	name := strings.TrimSpace(a[0])
+	if err := checkName("the board name", name); err != nil {
+		return err
+	}
 	days, err := postponeDays(c)
 	if err != nil {
 		return err
@@ -101,7 +105,7 @@ func boardCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	id, err := fz.CreateBoard(a[0], days)
+	id, err := fz.CreateBoard(name, days)
 	if err != nil {
 		return err
 	}
@@ -120,7 +124,7 @@ func boardCreate(c *cmdContext, a []string) error {
 		}
 	}
 	return emit(c.cmd, obj{{"id", orNull(id)}, {"columns", cols}},
-		fmt.Sprintf("board %s created: %s", pyRepr(a[0]), orNone(id)))
+		fmt.Sprintf("board %s created: %s", pyRepr(name), orNone(id)))
 }
 
 func columnList(c *cmdContext, a []string) error {

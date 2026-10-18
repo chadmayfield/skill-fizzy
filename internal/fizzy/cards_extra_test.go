@@ -191,8 +191,10 @@ func TestAddBoostLength(t *testing.T) {
 	if _, err := f.AddBoost(87, strings.Repeat("a", 17)); err == nil || !strings.Contains(err.Error(), "this one is 17") {
 		t.Errorf("17 letters: %v", err)
 	}
-	if _, err := f.AddBoost(87, ""); err == nil {
-		t.Error("empty boost accepted")
+	for _, blank := range []string{"", "    "} {
+		if _, err := f.AddBoost(87, blank); !IsRefusal(err) || err.Error() != "a boost cannot be empty" {
+			t.Errorf("blank boost %q: %v", blank, err)
+		}
 	}
 	if len(s.calls) != 0 {
 		t.Errorf("sent %d calls for a bad boost", len(s.calls))

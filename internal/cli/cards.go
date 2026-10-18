@@ -63,7 +63,7 @@ func addCardCommands(root *cobra.Command) {
 	create := &cobra.Command{
 		Use:     "create BOARD TITLE",
 		Short:   "create a card",
-		Long:    "Create a card on a board. It lands in Maybe? unless --column names another lane.",
+		Long:    "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing.",
 		Example: examples(`fz card create Home "Fix the gate"`, `fz card create Home "Fix the gate" --column Next --tag buy`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardCreate),
@@ -281,6 +281,9 @@ func isMaybe(column string) bool {
 
 func cardCreate(c *cmdContext, a []string) error {
 	fl := c.cmd.Flags()
+	if err := checkName("the card title", a[1]); err != nil {
+		return err
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err

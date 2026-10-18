@@ -146,14 +146,19 @@ func (f *Fizzy) Boosts(n int) ([]Boost, error) {
 	return list[Boost](f.C, "/cards/"+strconv.Itoa(n)+"/reactions")
 }
 
-// CheckBoost returns an error when text is empty or longer than Fizzy
-// stores.
-func CheckBoost(text string) error {
-	if text == "" {
-		return refusef("a boost needs some text")
+// CheckBoost returns a Refusal when text is empty, only spaces, or longer
+// than Fizzy stores.
+func CheckBoost(text string) error { return checkReactionText("a boost", text) }
+
+// CheckReaction applies the CheckBoost rule to a comment reaction.
+func CheckReaction(text string) error { return checkReactionText("a reaction", text) }
+
+func checkReactionText(what, text string) error {
+	if strings.TrimSpace(text) == "" {
+		return refusef("%s cannot be empty", what)
 	}
 	if l := BoostLength(text); l > MaxBoostChars {
-		return refusef("a boost is at most %d characters; this one is %d", MaxBoostChars, l)
+		return refusef("%s is at most %d characters; this one is %d", what, MaxBoostChars, l)
 	}
 	return nil
 }

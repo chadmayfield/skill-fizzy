@@ -29,6 +29,9 @@ func commentAdd(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkName("the comment text", a[1]); err != nil {
+		return err
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err

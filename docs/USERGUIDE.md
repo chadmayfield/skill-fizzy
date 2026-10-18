@@ -185,7 +185,7 @@ and JSON as the Python fz did.
 |---|---|
 | 0 | Success. |
 | 1 | An API, config or draft error. The message says which. |
-| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, and an empty or blank name, and sends nothing. |
+| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, a USER that matches nobody, and an empty or blank name, title, step, comment, boost or reaction, and sends nothing. |
 
 ### Boards
 
@@ -502,8 +502,8 @@ fz comment reactions 87 03abc123def456ghi789jkl0mn
 fz comment unreact 87 03abc123def456ghi789jkl0mn 03def456ghi789jkl0mn123abc
 ```
 
-A reaction is at most 16 characters, counted as boosts are. Empty or longer
-text exits 2 and sends nothing. Fizzy does not send back the new
+A reaction is at most 16 characters, counted as boosts are. Empty, blank or
+longer text exits 2 and sends nothing. Fizzy does not send back the new
 reaction's id, so `comment react` prints the comment id, and its `--json`
 output holds the comment id and the text. `comment reactions` prints each
 reaction's id, who reacted and the text. `comment unreact` removes your own

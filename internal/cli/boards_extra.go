@@ -153,6 +153,7 @@ func boardEdit(c *cmdContext, a []string) error {
 	var changed []string
 	if fl.Changed("name") {
 		name, _ := fl.GetString("name")
+		name = strings.TrimSpace(name)
 		if err := checkName("--name", name); err != nil {
 			return err
 		}

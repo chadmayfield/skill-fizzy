@@ -164,10 +164,13 @@ func userShow(c *cmdContext, a []string) error {
 
 func userEdit(c *cmdContext, a []string) error {
 	fl := c.cmd.Flags()
+	if !fl.Changed("name") {
+		return usagef("user edit needs --name")
+	}
 	name, _ := fl.GetString("name")
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return usagef("user edit needs --name")
+	if err := checkName("--name", name); err != nil {
+		return err
 	}
 	yes, _ := fl.GetBool("yes")
 	fz, err := c.api()

@@ -229,12 +229,13 @@ func refuseWithoutYes(c *cmdContext, summary string) error {
 
 func webhookCreate(c *cmdContext, a []string) error {
 	name, _ := c.cmd.Flags().GetString("name")
+	name = strings.TrimSpace(name)
 	hookURL, _ := c.cmd.Flags().GetString("url")
 	actions := splitActions(flagValue(c.cmd, "actions"))
 	switch {
-	case name == "":
+	case !c.cmd.Flags().Changed("name"):
 		return usagef("--name is required")
-	case strings.TrimSpace(name) == "":
+	case name == "":
 		return checkName("--name", name)
 	case hookURL == "":
 		return usagef("--url is required")
@@ -281,6 +282,7 @@ func webhookEdit(c *cmdContext, a []string) error {
 	var name *string
 	if c.cmd.Flags().Changed("name") {
 		n, _ := c.cmd.Flags().GetString("name")
+		n = strings.TrimSpace(n)
 		if err := checkName("--name", n); err != nil {
 			return err
 		}

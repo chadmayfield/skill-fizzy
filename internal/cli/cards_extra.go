@@ -55,7 +55,7 @@ func addCardExtraCommands(root *cobra.Command) {
 		Use:   "boost NUMBER TEXT",
 		Short: "add a boost to a card",
 		Long: fmt.Sprintf("Add a boost, a short reaction, to a card. TEXT is at most %d characters. "+
-			"fz counts characters as Fizzy does, one per Unicode code point, and refuses longer text before sending.", fizzy.MaxBoostChars),
+			"fz counts characters as Fizzy does, one per Unicode code point, and refuses empty, blank or longer text before sending.", fizzy.MaxBoostChars),
 		Example: examples(`fz card boost 87 "Nice hinge"`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardBoost),
