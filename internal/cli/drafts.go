@@ -809,16 +809,25 @@ func lockPath(p string) string {
 	return filepath.Join(filepath.Dir(key), "."+filepath.Base(key)+".fzlock")
 }
 
-// lockDrafts creates the apply lock of each existing draft in paths with
-// O_EXCL and returns a function that removes the locks it made. A lock that
-// already exists is a Refusal that names it. A folder where no lock can be
-// made is left unlocked: fz cannot write the draft there either, and
-// CheckWritable refuses it before anything is sent.
+// errLockHeld is acquireLock's error for a lock another apply holds.
+var errLockHeld = errors.New("lock held")
+
+// errLockUnsafe is acquireLock's error for a lock path that is not a
+// regular file, such as a planted symlink.
+var errLockUnsafe = errors.New("lock path unsafe")
+
+// lockDrafts takes the apply lock of each existing draft in paths and
+// returns a function that releases the locks it took and removes their
+// files. acquireLock, per system, takes one lock. A lock another apply
+// holds, or a lock path that is not a regular file, is a Refusal that
+// names it. A folder where no lock can be made is left unlocked: fz cannot
+// write the draft there either, and CheckWritable refuses it before
+// anything is sent.
 func lockDrafts(paths []string) (func(), error) {
-	var held []string
+	var held []func()
 	unlock := func() {
-		for _, l := range held {
-			os.Remove(l)
+		for _, release := range held {
+			release()
 		}
 	}
 	for _, p := range paths {
@@ -826,18 +835,20 @@ func lockDrafts(paths []string) (func(), error) {
 			continue
 		}
 		l := lockPath(p)
-		f, err := os.OpenFile(l, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if errors.Is(err, os.ErrExist) {
+		release, err := acquireLock(l)
+		switch {
+		case errors.Is(err, errLockHeld):
 			unlock()
-			return nil, fizzy.Refuse(fmt.Sprintf("%s: another fz draft apply holds the lock %s, so fz sends nothing. "+
-				"If no apply is running, the lock was left by one that stopped: check the draft's front matter, then delete the lock", p, l))
+			return nil, fizzy.Refuse(fmt.Sprintf("%s: another fz draft apply holds the lock %s, so fz sends nothing. %s", p, l, staleLockHelp))
+		case errors.Is(err, errLockUnsafe):
+			unlock()
+			return nil, fizzy.Refuse(fmt.Sprintf("%s: the lock path %s is not a regular file, so fz sends nothing. Delete it, then rerun", p, l))
+		case err != nil:
+			unlock()
+			return nil, fmt.Errorf("%s: taking the lock %s failed: %w", p, l, err)
+		case release != nil:
+			held = append(held, release)
 		}
-		if err != nil {
-			continue
-		}
-		fmt.Fprintf(f, "%d\n", os.Getpid())
-		f.Close()
-		held = append(held, l)
 	}
 	return unlock, nil
 }

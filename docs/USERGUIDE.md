@@ -958,9 +958,14 @@ fz draft apply ~/.fizzy-inbox/drafts/
 - While it runs, `apply` holds a lock file beside each draft it may write,
   `.<name>.fzlock`, such as `.gate.md.fzlock`, and removes it at the end. A
   second `apply` of the same draft at the same time exits 2, names the lock
-  and sends nothing. If no apply is running, the lock was left by one that
-  stopped. Check the draft's front matter, then delete the lock. A dry run
-  takes no lock.
+  and sends nothing. A dry run takes no lock.
+- On macOS, Linux and the BSDs the lock is a `flock(2)` on that file, and
+  the system drops it when `fz` exits, even after Ctrl-C or `kill -9`. A lock
+  file left behind by a stopped apply does not block the next one. Check the
+  draft's front matter for a `creating:` line all the same. On other systems
+  the lock is the file itself. If no apply is running there, the lock was
+  left by one that stopped: check the draft's front matter, then delete the
+  lock.
 - If one of those later calls fails, `apply` exits 1. The message names the
   card, says what was not sent, and gives the command that finishes it,
   `fz draft apply --update FILE`. A run over several drafts stops at the
