@@ -74,6 +74,10 @@ The workflow attests the archives with GitHub build provenance. The step
 runs only on a public repository, so v0.1.0-rc.1, released while the
 repository was private, has no attestation.
 
+Before tagging, add a row to the Compatibility table in README.md: the last
+commit that changed Fizzy's `docs/api`, and the Fizzy commit you tested
+against, each with its date. Put the same line in the release notes.
+
 `make dist` is reproducible. The build date is the commit time, or
 `SOURCE_DATE_EPOCH` when it is set, so two builds of one commit with the
 same Go, tar and gzip give the same checksums.

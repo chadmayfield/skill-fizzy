@@ -56,6 +56,18 @@ fz draft apply --update gate.md
 Add `--dry-run` before any command to print its writes instead of sending
 them. `fz help` lists the commands.
 
+## Compatibility
+
+Fizzy's API has no version number, so this table names Fizzy commits.
+
+| fz | Fizzy API docs | Tested against |
+|---|---|---|
+| v0.1.0 | [`7e4b5e5`](https://github.com/basecamp/fizzy/commit/7e4b5e5532819df8bb59a11502ed2e36f3eb9160) (2026-09-10) | Fizzy built from [`663a92d`](https://github.com/basecamp/fizzy/commit/663a92d05f4486d74ce69d5dba8267fa19593c08) (2026-10-14) |
+
+The API docs column is the last change to Fizzy's `docs/api` that `fz`
+follows. A newer Fizzy usually works. If Fizzy's API docs change after that
+commit, check this table and the release notes.
+
 ## More
 
 These two come with every release archive:
