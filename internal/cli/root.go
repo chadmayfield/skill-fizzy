@@ -61,7 +61,7 @@ func NewRoot() *cobra.Command {
 	})
 	root.PersistentFlags().Bool("dry-run", false, "show what would change without sending it")
 	root.PersistentFlags().Bool("json", false, "print JSON instead of text")
-	root.PersistentFlags().String("config", "", "path to the config file")
+	root.PersistentFlags().String("config", "", "path to a regular JSON config file of at most 1 MiB")
 	for _, f := range registrations {
 		f(root)
 	}

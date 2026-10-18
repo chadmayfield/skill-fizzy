@@ -22,8 +22,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
+
+const maxConfigBytes = 1 << 20
 
 // tokenCmdTimeout caps how long the token command may run.
 var tokenCmdTimeout = 30 * time.Second
@@ -185,12 +188,18 @@ func readChecked(f *os.File, path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
 	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%w: %s is not a regular file, so fz does not read it", ErrConfig, path)
+	}
 	if err := checkFileInfo(path, fi); err != nil {
 		return nil, err
 	}
-	raw, err := io.ReadAll(f)
+	raw, err := io.ReadAll(io.LimitReader(f, maxConfigBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
+	}
+	if len(raw) > maxConfigBytes {
+		return nil, fmt.Errorf("%w: %s is larger than 1 MiB; fz reads at most 1 MiB from a config file", ErrConfig, path)
 	}
 	return raw, nil
 }
@@ -273,7 +282,7 @@ func readConfig(path string) (map[string]any, string, error) {
 	path = ExpandTilde(path)
 
 	data := map[string]any{}
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	switch {
 	case err == nil:
 		raw, err := readChecked(f, path)

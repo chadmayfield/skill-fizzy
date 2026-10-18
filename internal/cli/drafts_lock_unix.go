@@ -19,8 +19,8 @@ const staleLockHelp = "Wait for it to finish, then rerun"
 // exits, even on SIGKILL, so a file left by a killed apply does not block
 // the next one. The returned function removes the file and then closes it.
 // It returns errLockHeld when another process holds the flock, and
-// errLockUnsafe when l is a symlink or not a regular file. A nil function
-// and nil error mean the folder cannot hold a lock.
+// errLockUnsafe when l is a symlink, is not regular or has multiple hard
+// links. A nil function and nil error mean the folder cannot hold a lock.
 func acquireLock(l string) (func(), error) {
 	for range 5 {
 		f, err := os.OpenFile(l, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
@@ -32,6 +32,10 @@ func acquireLock(l string) (func(), error) {
 		}
 		fi, err := f.Stat()
 		if err != nil || !fi.Mode().IsRegular() {
+			f.Close()
+			return nil, errLockUnsafe
+		}
+		if stat, ok := fi.Sys().(*syscall.Stat_t); ok && stat.Nlink > 1 {
 			f.Close()
 			return nil, errLockUnsafe
 		}

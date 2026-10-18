@@ -155,6 +155,35 @@ func TestApplyLockRefusesSymlink(t *testing.T) {
 	}
 }
 
+// TestApplyLockRefusesHardLink keeps drafts and unrelated linked files intact.
+func TestApplyLockRefusesHardLink(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gate.md")
+	text := "---\nboard: Home\n---\n# Fix the gate\n"
+	writeFile(t, path, text)
+	for _, target := range []string{path, filepath.Join(dir, "hinge.txt")} {
+		t.Run(filepath.Base(target), func(t *testing.T) {
+			if target != path {
+				writeFile(t, target, text)
+			}
+			lock := filepath.Join(dir, ".gate.md.fzlock")
+			if err := os.Link(target, lock); err != nil {
+				t.Fatal(err)
+			}
+			defer os.Remove(lock)
+			got := syncRun(t, srv, "draft", "apply", path)
+			if got.code != 2 || len(srv.writes()) != 0 {
+				t.Errorf("result %+v, writes %q", got, srv.writes())
+			}
+			data, err := os.ReadFile(target)
+			if err != nil || string(data) != text {
+				t.Fatalf("linked file changed: %q, %v", data, err)
+			}
+		})
+	}
+}
+
 // A lock file that no process holds, such as one left by a crash, does not
 // block the apply, and the apply removes it at the end.
 func TestApplyLockStaleFileIgnored(t *testing.T) {

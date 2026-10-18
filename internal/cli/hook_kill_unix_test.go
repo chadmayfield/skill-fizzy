@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -14,6 +15,48 @@ import (
 	"testing"
 	"time"
 )
+
+// TestPythonHookBoundsRegularMap limits map size and time spent parsing JSON.
+func TestPythonHookBoundsRegularMap(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is not on PATH")
+	}
+	fixture := newHookFixture(t)
+	program := `import runpy, sys, time
+hook = runpy.run_path(sys.argv[1], run_name="fizzy_hook_test")
+namespace = hook["read_map"].__globals__
+namespace["DEADLINE"] = time.monotonic() + 0.2
+if sys.argv[2] == "slow":
+    original = namespace["json"].loads
+    def slow_loads(*args, **kwargs):
+        time.sleep(5)
+        return original(*args, **kwargs)
+    namespace["json"].loads = slow_loads
+try:
+    hook["read_map"]()
+except TimeoutError:
+    sys.exit(0 if sys.argv[2] == "slow" else 2)
+except ValueError:
+    sys.exit(0 if sys.argv[2] == "large" else 2)
+sys.exit(3)
+`
+	for _, mode := range []string{"slow", "large"} {
+		t.Run(mode, func(t *testing.T) {
+			text := hookMap
+			if mode == "large" {
+				text = strings.Repeat(" ", 1<<20) + text
+			}
+			writeFile(t, fixture.mapPath, text)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, "python3", "-I", "-c", program, fixture.script, mode)
+			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + fixture.home, "FIZZY_REPOS_MAP=" + fixture.mapPath}
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("map %s: %v, %s", mode, err, out)
+			}
+		})
+	}
+}
 
 // hungTokenCmd is a token command that never prints, with a child of its
 // own. Both write their pids to pidFile.
@@ -123,4 +166,68 @@ func TestPythonHookKillsHungFz(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 	checkPidsDead(t, pids)
+}
+
+// The Python hook's limit covers stdin and the map. A stdin left open, or a
+// named pipe at the map's path, prints nothing and ends the hook near the
+// limit, not later. The fixture's copy has a 60 second limit, so this test
+// runs one with 1 second.
+func TestPythonHookLimitCoversStdinAndMap(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is not on PATH")
+	}
+	f := newHookFixture(t)
+	src, err := os.ReadFile(f.script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(t.TempDir(), "fizzy-session-hook.py")
+	writeFile(t, script, strings.Replace(string(src), "TIMEOUT = 60", "TIMEOUT = 1", 1))
+	fifo := filepath.Join(f.root, "repos-fifo.json")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, mapPath string
+		openStdin     bool
+	}{
+		{"stdin left open", f.mapPath, true},
+		{"map is a named pipe", fifo, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command("python3", "-I", script)
+			cmd.Dir = f.root
+			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + f.home, "FIZZY_REPOS_MAP=" + tc.mapPath, "FIZZY_FZ=" + f.fakeFz}
+			if tc.openStdin {
+				w, err := cmd.StdinPipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer w.Close()
+			} else {
+				cmd.Stdin = strings.NewReader(`{"cwd":"` + filepath.Join(f.root, "gatehouse") + `"}`)
+			}
+			var out strings.Builder
+			cmd.Stdout = &out
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			start := time.Now()
+			done := make(chan error, 1)
+			go func() { done <- cmd.Wait() }()
+			select {
+			case err := <-done:
+				if err != nil || out.String() != "" {
+					t.Errorf("err %v, stdout %q", err, out.String())
+				}
+				if d := time.Since(start); d > 3*time.Second {
+					t.Errorf("took %v, want about 1 s", d)
+				}
+			case <-time.After(6 * time.Second):
+				_ = cmd.Process.Kill()
+				<-done
+				t.Fatal("the hook ran past its limit")
+			}
+		})
+	}
 }

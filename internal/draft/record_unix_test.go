@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // The rewrite keeps the draft's mode and group. A user in more than one
@@ -69,5 +70,27 @@ func TestRecordFieldsRefusesHardLinks(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(dir, "hinge.md"))
 	if string(raw) != "---\nboard: Home\n---\n# Fix the gate\n" {
 		t.Errorf("hinge.md = %q", raw)
+	}
+}
+
+// A named pipe with no writer is refused at once, not waited on, and the
+// error matches ErrDraft.
+func TestReadCappedRefusesPipe(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "gate.md")
+	if err := syscall.Mkfifo(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := ReadCapped(p)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrDraft) || err.Error() != p+" is not a regular file, so fz does not read it" {
+			t.Errorf("err %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReadCapped blocked on a named pipe")
 	}
 }

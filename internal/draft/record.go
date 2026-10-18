@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // ErrLinked is matched by errors.Is when a draft has more than one hard
@@ -33,13 +34,22 @@ func (e *tooLargeError) Is(target error) bool {
 }
 
 // ReadCapped reads a whole file of at most MaxFileBytes. A larger file is
-// an ErrTooLarge error that names the path and the cap.
+// an ErrTooLarge error that names the path and the cap. A path that is not
+// a regular file, such as a named pipe, is an ErrDraft error. The open does
+// not block, so a pipe with no writer cannot hold fz.
 func ReadCapped(path string) ([]byte, error) {
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, errf("%s is not a regular file, so fz does not read it", path)
+	}
 	raw, err := io.ReadAll(io.LimitReader(f, MaxFileBytes+1))
 	if err != nil {
 		return nil, err
@@ -187,10 +197,16 @@ func rewriteFront(path string, drop []string, fields []KV) error {
 		return errf("%s: missing front matter", path)
 	}
 	start, end := src.rawAt[m[2]], src.rawAt[m[3]]
+	// dropped reads a line's key the way parseFront does, so "creating :"
+	// is the creating key here too.
 	dropped := func(piece string) bool {
-		lower := strings.ToLower(pyStrip(trimEnding(piece)))
-		for _, k := range drop {
-			if strings.HasPrefix(lower, strings.ToLower(k)+":") {
+		k, _, ok := strings.Cut(trimEnding(piece), ":")
+		if !ok {
+			return false
+		}
+		key := strings.ToLower(pyStrip(k))
+		for _, d := range drop {
+			if key == strings.ToLower(d) {
 				return true
 			}
 		}

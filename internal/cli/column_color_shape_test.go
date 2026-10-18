@@ -84,6 +84,9 @@ func TestStringColorsDraftUpdate(t *testing.T) {
 	srv.edit(func(c *cardState) {
 		c.column = `{"id":"c1","name":"Next","color":{"name":"Blue","value":"var(--color-card-4)"}}`
 	})
+	srv.mu.Lock()
+	srv.columns = `[{"id":"c1","name":"Next","color":{"name":"Blue","value":"var(--color-card-4)"}}]`
+	srv.mu.Unlock()
 	str := stringColors(t, srv.Server)
 	path := filepath.Join(t.TempDir(), "gate.md")
 	writeFile(t, path, srv.draft(t, strings.Replace(syncDraftText, "column: Maybe?", "column: Next", 1)))

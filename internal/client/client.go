@@ -167,6 +167,42 @@ func redactErr(err error) error {
 	return err
 }
 
+// redactErrHost names only the storage origin and a generic error.
+// Nested diagnostics can echo signing keys from redirect headers.
+func redactErrHost(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		shown := "(unparsable URL)"
+		if u, perr := url.Parse(ue.URL); perr == nil {
+			shown = (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
+		}
+		return &url.Error{Op: ue.Op, URL: shown, Err: storageRequestError{ue.Err}}
+	}
+	return storageRequestError{err}
+}
+
+type storageRequestError struct{ err error }
+
+// Error hides storage diagnostics that may carry signing details.
+func (e storageRequestError) Error() string {
+	if e.Timeout() {
+		return "storage request timed out"
+	}
+	if errors.Is(e.err, context.Canceled) {
+		return "storage request canceled"
+	}
+	return "storage request failed"
+}
+
+// Unwrap preserves the underlying cause for errors.Is and errors.As.
+func (e storageRequestError) Unwrap() error { return e.err }
+
+// Timeout reports whether the underlying storage failure timed out.
+func (e storageRequestError) Timeout() bool {
+	var timeout interface{ Timeout() bool }
+	return errors.As(e.err, &timeout) && timeout.Timeout()
+}
+
 // ErrUnsafeID is the error IDFromLocation returns for an id that holds
 // whitespace, a control character or a format character. Such an id could
 // split a printed line or a URL path, so fz never uses it.
@@ -435,9 +471,13 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 		ctx, cancelAt = context.WithDeadline(ctx, o.deadline)
 		defer cancelAt()
 	}
+	redact := redactErr
+	if o.logHost {
+		redact = redactErrHost
+	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
-		return 0, nil, nil, redactErr(err)
+		return 0, nil, nil, redact(err)
 	}
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
@@ -455,7 +495,7 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 		if isWrite {
 			c.logAction(method, logPath, 0)
 		}
-		return 0, nil, nil, redactErr(err)
+		return 0, nil, nil, redact(err)
 	}
 	defer resp.Body.Close()
 	if isWrite {
@@ -467,7 +507,7 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody+1))
 	if err != nil {
-		return resp.StatusCode, resp.Header, nil, redactErr(err)
+		return resp.StatusCode, resp.Header, nil, redact(err)
 	}
 	if len(payload) > MaxBody {
 		return resp.StatusCode, resp.Header, nil, fmt.Errorf("%s %s: the response is larger than 32 MiB", method, logPath)

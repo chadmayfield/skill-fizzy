@@ -36,6 +36,20 @@ func TestColumnLookupAmbiguous(t *testing.T) {
 	}
 }
 
+// Two columns with the same exact name are ambiguous too. The first one is
+// never picked.
+func TestColumnLookupExactDuplicate(t *testing.T) {
+	f, _, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+		io.WriteString(w, `[{"id":"c1","name":"Next"},{"id":"c2","name":"Next"},{"id":"c3","name":"next"}]`)
+	})
+	if _, err := f.Column("b1", "Next"); !IsRefusal(err) || err.Error() != "2 columns are named 'Next'; use the column id" {
+		t.Errorf("duplicate: %v", err)
+	}
+	if c, err := f.Column("b1", "c2"); err != nil || c.ID != "c2" {
+		t.Errorf("by id: %+v %v", c, err)
+	}
+}
+
 func TestFindTagAmbiguous(t *testing.T) {
 	f, _, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
 		io.WriteString(w, `[{"id":"t1","title":"Gate"},{"id":"t2","title":"gate"},{"id":"t3","title":"hinge"}]`)

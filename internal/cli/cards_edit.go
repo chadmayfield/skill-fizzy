@@ -37,7 +37,7 @@ func addCardEditCommand(root *cobra.Command) {
 	}
 	edit.Flags().String("title", "", "new title")
 	edit.Flags().String("description", "", "new description as Markdown")
-	edit.Flags().String("description-file", "", "read the new Markdown description from a file of at most 4 MiB")
+	edit.Flags().String("description-file", "", "read the new Markdown description from a regular file of at most 4 MiB")
 	// --replace takes OLD and NEW, which cobra cannot read as two values of
 	// one flag. The flag takes none, and the two words follow the number.
 	edit.Flags().Bool("replace", false, "swap one phrase in the description; give OLD and NEW after the number")

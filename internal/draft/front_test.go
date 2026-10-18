@@ -101,6 +101,16 @@ func TestTagQuotes(t *testing.T) {
 	}
 }
 
+// TestEmptyTagRefused checks tags after quotes, spaces and hashes are removed.
+func TestEmptyTagRefused(t *testing.T) {
+	for _, value := range []string{`['#']`, `[" "]`, `buy, '#', hinge`, `["##"]`, `['## #']`} {
+		_, err := parseFrontText(t, "tags: "+value)
+		if !errors.Is(err, ErrBadValue) || !strings.Contains(err.Error(), "tag") {
+			t.Errorf("tags %q: %v", value, err)
+		}
+	}
+}
+
 func TestHeadingsInsideFenceAreNotStructure(t *testing.T) {
 	text := "---\nboard: Home\n---\n```text\n# Not the title\n```\n# Fix the gate\n\n```sh\n## Steps\n- [ ] not a step\n```\n\n## Steps\n- [ ] Order the hinge\n"
 	d, err := Parse(writeFile(t, t.TempDir(), "gate.md", text))

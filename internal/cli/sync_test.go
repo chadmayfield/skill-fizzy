@@ -832,3 +832,135 @@ func TestApplyUpdateTagCompareIgnoresHashAndCase(t *testing.T) {
 		}
 	}
 }
+
+// A column the board lacks is found before the create, so draft apply sends
+// nothing and makes no card.
+func TestApplyMissingColumnSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	path := filepath.Join(t.TempDir(), "gate.md")
+	writeFile(t, path, "---\nboard: Home\ncolumn: Missing\n---\n# Fix the gate\n")
+	got := syncRun(t, srv, "draft", "apply", path)
+	if got.code == 0 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "gate.md: no column 'Missing'") {
+		t.Fatalf("exit %d, writes %q, stderr %q", got.code, srv.writes(), got.stderr)
+	}
+}
+
+// With --update, a column the board lacks stops the sync before the title,
+// description or steps are sent.
+func TestApplyUpdateMissingColumnSendsNothing(t *testing.T) {
+	srv, fz, cfg, parsed := syncFixture(t, strings.Replace(syncDraftText, "column: Maybe?", "column: Missing", 1))
+	if _, err := syncDraft(fz, parsed, cfg.InboxPath(), false, false, nil); err == nil || len(srv.writes()) != 0 {
+		t.Fatalf("err %v, writes %q", err, srv.writes())
+	}
+}
+
+// Next and NEXT are two columns. A card in Next whose draft says NEXT moves
+// to NEXT's column id, though the names match ignoring case.
+func TestApplyUpdateMovesBetweenColumnsByID(t *testing.T) {
+	srv, fz, cfg, parsed := syncFixture(t, syncDraftText)
+	srv.mu.Lock()
+	srv.columns = `[{"id":"c1","name":"Next"},{"id":"c2","name":"NEXT"}]`
+	srv.mu.Unlock()
+	srv.edit(func(card *cardState) { card.column = `{"id":"c1","name":"Next"}` })
+	parsed.Synced = srv.fingerprint(t)
+	parsed.Column = "NEXT"
+	report, err := syncDraft(fz, parsed, cfg.InboxPath(), false, false, nil)
+	if err != nil || !syncHas(srv.writes(), "POST /1/cards/87/triage") || !syncHas(report, "moved to NEXT") {
+		t.Fatalf("err %v, writes %q, report %q", err, srv.writes(), report)
+	}
+}
+
+// A card already in the draft's column, named the same, is not moved.
+func TestApplyUpdateSameColumnNoMove(t *testing.T) {
+	srv, fz, cfg, parsed := syncFixture(t, syncDraftText)
+	srv.mu.Lock()
+	srv.columns = `[{"id":"c1","name":"Next"},{"id":"c2","name":"NEXT"}]`
+	srv.mu.Unlock()
+	srv.edit(func(card *cardState) { card.column = `{"id":"c2","name":"NEXT"}` })
+	parsed.Synced = srv.fingerprint(t)
+	parsed.Column = "NEXT"
+	if _, err := syncDraft(fz, parsed, cfg.InboxPath(), false, false, nil); err != nil || syncHas(srv.writes(), "POST /1/cards/87/triage") {
+		t.Fatalf("err %v, writes %q", err, srv.writes())
+	}
+}
+
+// An image over the upload cap in a later draft stops the whole batch
+// before the first draft makes its card.
+func TestApplyBatchLargeImageSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	image, err := os.Create(filepath.Join(dir, "hinge.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := image.Truncate(fizzy.MaxUploadSize + 1); err != nil {
+		t.Fatal(err)
+	}
+	image.Close()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), "---\nboard: Home\n---\n# Oil the hinge\n\n![hinge](hinge.jpg)\n")
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code != 2 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "fz uploads files up to 100 MiB") {
+		t.Fatalf("exit %d, writes %q, stderr %q", got.code, srv.writes(), got.stderr)
+	}
+}
+
+// A column a later draft gets wrong stops the batch before the first draft
+// makes its card.
+func TestApplyBatchMissingColumnSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), "---\nboard: Home\ncolumn: Missing\n---\n# Oil the hinge\n")
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code == 0 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "b.md: no column 'Missing'") {
+		t.Fatalf("exit %d, writes %q, stderr %q", got.code, srv.writes(), got.stderr)
+	}
+}
+
+// TestApplyBatchEmptyTagSendsNothing checks tags before an earlier draft writes.
+func TestApplyBatchEmptyTagSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), "---\nboard: Home\ntags: ['#']\n---\n# Oil the hinge\n")
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code != 2 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "tag") {
+		t.Fatalf("result %+v, writes %q", got, srv.writes())
+	}
+}
+
+// TestApplyBatchUnreadableImageSendsNothing catches read failures before creates.
+func TestApplyBatchUnreadableImageSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	dir := t.TempDir()
+	image := filepath.Join(dir, "hinge.jpg")
+	writeFile(t, image, "hinge")
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Fix the gate\n")
+	writeFile(t, filepath.Join(dir, "b.md"), "---\nboard: Home\n---\n# Oil the hinge\n\n![hinge](hinge.jpg)\n")
+	old := openImage
+	t.Cleanup(func() { openImage = old })
+	openImage = func(path string) (*os.File, error) {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrPermission}
+	}
+	got := syncRun(t, srv, "draft", "apply", dir)
+	if got.code != 1 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "permission denied") {
+		t.Fatalf("result %+v, writes %q", got, srv.writes())
+	}
+}
+
+// TestApplyBatchAmbiguousMaybeSendsNothing checks moves back to the fixed lane.
+func TestApplyBatchAmbiguousMaybeSendsNothing(t *testing.T) {
+	srv := newSyncServer(t)
+	srv.mu.Lock()
+	srv.columns = `[{"id":"c-now","name":"Now"},{"id":"c-maybe","name":"Maybe?"}]`
+	srv.mu.Unlock()
+	srv.edit(func(card *cardState) { card.column = `{"id":"c-now","name":"Now"}` })
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.md"), "---\nboard: Home\n---\n# Oil the hinge\n")
+	writeFile(t, filepath.Join(dir, "b.md"), srv.draft(t, syncDraftText))
+	got := syncRun(t, srv, "draft", "apply", "--update", dir)
+	if got.code != 2 || len(srv.writes()) != 0 || !strings.Contains(got.stderr, "could mean") {
+		t.Fatalf("result %+v, writes %q", got, srv.writes())
+	}
+}

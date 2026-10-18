@@ -318,12 +318,18 @@ func Parse(path string) (*Draft, error) {
 	default:
 		return nil, badValue(path, lines["golden"], "golden: must be true or false (yes, no, on, off, 1 and 0 also work)")
 	}
+	tags := splitList(meta["tags"])
+	for _, tag := range tags {
+		if strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(tag), "#")) == "" {
+			return nil, badValue(path, lines["tags"], "tags: must not contain an empty tag")
+		}
+	}
 	return &Draft{
 		Path:   path,
 		Title:  pyStrip(title),
 		Board:  meta["board"],
 		Column: column,
-		Tags:   splitList(meta["tags"]),
+		Tags:   tags,
 		Golden: golden,
 		Card:   card,
 		Synced: meta["synced"],
