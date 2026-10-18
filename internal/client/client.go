@@ -184,6 +184,9 @@ func IDFromLocation(loc string) string {
 
 type reqOpts struct {
 	raw           []byte
+	stream        io.Reader
+	streamSize    int64
+	logHost       bool
 	headers       map[string]string
 	noAuth        bool
 	notAccountScp bool
@@ -195,6 +198,17 @@ type Option func(*reqOpts)
 
 // Raw sends these bytes as the body instead of JSON.
 func Raw(b []byte) Option { return func(o *reqOpts) { o.raw = b } }
+
+// Stream sends size bytes read from r as the body instead of JSON, without
+// holding them in memory.
+func Stream(r io.Reader, size int64) Option {
+	return func(o *reqOpts) { o.stream, o.streamSize = r, size }
+}
+
+// LogHost writes the request's host to the action log instead of its path,
+// for a URL whose path or query carries a secret, such as a signed storage
+// key.
+func LogHost() Option { return func(o *reqOpts) { o.logHost = true } }
 
 // Headers adds request headers, overriding the defaults.
 func Headers(h map[string]string) Option {
@@ -349,6 +363,8 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 			shown = s
 		case len(o.raw) > 0:
 			shown = fmt.Sprintf("<%d bytes>", len(o.raw))
+		case o.stream != nil:
+			shown = fmt.Sprintf("<%d bytes>", o.streamSize)
 		}
 		fmt.Fprintf(c.out, "[dry-run] %s %s %s\n", method, u, shown)
 		return 0, nil, nil, nil
@@ -383,6 +399,9 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	if data != nil {
 		rd = bytes.NewReader(data)
 	}
+	if o.stream != nil && body == nil {
+		rd = io.LimitReader(o.stream, o.streamSize)
+	}
 	timeout := RequestTimeout
 	if o.upload {
 		timeout = UploadTimeout
@@ -398,20 +417,27 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	for k, v := range hdrs {
 		req.Header.Set(k, v)
 	}
-	reqPath := req.URL.Path
+	if o.stream != nil && body == nil {
+		req.ContentLength = o.streamSize
+	}
+	// logPath names the request in the action log and in errors.
+	logPath := req.URL.Path
+	if o.logHost {
+		logPath = req.URL.Host
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if isWrite {
-			c.logAction(method, reqPath, 0)
+			c.logAction(method, logPath, 0)
 		}
 		return 0, nil, nil, redactErr(err)
 	}
 	defer resp.Body.Close()
 	if isWrite {
-		c.logAction(method, reqPath, resp.StatusCode)
+		c.logAction(method, logPath, resp.StatusCode)
 	}
 	if isWrite && (resp.StatusCode == 301 || resp.StatusCode == 302 || resp.StatusCode == 303) {
-		return resp.StatusCode, resp.Header, nil, &APIError{resp.StatusCode, method, reqPath,
+		return resp.StatusCode, resp.Header, nil, &APIError{resp.StatusCode, method, logPath,
 			"the server redirected a write, and fz does not follow that; the configured URL may need https"}
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody+1))
@@ -419,10 +445,10 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 		return resp.StatusCode, resp.Header, nil, redactErr(err)
 	}
 	if len(payload) > MaxBody {
-		return resp.StatusCode, resp.Header, nil, fmt.Errorf("%s %s: the response is larger than 32 MiB", method, reqPath)
+		return resp.StatusCode, resp.Header, nil, fmt.Errorf("%s %s: the response is larger than 32 MiB", method, logPath)
 	}
 	if resp.StatusCode >= 300 {
-		return resp.StatusCode, resp.Header, payload, &APIError{resp.StatusCode, method, reqPath, string(payload)}
+		return resp.StatusCode, resp.Header, payload, &APIError{resp.StatusCode, method, logPath, string(payload)}
 	}
 	return resp.StatusCode, resp.Header, payload, nil
 }

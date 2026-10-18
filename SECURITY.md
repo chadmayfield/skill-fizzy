@@ -20,7 +20,9 @@ Please do not open a public issue for a security problem.
 - `fz` never writes the token to disk and never prints it.
 - The action log at `~/.local/state/fizzy-skill/actions.log` holds the time,
   method, path and status of each write. It does not hold the token, request
-  bodies or response bodies. `fz` creates it with mode 0600.
+  bodies or response bodies. For the upload of a file's bytes it holds the
+  storage host instead of the path, because that path can carry a signed
+  key. `fz` creates it with mode 0600.
 - If the token command fails, the error gives its exit status, or says it
   was not found or timed out. It leaves out everything the command printed,
   on stdout and stderr, because a broken command may print the token.

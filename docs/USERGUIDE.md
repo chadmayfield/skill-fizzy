@@ -577,6 +577,13 @@ This uploads a file through Fizzy's direct upload and prints its
 to embed the `signed_id` instead, but that renders as a broken attachment.
 Drafts upload their images for you, so most people never need this command.
 
+The file must be a regular file of at most 100 MiB. A missing file, a
+folder, a device or a larger file exits 2 and sends nothing, in a dry run
+too. `fz` reads the file as it sends it, so a large file does not fill
+memory. The storage URL that Fizzy names must be an https URL, or a path
+that starts with a single `/`, which goes to your configured server. Any
+other URL is refused before the file is sent.
+
 ### Tags and people
 
 ```sh
@@ -1097,7 +1104,9 @@ HTTP status the server returned. A status of 300 or above means the write
 failed. A status of 0 means the write got no reply, for example after a
 timeout or a dropped connection, so the server may or may not have applied
 it. Check in Fizzy before you run it again. The log never holds the token or
-the request and response bodies. A dry run sends nothing, so it logs nothing.
+the request and response bodies. For the upload of a file's bytes, `path` is
+the storage host only, because the storage path can carry a signed key. A dry
+run sends nothing, so it logs nothing.
 
 `fz` creates the log with mode 0600, so only you can read it, and sets an
 existing log to 0600.

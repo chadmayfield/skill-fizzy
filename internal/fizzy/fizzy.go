@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -552,16 +553,72 @@ func (f *Fizzy) AddComment(n int, bodyHTML string) (string, error) {
 
 // -- uploads (ActiveStorage direct upload) ---------------------------------
 
+// MaxUploadSize is the largest file Upload sends, 100 MiB.
+const MaxUploadSize = 100 << 20
+
+// storageURL checks the storage URL from a direct upload reply and returns
+// the absolute URL to PUT the file to. It takes an absolute https URL, a URL
+// on the configured server, or a path that starts with a single slash, which
+// resolves against the configured server's origin. A disk service sends such
+// a path, and it already carries any account prefix. Anything else, such as
+// //host, @host, a relative path or another scheme, is refused.
+func (f *Fizzy) storageURL(raw string) (string, error) {
+	bad := refusef("Fizzy sent a storage URL fz will not use; it takes an https URL or a path that starts with /")
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", bad
+	}
+	origin, err := url.Parse(f.C.URL("", false))
+	if err != nil || origin.Host == "" {
+		return "", bad
+	}
+	origin = &url.URL{Scheme: origin.Scheme, Host: origin.Host}
+	switch {
+	case u.IsAbs():
+		sameServer := strings.EqualFold(u.Scheme, origin.Scheme) && strings.EqualFold(u.Host, origin.Host)
+		if u.Host == "" || u.User != nil || (!strings.EqualFold(u.Scheme, "https") && !sameServer) {
+			return "", bad
+		}
+		return u.String(), nil
+	case strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") && u.Host == "" && u.User == nil:
+		return origin.ResolveReference(u).String(), nil
+	}
+	return "", bad
+}
+
 // Upload sends a file and returns the sgid to embed as
 // <action-text-attachment sgid=...>. In dry-run mode it prints the blob
 // request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
 // it returns signed_id and prints a warning on the client's output.
+//
+// A path that is not a regular file, or a file over MaxUploadSize, is
+// refused before anything is read or sent, in dry-run mode too. The file is
+// read twice, once for the checksum and once as the PUT body, and never
+// held in memory whole.
 func (f *Fizzy) Upload(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	fi, err := os.Stat(path)
 	if err != nil {
 		return "", err
 	}
-	sum := md5.Sum(data) //nolint:gosec // ActiveStorage requires MD5.
+	if !fi.Mode().IsRegular() {
+		return "", refusef("%s is not a regular file", PyRepr(path))
+	}
+	if fi.Size() > MaxUploadSize {
+		return "", refusef("%s is %d bytes; fz uploads files up to 100 MiB (%d bytes)", PyRepr(path), fi.Size(), MaxUploadSize)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	h := md5.New() //nolint:gosec // ActiveStorage requires MD5.
+	size, err := io.Copy(h, io.LimitReader(file, MaxUploadSize+1))
+	if err != nil {
+		return "", err
+	}
+	if size != fi.Size() {
+		return "", fmt.Errorf("%s changed size while fz read it", PyRepr(path))
+	}
 	name := filepath.Base(path)
 	ctype := "application/octet-stream"
 	if t := mime.TypeByExtension(filepath.Ext(name)); t != "" {
@@ -571,10 +628,10 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	}
 	blob := wrap("blob", struct {
 		Filename    string `json:"filename"`
-		ByteSize    int    `json:"byte_size"`
+		ByteSize    int64  `json:"byte_size"`
 		Checksum    string `json:"checksum"`
 		ContentType string `json:"content_type"`
-	}{name, len(data), base64.StdEncoding.EncodeToString(sum[:]), ctype})
+	}{name, size, base64.StdEncoding.EncodeToString(h.Sum(nil)), ctype})
 	status, _, payload, err := f.C.Do(http.MethodPost, "/rails/active_storage/direct_uploads", blob)
 	if err != nil {
 		return "", err
@@ -599,11 +656,16 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	if info.SignedID == "" && info.AttachableSgid == "" {
 		return "", errors.New("direct upload reply has no signed_id or attachable_sgid")
 	}
-	// The storage URL is absolute for cloud services; a disk service may
-	// return a site-relative path, which already carries any account prefix
-	// it needs.
-	_, _, _, err = f.C.Do(http.MethodPut, info.DirectUpload.URL, nil,
-		client.Raw(data), client.Headers(info.DirectUpload.Headers), client.NoAuth(), client.NotAccountScoped(), client.Upload())
+	storage, err := f.storageURL(info.DirectUpload.URL)
+	if err != nil {
+		return "", err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	_, _, _, err = f.C.Do(http.MethodPut, storage, nil,
+		client.Stream(file, size), client.Headers(info.DirectUpload.Headers), client.NoAuth(), client.NotAccountScoped(),
+		client.Upload(), client.LogHost())
 	if err != nil {
 		return "", err
 	}

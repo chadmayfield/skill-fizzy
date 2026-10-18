@@ -47,7 +47,7 @@ var rootSections = []helpSection{
 
 The board is required. The column, tags and golden lines are optional. Everything except the title and the Steps section becomes the card description. Each step becomes a Fizzy step. Relative image paths resolve against the draft's folder, then the inbox. After a successful apply, fz writes card: N back into the front matter so a draft is never created twice. It also writes synced:, a fingerprint of the card as Fizzy then holds it, so fz draft apply --update can tell when someone changed the card in Fizzy, and synced-fields:, a short hash of each part of the card, so the refusal can name what changed.`},
 	{"FILES", `- ~/.config/fizzy-skill/config.json holds url, account, token_cmd, inbox and rules_card. The token itself comes only from FIZZY_TOKEN, or from the command that FIZZY_TOKEN_CMD or the token_cmd key names.
-- ~/.local/state/fizzy-skill/actions.log gets one JSON line per write with the time, method, path and status. It never holds the token.
+- ~/.local/state/fizzy-skill/actions.log gets one JSON line per write with the time, method, path and status. For the upload of a file's bytes, the path is the storage host only. It never holds the token.
 - ~/.fizzy-inbox/ is the default inbox. Draft images resolve against the draft's folder, then here.`},
 	{"ENVIRONMENT", `- FIZZY_CONFIG is the path of the config file.
 - FIZZY_URL is the server URL, for example https://fizzy.example.com.
