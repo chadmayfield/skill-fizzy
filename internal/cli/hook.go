@@ -59,7 +59,8 @@ func addHookCommands(root *cobra.Command) {
 			"Escape sequences, control characters and Unicode format characters are removed from server text first.\n\n" +
 			"The map is the file named by FIZZY_REPOS_MAP, or " + defaultReposMap + ". " +
 			`Each entry maps a folder name to {"board": "Home"} or {"board": "Home", "card": 87}. ` +
-			"The card is a whole number or a string of digits, and 0 means the whole board. Any other value, such as 87.0 or true, prints nothing. " +
+			"The card is a whole number, such as 87, or a string, such as \"87\". 0, \"0\", 0.0 and false mean the whole board. " +
+			"A string that is not a number, such as \"x7\", prints that card as not open. Any other value, such as 87.0, true, a list or an object, prints nothing. " +
 			"Inside a git worktree the main checkout's folder name is tried first, then each folder " +
 			"in the path from the deepest up. The first name in the map wins.\n\n" +
 			"An unmapped folder, or an entry with an empty board, prints nothing and reads no config. " +

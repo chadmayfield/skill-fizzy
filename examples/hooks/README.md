@@ -41,8 +41,10 @@ hook exits.
   Inside a git worktree, the main checkout's folder name is tried first. Then
   each folder in the path is tried, from the deepest up.
 
-  `card` is a whole number or a string of digits, and `0` means the whole
-  board. Any other value, such as `87.0` or `true`, prints nothing, as
+  `card` is a whole number, such as `87`, or a string, such as `"87"`.
+  `0`, `"0"`, `0.0` and `false` mean the whole board. A string that is not
+  a number, such as `"x7"`, prints that card as not open. Any other value,
+  such as `87.0`, `true`, a list or an object, prints nothing, as
   `fz hook session-start` does.
 
 ## Setup

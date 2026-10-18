@@ -1130,9 +1130,10 @@ Inside a git worktree, the main checkout's folder name is tried first. Then
 each folder in the path is tried, from the deepest up. The first name found
 in the map wins.
 
-`card` is a whole number, such as `87`, or a string of digits, such as
-`"87"`. `0` means the whole board. Any other number, such as `87.0`, and
-`true` print nothing.
+`card` is a whole number, such as `87`, or a string, such as `"87"`. `0`,
+`"0"`, `0.0` and `false` mean the whole board. A string that is not a
+number, such as `"x7"`, prints that card as not open. Any other value, such
+as `87.0`, `true`, a list or an object, prints nothing.
 
 A folder that is not in the map, or whose entry has an empty board, prints
 nothing and reads no config. Any failure at run time also prints nothing and
