@@ -82,12 +82,13 @@ func postponeDays(c *cmdContext) (int, error) {
 		return 0, nil
 	}
 	n, _ := fl.GetInt("postpone")
+	if fizzy.ValidPostponeDays(n) == nil {
+		return n, nil
+	}
+	// The usage text matches the Python fz's argparse error.
 	allowed := make([]string, len(fizzy.AutoPostponeDays))
 	for i, d := range fizzy.AutoPostponeDays {
 		allowed[i] = strconv.Itoa(d)
-		if d == n {
-			return n, nil
-		}
 	}
 	return 0, usagef("argument --postpone: invalid choice: %d (choose from %s)", n, strings.Join(allowed, ", "))
 }

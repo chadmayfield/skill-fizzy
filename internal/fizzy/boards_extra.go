@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"slices"
 	"strings"
 )
 
@@ -67,8 +66,10 @@ func (f *Fizzy) UpdateBoard(boardID string, fields BoardFields) error {
 	if fields == (BoardFields{}) {
 		return refusef("nothing to update")
 	}
-	if fields.PostponeDays != nil && !slices.Contains(AutoPostponeDays, *fields.PostponeDays) {
-		return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
+	if fields.PostponeDays != nil {
+		if err := ValidPostponeDays(*fields.PostponeDays); err != nil {
+			return err
+		}
 	}
 	_, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(boardID), wrap("board", fields))
 	return err

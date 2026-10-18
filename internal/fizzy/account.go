@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
@@ -211,10 +212,8 @@ func (f *Fizzy) AccountSettings() (Account, error) {
 // ValidPostponeDays checks days against AutoPostponeDays. Fizzy's Entropy
 // model uses the same list for accounts and boards.
 func ValidPostponeDays(days int) error {
-	for _, d := range AutoPostponeDays {
-		if d == days {
-			return nil
-		}
+	if slices.Contains(AutoPostponeDays, days) {
+		return nil
 	}
 	return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
 }
