@@ -89,10 +89,8 @@ func addCardExtraCommands(root *cobra.Command) {
 	image.Flags().Bool("remove", false, "remove the header image")
 	image.Flags().Bool("yes", false, "really remove it")
 
-	for _, c := range root.Commands() {
-		if c.Name() == "card" {
-			c.AddCommand(assign, unassign, watch, unwatch, pin, unpin, pins, boost, boosts, unboost, image)
-		}
+	if g := subgroup(root, "card"); g != nil {
+		g.AddCommand(assign, unassign, watch, unwatch, pin, unpin, pins, boost, boosts, unboost, image)
 	}
 }
 

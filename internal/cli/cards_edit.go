@@ -47,10 +47,8 @@ func addCardEditCommand(root *cobra.Command) {
 	edit.Flags().Bool("allow-empty", false, "allow a new description that is empty, which clears it")
 	edit.Flags().String("status", "", "card status, drafted or published")
 
-	for _, c := range root.Commands() {
-		if c.Name() == "card" {
-			c.AddCommand(edit)
-		}
+	if g := subgroup(root, "card"); g != nil {
+		g.AddCommand(edit)
 	}
 }
 

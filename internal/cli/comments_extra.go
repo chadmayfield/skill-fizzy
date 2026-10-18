@@ -18,12 +18,7 @@ func init() { register(addCommentExtraCommands) }
 // addCommentExtraCommands adds the comment subcommands beyond add. The comment
 // group is registered first, because comments.go sorts before this file.
 func addCommentExtraCommands(root *cobra.Command) {
-	var g *cobra.Command
-	for _, c := range root.Commands() {
-		if c.Name() == "comment" {
-			g = c
-		}
-	}
+	g := subgroup(root, "comment")
 	if g == nil {
 		return
 	}

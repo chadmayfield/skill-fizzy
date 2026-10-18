@@ -24,6 +24,19 @@ func register(f func(root *cobra.Command)) {
 	registrations = append(registrations, f)
 }
 
+// subgroup returns the command group named name, or nil. Go runs a
+// package's init functions in file name order, so a file that adds to a
+// group must sort after the file that registers it, as cards_edit.go sorts
+// after cards.go.
+func subgroup(root *cobra.Command, name string) *cobra.Command {
+	for _, c := range root.Commands() {
+		if c.Name() == name {
+			return c
+		}
+	}
+	return nil
+}
+
 // usageError marks an error caused by bad flags or an unknown command.
 type usageError struct{ err error }
 

@@ -14,17 +14,6 @@ import (
 
 func init() { register(addBoardExtraCommands) }
 
-// subgroup returns the command group named name, or nil. boards.go sorts
-// before this file, so its groups are registered first.
-func subgroup(root *cobra.Command, name string) *cobra.Command {
-	for _, c := range root.Commands() {
-		if c.Name() == name {
-			return c
-		}
-	}
-	return nil
-}
-
 func addBoardExtraCommands(root *cobra.Command) {
 	g := subgroup(root, "board")
 	show := &cobra.Command{
