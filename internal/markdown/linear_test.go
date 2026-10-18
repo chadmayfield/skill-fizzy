@@ -27,3 +27,18 @@ func TestToHTMLLinear(t *testing.T) {
 		}
 	}
 }
+
+// A wide header over many short rows must not pad every row to full width,
+// or a few megabytes of draft would become gigabytes of empty cells.
+func TestTablePaddingLinear(t *testing.T) {
+	const cols = 1 << 18
+	in := strings.Repeat("a|", cols) + "\n" + strings.Repeat("-|", cols) + "\n" + strings.Repeat("|\n", cols)
+	start := time.Now()
+	out := ToHTML(in)
+	if d := time.Since(start); d > timeLimit {
+		t.Errorf("took %v", d)
+	}
+	if len(out) > 20*len(in) {
+		t.Errorf("%d bytes in, %d bytes out", len(in), len(out))
+	}
+}
