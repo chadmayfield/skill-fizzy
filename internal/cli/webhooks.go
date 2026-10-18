@@ -44,7 +44,7 @@ func addWebhookCommands(root *cobra.Command) {
 	show.Flags().Bool("reveal-secret", false, "include the signing secret in --json output")
 	g.AddCommand(show)
 	create := &cobra.Command{
-		Use:   "create BOARD --name NAME --url URL --actions A,B --yes",
+		Use:   "create BOARD",
 		Short: "create a webhook (needs --yes)",
 		Long: "Create a webhook that sends the listed actions to a URL. The URL must be https, or http for localhost. " +
 			"It cannot change after creation. An empty or blank name exits 2 and sends nothing. Prints the URL and actions and refuses without --yes. " +
@@ -59,7 +59,7 @@ func addWebhookCommands(root *cobra.Command) {
 	create.Flags().Bool("yes", false, "really send card data to this URL")
 	g.AddCommand(create)
 	edit := &cobra.Command{
-		Use:   "edit BOARD ID [--name NAME] [--actions A,B] --yes",
+		Use:   "edit BOARD ID",
 		Short: "change a webhook's name or actions (needs --yes)",
 		Long: "Change a webhook's name or the actions it sends. The URL cannot change. " +
 			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes.",
@@ -72,7 +72,7 @@ func addWebhookCommands(root *cobra.Command) {
 	edit.Flags().Bool("yes", false, "really change what this webhook sends")
 	g.AddCommand(edit)
 	del := &cobra.Command{
-		Use:     "delete BOARD ID --yes",
+		Use:     "delete BOARD ID",
 		Short:   "delete a webhook (needs --yes)",
 		Long:    "Delete a webhook. Prints its URL and actions and refuses without --yes.",
 		Example: examples("fz webhook delete Gate 03abc123def456ghi789jkl0mn --yes"),

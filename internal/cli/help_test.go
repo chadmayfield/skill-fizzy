@@ -135,6 +135,16 @@ func checkExample(t *testing.T, path, line string) {
 	}
 }
 
+// A Use line names the command and its arguments only. Cobra lists the
+// flags under it, so no Use line names a flag.
+func TestUseLinesHaveNoFlags(t *testing.T) {
+	walk(NewRoot(), func(c *cobra.Command) {
+		if strings.Contains(c.Use, " -") || strings.Contains(c.Use, "[-") {
+			t.Errorf("%s: Use %q names a flag", c.CommandPath(), c.Use)
+		}
+	})
+}
+
 func TestOldFormsInHelpResolve(t *testing.T) {
 	for _, line := range []string{
 		"fz boards", "fz board-create Garden --postpone 365", "fz columns Home",
