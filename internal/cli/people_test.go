@@ -121,7 +121,7 @@ func TestUserEditYes(t *testing.T) {
 func TestUserEditDryRun(t *testing.T) {
 	srv, calls := acctServer(t, map[string]string{"GET /1/users/U1": acctUser})
 	r := runGo([]string{"--dry-run", "--json", "user", "edit", "U1", "--name", "Gate Keeper", "--yes"})
-	if r.code != 0 || r.stdout != "{\n  \"id\": \"U1\",\n  \"name\": \"Gate Keeper\"\n}\n" {
+	if r.code != 0 || r.stdout != "{\n  \"id\": \"U1\",\n  \"name\": \"Gate Keeper\",\n  \"dry_run\": true\n}\n" {
 		t.Fatalf("got %+v", r)
 	}
 	if !strings.Contains(r.stderr, "[dry-run] PUT "+srv.URL+`/1/users/U1 {"user": {"name": "Gate Keeper"}}`) {

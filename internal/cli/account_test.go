@@ -113,7 +113,7 @@ func TestAccountPostponeYes(t *testing.T) {
 func TestAccountPostponeDryRun(t *testing.T) {
 	srv, calls := acctServer(t, map[string]string{"GET /1/account/settings": acctSettings})
 	r := runGo([]string{"--dry-run", "--json", "account", "postpone", "90", "--yes"})
-	if r.code != 0 || r.stdout != "{\n  \"auto_postpone_period_in_days\": 90\n}\n" {
+	if r.code != 0 || r.stdout != "{\n  \"auto_postpone_period_in_days\": 90,\n  \"dry_run\": true\n}\n" {
 		t.Fatalf("got %+v", r)
 	}
 	if !strings.Contains(r.stderr, "[dry-run] PUT "+srv.URL+`/1/account/entropy {"entropy": {"auto_postpone_period_in_days": 90}}`) {
@@ -173,7 +173,7 @@ func TestExportAccountAndMine(t *testing.T) {
 func TestExportDryRun(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{"GET /my/identity": acctIdentity})
 	r := runGo([]string{"--dry-run", "export", "mine"})
-	if r.code != 0 || r.stdout != "dry-run: export not started\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
+	if r.code != 0 || r.stdout != "dry-run: nothing sent; would start your export\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
 		t.Fatalf("got %+v", r)
 	}
 	if got := callList(calls()); got != "GET /my/identity" {

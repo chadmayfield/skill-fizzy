@@ -14,9 +14,9 @@ package fizzy
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -29,68 +29,17 @@ const MaxBoostChars = 16
 // per Unicode code point.
 func BoostLength(text string) int { return utf8.RuneCountInString(text) }
 
-// UserMatch is the user a USER argument resolved to. By says what matched:
-// "id", "name" or "email".
-type UserMatch struct {
-	ID, Name, By string
-}
-
-// cardUser holds the user fields MatchUser reads from GET /users.
-type cardUser struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email_address"`
-}
-
-// cardUsers lists the account's active users.
-func (f *Fizzy) cardUsers() ([]cardUser, error) { return list[cardUser](f.C, "/users") }
-
-// MatchUser resolves a user id, an exact name, or an email address (case
-// ignored) against the account's users.
-func (f *Fizzy) MatchUser(s string) (UserMatch, error) {
-	users, err := f.cardUsers()
-	if err != nil {
-		return UserMatch{}, err
-	}
-	for _, u := range users {
-		if u.ID == s {
-			return UserMatch{u.ID, u.Name, "id"}, nil
-		}
-	}
-	var named []cardUser
-	for _, u := range users {
-		if u.Name == s {
-			named = append(named, u)
-		}
-	}
-	switch len(named) {
-	case 1:
-		return UserMatch{named[0].ID, named[0].Name, "name"}, nil
-	case 0:
-	default:
-		return UserMatch{}, fmt.Errorf("%d users are named %s; use the user id or email", len(named), pyRepr(s))
-	}
-	for _, u := range users {
-		if u.Email != "" && strings.EqualFold(u.Email, s) {
-			return UserMatch{u.ID, u.Name, "email"}, nil
-		}
-	}
-	names := make([]string, len(users))
-	for i, u := range users {
-		names[i] = u.Name
-	}
-	return UserMatch{}, fmt.Errorf("no user %s (have: %s)", pyRepr(s), strings.Join(names, ", "))
-}
-
 // -- assignments (idempotent over Fizzy's toggle) ----------------------------
 
 func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, error) {
-	u, err := f.MatchUser(user)
+	u, err := f.MatchUser(user, false)
 	if err != nil {
 		return UserMatch{}, false, err
 	}
+	// Assignees is a pointer so a reply without the key is told apart from
+	// an empty list.
 	var card struct {
-		Assignees []struct {
+		Assignees *[]struct {
 			ID string `json:"id"`
 		} `json:"assignees"`
 		HasMore bool `json:"has_more_assignees"`
@@ -98,12 +47,15 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 	if err := f.C.Get("/cards/"+strconv.Itoa(n), &card); err != nil {
 		return u, false, err
 	}
+	if card.Assignees == nil {
+		return u, false, refusef("card #%d has no assignees list in Fizzy's reply, so fz cannot tell whether %s is assigned", n, u.Name)
+	}
 	present := false
-	for _, a := range card.Assignees {
+	for _, a := range *card.Assignees {
 		present = present || a.ID == u.ID
 	}
 	if !present && card.HasMore {
-		return u, false, fmt.Errorf("card #%d has more than 5 assignees and Fizzy lists only the first 5, so fz cannot tell whether %s is assigned; change it in Fizzy",
+		return u, false, refusef("card #%d has more than 5 assignees and Fizzy lists only the first 5, so fz cannot tell whether %s is assigned; change it in Fizzy",
 			n, u.Name)
 	}
 	if present == want {
@@ -116,7 +68,7 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 }
 
 // Assign assigns a user to a card and reports whether it changed anything.
-// user is a user id, an exact name or an email address.
+// user is matched by MatchUser.
 func (f *Fizzy) Assign(n int, user string) (UserMatch, bool, error) {
 	return f.setAssigned(n, user, true)
 }
@@ -195,10 +147,10 @@ func (f *Fizzy) Boosts(n int) ([]Boost, error) {
 // stores.
 func CheckBoost(text string) error {
 	if text == "" {
-		return errors.New("a boost needs some text")
+		return refusef("a boost needs some text")
 	}
 	if l := BoostLength(text); l > MaxBoostChars {
-		return fmt.Errorf("a boost is at most %d characters; this one is %d", MaxBoostChars, l)
+		return refusef("a boost is at most %d characters; this one is %d", MaxBoostChars, l)
 	}
 	return nil
 }
@@ -216,7 +168,7 @@ func (f *Fizzy) AddBoost(n int, text string) (json.RawMessage, error) {
 
 // RemoveBoost removes one of the current user's boosts from a card.
 func (f *Fizzy) RemoveBoost(n int, id string) error {
-	return f.cardWrite(http.MethodDelete, n, "/reactions/"+id)
+	return f.cardWrite(http.MethodDelete, n, "/reactions/"+url.PathEscape(id))
 }
 
 // -- lookups for card list filters ---------------------------------------------

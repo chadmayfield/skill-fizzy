@@ -346,6 +346,9 @@ func draftApply(c *cmdContext, a []string) error {
 				return err
 			}
 			for _, line := range report {
+				if c.dryRun {
+					line = dryRunLine(line)
+				}
 				fmt.Fprintf(w, "#%d %s\n", d.Card, line)
 			}
 			if !c.dryRun {

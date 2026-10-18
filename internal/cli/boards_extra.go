@@ -129,6 +129,10 @@ func accessSummary(d fizzy.BoardInfo) string {
 	if d.AllAccess {
 		return "all users"
 	}
+	// A reply without user_ids does not say who has access.
+	if d.UserIDs == nil {
+		return "selected users"
+	}
 	if len(d.UserIDs) == 1 {
 		return "1 user"
 	}
@@ -172,8 +176,9 @@ func boardEdit(c *cmdContext, a []string) error {
 	if err := fz.UpdateBoard(b.ID, fields); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"changed", changed}},
-		fmt.Sprintf("board %s updated: %s", b.Name, strings.Join(changed, ", ")))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"changed", changed}}),
+		c.wrote(fmt.Sprintf("board %s updated: %s", b.Name, strings.Join(changed, ", ")),
+			fmt.Sprintf("update board %s: %s", b.Name, strings.Join(changed, ", "))))
 }
 
 func plural(n int, one, many string) string {
@@ -220,7 +225,7 @@ func boardDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteBoard(b.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"deleted", b.ID}}, fmt.Sprintf("board %s deleted", b.Name))
+	return emit(c.cmd, c.dry(obj{{"deleted", b.ID}}), c.wrote(fmt.Sprintf("board %s deleted", b.Name), "delete board "+b.Name))
 }
 
 func boardPublish(c *cmdContext, a []string) error {
@@ -241,8 +246,8 @@ func boardPublish(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"public_url", orNull(link)}},
-		fmt.Sprintf("board %s published: %s", b.Name, orNone(link)))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"public_url", orNull(link)}}),
+		c.wrote(fmt.Sprintf("board %s published: %s", b.Name, orNone(link)), "publish board "+b.Name))
 }
 
 func boardUnpublish(c *cmdContext, a []string) error {
@@ -257,7 +262,7 @@ func boardUnpublish(c *cmdContext, a []string) error {
 	if err := fz.UnpublishBoard(b.ID); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"published", false}}, fmt.Sprintf("board %s unpublished", b.Name))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"published", false}}), c.wrote(fmt.Sprintf("board %s unpublished", b.Name), "unpublish board "+b.Name))
 }
 
 func boardAccess(c *cmdContext, a []string) error {
@@ -311,11 +316,12 @@ func boardAccess(c *cmdContext, a []string) error {
 	if err := fz.SetBoardAccess(b.ID, all, ids); err != nil {
 		return err
 	}
-	text := fmt.Sprintf("board %s access set to all users", b.Name)
+	to := "all users"
 	if !all {
-		text = fmt.Sprintf("board %s access set to %s", b.Name, plural(len(ids), "user", "users"))
+		to = plural(len(ids), "user", "users")
 	}
-	return emit(c.cmd, obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}, text)
+	text := c.wrote(fmt.Sprintf("board %s access set to %s", b.Name, to), fmt.Sprintf("set board %s access to %s", b.Name, to))
+	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}), text)
 }
 
 func boardAccessList(c *cmdContext, fz *fizzy.Fizzy, b fizzy.Board) error {

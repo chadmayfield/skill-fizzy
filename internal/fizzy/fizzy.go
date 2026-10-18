@@ -104,12 +104,8 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 // in dry-run mode.
 func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
 	if postponeDays != 0 {
-		ok := false
-		for _, d := range AutoPostponeDays {
-			ok = ok || d == postponeDays
-		}
-		if !ok {
-			return "", errors.New("auto-postpone must be one of " + pyIntTuple(AutoPostponeDays))
+		if err := ValidPostponeDays(postponeDays); err != nil {
+			return "", err
 		}
 	}
 	id, err := f.C.Create("/boards", wrap("board", struct {

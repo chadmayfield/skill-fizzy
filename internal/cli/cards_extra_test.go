@@ -231,7 +231,7 @@ func TestCardBoostTooLong(t *testing.T) {
 func TestCardBoostDryRun(t *testing.T) {
 	_, calls := extraServer(t, `{}`)
 	r := runGo([]string{"--dry-run", "card", "boost", "87", "ok"})
-	if r.code != 0 || r.stdout != "dry-run: boost not added to card #87\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
+	if r.code != 0 || r.stdout != "dry-run: nothing sent; would add a boost to card #87\n" || !strings.Contains(r.stderr, "[dry-run] POST ") {
 		t.Fatalf("got %+v", r)
 	}
 	if len(calls()) != 0 {
@@ -336,5 +336,49 @@ func TestCardListUnknownTag(t *testing.T) {
 	r := runGo([]string{"card", "list", "--tag", "nope"})
 	if r.code != 1 || r.stderr != "fz: no tag 'nope' (have: buy, waiting)\n" {
 		t.Fatalf("got %+v", r)
+	}
+}
+
+// A name that differs only in case still matches when one user has it.
+func TestCardAssignNameIgnoresCase(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"assignees":[],"has_more_assignees":false}`)
+	r := runGo([]string{"card", "assign", "87", "hinge smith"})
+	if r.code != 0 || r.stdout != "card #87: assigned Hinge Smith (u2, matched by name)\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 1 || w[0].body != `{"assignee_id":"u2"}` {
+		t.Errorf("writes %+v", w)
+	}
+}
+
+// --assignee does not pass an unknown id through; only activity --creator does.
+func TestCardListAssigneeUnknownID(t *testing.T) {
+	extraServer(t, `{}`)
+	r := runGo([]string{"card", "list", "--assignee", "03abc123def456ghi789jkl0mn"})
+	if r.code != 1 || !strings.HasPrefix(r.stderr, "fz: no user '03abc123def456ghi789jkl0mn'") {
+		t.Fatalf("got %+v", r)
+	}
+}
+
+// fz cannot see past the first five assignees, so it refuses with exit 2.
+func TestCardAssignRefusesWhenListIsCut(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87,"assignees":[{"id":"u1"}],"has_more_assignees":true}`)
+	r := runGo([]string{"card", "assign", "87", "u2"})
+	if r.code != 2 || !strings.Contains(r.stderr, "more than 5 assignees") {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 0 {
+		t.Errorf("writes %+v", w)
+	}
+}
+
+func TestCardAssignRefusesWithoutAssignees(t *testing.T) {
+	_, calls := extraServer(t, `{"number":87}`)
+	r := runGo([]string{"card", "unassign", "87", "u1"})
+	if r.code != 2 || r.stderr != "fz: card #87 has no assignees list in Fizzy's reply, so fz cannot tell whether Gate Keeper is assigned\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 0 {
+		t.Errorf("writes %+v", w)
 	}
 }

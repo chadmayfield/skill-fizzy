@@ -2,8 +2,6 @@ package fizzy
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -94,13 +92,13 @@ func (d *WebhookDelivery) UnmarshalJSON(data []byte) error {
 func CheckWebhookURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
-		return errors.New("webhook url must start with https://")
+		return refusef("webhook url must start with https://")
 	}
 	if u.User != nil {
-		return errors.New("webhook url must not contain credentials")
+		return refusef("webhook url must not contain credentials")
 	}
 	if u.Hostname() == "" {
-		return errors.New("webhook url has no host")
+		return refusef("webhook url has no host")
 	}
 	switch u.Scheme {
 	case "https":
@@ -111,7 +109,7 @@ func CheckWebhookURL(raw string) error {
 			return nil
 		}
 	}
-	return errors.New("webhook url must start with https:// (http:// is allowed only for localhost)")
+	return refusef("webhook url must start with https:// (http:// is allowed only for localhost)")
 }
 
 // CheckWebhookActions rejects an action that is not in WebhookActions.
@@ -122,19 +120,19 @@ func CheckWebhookActions(actions []string) error {
 			ok = ok || k == a
 		}
 		if !ok {
-			return fmt.Errorf("unknown webhook action %q (choose from %s)", a, strings.Join(WebhookActions, ", "))
+			return refusef("unknown webhook action %q (choose from %s)", a, strings.Join(WebhookActions, ", "))
 		}
 	}
 	return nil
 }
 
 func webhookPath(boardID, id string) string {
-	return "/boards/" + boardID + "/webhooks/" + id
+	return "/boards/" + url.PathEscape(boardID) + "/webhooks/" + url.PathEscape(id)
 }
 
 // Webhooks lists a board's webhooks. Only account admins may.
 func (f *Fizzy) Webhooks(boardID string) ([]Webhook, error) {
-	return list[Webhook](f.C, "/boards/"+boardID+"/webhooks")
+	return list[Webhook](f.C, "/boards/"+url.PathEscape(boardID)+"/webhooks")
 }
 
 // Webhook fetches one webhook.
@@ -157,12 +155,12 @@ func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (
 		return Webhook{}, err
 	}
 	if len(actions) == 0 {
-		return Webhook{}, errors.New("give at least one action")
+		return Webhook{}, refusef("give at least one action")
 	}
 	if err := CheckWebhookActions(actions); err != nil {
 		return Webhook{}, err
 	}
-	status, hdr, payload, err := f.C.Do(http.MethodPost, "/boards/"+boardID+"/webhooks", wrap("webhook", struct {
+	status, hdr, payload, err := f.C.Do(http.MethodPost, "/boards/"+url.PathEscape(boardID)+"/webhooks", wrap("webhook", struct {
 		Name    string   `json:"name"`
 		URL     string   `json:"url"`
 		Actions []string `json:"subscribed_actions"`
@@ -182,11 +180,11 @@ func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (
 // is empty in dry-run mode.
 func (f *Fizzy) UpdateWebhook(boardID, id string, name *string, actions []string) (Webhook, error) {
 	if name == nil && actions == nil {
-		return Webhook{}, errors.New("nothing to update")
+		return Webhook{}, refusef("nothing to update")
 	}
 	if actions != nil {
 		if len(actions) == 0 {
-			return Webhook{}, errors.New("give at least one action")
+			return Webhook{}, refusef("give at least one action")
 		}
 		if err := CheckWebhookActions(actions); err != nil {
 			return Webhook{}, err

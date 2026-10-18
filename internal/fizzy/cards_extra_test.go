@@ -30,36 +30,6 @@ func cardServer(card string) func(w http.ResponseWriter, r *http.Request, b []by
 	}
 }
 
-func TestMatchUser(t *testing.T) {
-	f, _, _, _ := newFizzy(t, false, cardServer("{}"))
-	for _, c := range []struct{ in, id, by string }{
-		{"u2", "u2", "id"},
-		{"Gate Keeper", "u1", "name"},
-		{"hinge@fizzy.example.com", "u2", "email"},
-		{"HINGE@fizzy.example.com", "u2", "email"},
-		{"twin2@fizzy.example.com", "u4", "email"},
-	} {
-		m, err := f.MatchUser(c.in)
-		if err != nil || m.ID != c.id || m.By != c.by {
-			t.Errorf("MatchUser(%q) = %+v, %v; want id %s by %s", c.in, m, err, c.id, c.by)
-		}
-	}
-	m, _ := f.MatchUser("Gate Keeper")
-	if m.Name != "Gate Keeper" {
-		t.Errorf("name = %q", m.Name)
-	}
-}
-
-func TestMatchUserErrors(t *testing.T) {
-	f, _, _, _ := newFizzy(t, false, cardServer("{}"))
-	if _, err := f.MatchUser("gate keeper"); err == nil || !strings.Contains(err.Error(), "no user 'gate keeper'") {
-		t.Errorf("case-changed name: %v", err)
-	}
-	if _, err := f.MatchUser("Twin"); err == nil || !strings.Contains(err.Error(), "2 users are named 'Twin'") {
-		t.Errorf("duplicate name: %v", err)
-	}
-}
-
 func TestAssignSendsOnlyWhenNeeded(t *testing.T) {
 	card := `{"number":87,"assignees":[{"id":"u1","name":"Gate Keeper"}],"has_more_assignees":false}`
 	f, s, _, _ := newFizzy(t, false, cardServer(card))
@@ -247,5 +217,22 @@ func TestFindTag(t *testing.T) {
 	}
 	if _, err := f.FindTag("nope"); err == nil || !strings.Contains(err.Error(), "no tag 'nope' (have: buy, waiting)") {
 		t.Errorf("missing: %v", err)
+	}
+}
+
+// A card reply without an assignees key says nothing about who is
+// assigned, so fz refuses rather than send a toggle blind.
+func TestAssignRefusesWithoutAssignees(t *testing.T) {
+	f, s, _, _ := newFizzy(t, false, cardServer(`{"number":87}`))
+	for _, op := range []func(int, string) (UserMatch, bool, error){f.Assign, f.Unassign} {
+		_, changed, err := op(87, "u2")
+		if !IsRefusal(err) || changed || err.Error() != "card #87 has no assignees list in Fizzy's reply, so fz cannot tell whether Hinge Smith is assigned" {
+			t.Errorf("err = %v, changed %v", err, changed)
+		}
+	}
+	for _, c := range s.calls {
+		if c.Method != http.MethodGet {
+			t.Errorf("sent %s %s", c.Method, c.Path)
+		}
 	}
 }

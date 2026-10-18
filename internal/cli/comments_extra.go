@@ -27,7 +27,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 	del := &cobra.Command{
 		Use:     "delete NUMBER COMMENT_ID",
 		Short:   "delete a comment (needs --yes)",
-		Long:    "Delete a comment. Only its author can. Prints the comment first and refuses without --yes.",
+		Long:    "Delete a comment. The Fizzy API docs say only the comment's creator can delete it. Prints the comment first and refuses without --yes.",
 		Example: examples("fz comment delete 87 03abc123def456ghi789jkl0mn --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(commentDelete),
@@ -78,7 +78,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "unreact NUMBER COMMENT_ID REACTION_ID",
 			Short:   "remove your reaction from a comment",
-			Long:    "Remove a reaction from a comment. Only the person who reacted can.",
+			Long:    "Remove your reaction from a comment. comment reactions prints the reaction ids.",
 			Example: examples("fz comment unreact 87 03abc123def456ghi789jkl0mn 03def456ghi789jkl0mn123abc"),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentUnreact),
@@ -113,11 +113,8 @@ func commentList(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(cs))
-	for i, cm := range cs {
-		lines[i] = commentHead(cm) + "  " + firstLine(cm.Body.PlainText)
-	}
-	return emit(c.cmd, rawList(cs), strings.Join(lines, "\n"))
+	line := func(cm fizzy.Comment) string { return commentHead(cm) + "  " + firstLine(cm.Body.PlainText) }
+	return emit(c.cmd, rawList(cs), listText(cs, line, "(no comments)"))
 }
 
 func commentShow(c *cmdContext, a []string) error {
@@ -148,7 +145,7 @@ func commentEdit(c *cmdContext, a []string) error {
 	if err := fz.EditComment(n, a[1], markdown.ToHTML(a[2])); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"updated", a[1]}}, "comment "+a[1]+" updated")
+	return emit(c.cmd, c.dry(obj{{"updated", a[1]}}), c.wrote("comment "+a[1]+" updated", "update comment "+a[1]))
 }
 
 func commentDelete(c *cmdContext, a []string) error {
@@ -173,7 +170,7 @@ func commentDelete(c *cmdContext, a []string) error {
 	if err := fz.DeleteComment(n, a[1]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"deleted", a[1]}}, "comment "+a[1]+" deleted")
+	return emit(c.cmd, c.dry(obj{{"deleted", a[1]}}), c.wrote("comment "+a[1]+" deleted", "delete comment "+a[1]))
 }
 
 func commentReact(c *cmdContext, a []string) error {
@@ -189,7 +186,7 @@ func commentReact(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", orNull(id)}}, "reaction added: "+orNone(id))
+	return emit(c.cmd, c.dry(obj{{"id", orNull(id)}}), c.wrote("reaction added: "+orNone(id), "add a reaction to comment "+a[1]))
 }
 
 func commentReactions(c *cmdContext, a []string) error {
@@ -205,11 +202,8 @@ func commentReactions(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(rs))
-	for i, r := range rs {
-		lines[i] = fmt.Sprintf("%s  %s  %s", r.ID, r.Reacter.Name, r.Content)
-	}
-	return emit(c.cmd, rawList(rs), strings.Join(lines, "\n"))
+	line := func(r fizzy.Reaction) string { return fmt.Sprintf("%s  %s  %s", r.ID, r.Reacter.Name, r.Content) }
+	return emit(c.cmd, rawList(rs), listText(rs, line, "(no reactions)"))
 }
 
 func commentUnreact(c *cmdContext, a []string) error {
@@ -224,5 +218,5 @@ func commentUnreact(c *cmdContext, a []string) error {
 	if err := fz.DeleteCommentReaction(n, a[1], a[2]); err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"removed", a[2]}}, "reaction "+a[2]+" removed")
+	return emit(c.cmd, c.dry(obj{{"removed", a[2]}}), c.wrote("reaction "+a[2]+" removed", "remove reaction "+a[2]))
 }

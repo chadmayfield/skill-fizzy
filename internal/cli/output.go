@@ -29,6 +29,26 @@ func newContext(cmd *cobra.Command) *cmdContext {
 	return &cmdContext{cmd: cmd, dryRun: flagValue(cmd, "dry-run") == "true"}
 }
 
+// wrote returns text, the line a command prints after a write. In dry-run
+// mode nothing was sent, so it returns "dry-run: nothing sent; would "
+// followed by would instead.
+func (c *cmdContext) wrote(text, would string) string {
+	if c.dryRun {
+		return "dry-run: nothing sent; would " + would
+	}
+	return text
+}
+
+// dry adds "dry_run": true to a command's JSON in dry-run mode. The
+// commands added after the Python port pass their JSON through it. The
+// commands the parity goldens pin do not.
+func (c *cmdContext) dry(data any) any {
+	if o, ok := data.(obj); ok && c.dryRun {
+		return append(append(obj{}, o...), kv{"dry_run", true})
+	}
+	return data
+}
+
 // config loads the config file named by --config, or the default.
 func (c *cmdContext) config() (*config.Config, error) {
 	if c.cfg == nil {

@@ -2,7 +2,6 @@ package fizzy
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -217,7 +216,7 @@ func ValidPostponeDays(days int) error {
 			return nil
 		}
 	}
-	return errors.New("auto-postpone must be one of " + pyIntTuple(AutoPostponeDays))
+	return refusef("auto-postpone must be one of %s", pyIntTuple(AutoPostponeDays))
 }
 
 // PostponeAccount sets the account's default auto-postpone period and
@@ -313,7 +312,7 @@ func (f *Fizzy) SetEmailFrequency(freq string) error {
 		ok = ok || v == freq
 	}
 	if !ok {
-		return fmt.Errorf("email frequency must be one of %s", strings.Join(EmailFrequencies, ", "))
+		return refusef("email frequency must be one of %s", strings.Join(EmailFrequencies, ", "))
 	}
 	_, err := f.C.Write(http.MethodPut, "/notifications/settings", wrap("user_settings", struct {
 		Frequency string `json:"bundle_email_frequency"`

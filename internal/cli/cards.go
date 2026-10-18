@@ -34,7 +34,7 @@ func addCardCommands(root *cobra.Command) {
 		Use:   "list",
 		Short: "list cards (every page)",
 		Long: "List cards, newest activity first. Fizzy returns pages; fz reads all of them. " +
-			"Filters combine with AND. --column needs --board. --assignee takes a user id, an exact name or an email address.",
+			"Filters combine with AND. --column needs --board. --assignee takes a user id, a name or an email address, matched as card assign matches USER.",
 		Example: examples("fz card list --board Home", "fz card list --state golden", `fz card list --search "first aid"`,
 			"fz card list --board Home --column Next --tag waiting", "fz card list --unassigned --created thisweek --sort oldest"),
 		Args: args(cobra.NoArgs),
@@ -45,7 +45,7 @@ func addCardCommands(root *cobra.Command) {
 	list.Flags().String("search", "", "search terms")
 	list.Flags().String("column", "", "column name or id on --board")
 	list.Flags().String("tag", "", "tag name")
-	list.Flags().String("assignee", "", "assigned to this user: id, exact name or email")
+	list.Flags().String("assignee", "", "assigned to this user: id, name or email")
 	list.Flags().Bool("unassigned", false, "only cards with no assignee")
 	list.Flags().String("sort", "", "latest (default), newest or oldest")
 	list.Flags().String("created", "", "created in a window: "+strings.Join(cardWindows, ", "))
@@ -191,7 +191,7 @@ func cardList(c *cmdContext, _ []string) error {
 		filters = append(filters, fizzy.Param{Key: "tag_ids[]", Value: t.ID})
 	}
 	if assignee != "" {
-		u, err := fz.MatchUser(assignee)
+		u, err := fz.MatchUser(assignee, false)
 		if err != nil {
 			return err
 		}

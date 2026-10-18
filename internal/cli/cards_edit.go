@@ -142,8 +142,9 @@ func cardEdit(c *cmdContext, a []string) error {
 		return err
 	}
 	slices.Sort(changed)
-	text := fmt.Sprintf("card #%d updated: %s", number, strings.Join(changed, ", "))
-	return emit(c.cmd, obj{{"number", number}, {"changed", changed}}, text)
+	text := c.wrote(fmt.Sprintf("card #%d updated: %s", number, strings.Join(changed, ", ")),
+		fmt.Sprintf("update card #%d: %s", number, strings.Join(changed, ", ")))
+	return emit(c.cmd, c.dry(obj{{"number", number}, {"changed", changed}}), text)
 }
 
 var htmlTag = regexp.MustCompile(`<[^>]*>`)
