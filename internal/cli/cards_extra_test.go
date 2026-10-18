@@ -213,6 +213,20 @@ func TestCardBoost(t *testing.T) {
 	}
 }
 
+// TestCardBoostNoBody covers a server that answers 201 with no body, as
+// Fizzy's API docs describe. The text must not print None.
+func TestCardBoostNoBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(201)
+	}))
+	t.Cleanup(srv.Close)
+	editEnv(t, srv)
+	r := runGo([]string{"card", "boost", "87", "ok"})
+	if r.code != 0 || r.stdout != "boost added to card #87\n" {
+		t.Fatalf("got %+v", r)
+	}
+}
+
 func TestCardBoostTooLong(t *testing.T) {
 	_, calls := extraServer(t, `{}`)
 	r := runGo([]string{"card", "boost", "87", "seventeen letters"})

@@ -489,7 +489,9 @@ fz comment reactions 87 03abc123def456ghi789jkl0mn
 fz comment unreact 87 03abc123def456ghi789jkl0mn 03def456ghi789jkl0mn123abc
 ```
 
-A reaction is at most 16 characters. `comment reactions` prints each
+A reaction is at most 16 characters. Fizzy does not send back the new
+reaction's id, so `comment react` prints the comment id, and its `--json`
+output holds the comment id and the text. `comment reactions` prints each
 reaction's id, who reacted and the text. `comment unreact` removes your own
 reaction.
 

@@ -31,7 +31,7 @@ func commentServer(t *testing.T) (*httptest.Server, func() []seenCall) {
 			w.WriteHeader(403)
 			io.WriteString(w, "not yours")
 		case r.Method == "POST":
-			w.Header().Set("Location", "/1/cards/87/comments/c1/reactions/r2")
+			// Fizzy's API docs: 201 Created, with no body and no Location.
 			w.WriteHeader(201)
 		}
 	}))
@@ -133,7 +133,7 @@ func TestCommentReactFlow(t *testing.T) {
 	srv, calls := commentServer(t)
 	editEnv(t, srv)
 	r := runGo([]string{"comment", "react", "87", "c1", "ok"})
-	if r.code != 0 || r.stdout != "reaction added: r2\n" {
+	if r.code != 0 || r.stdout != "reaction added to comment c1\n" {
 		t.Fatalf("%+v", r)
 	}
 	if c := calls()[0]; c.method != "POST" || c.body != `{"reaction":{"content":"ok"}}` {
@@ -146,6 +146,32 @@ func TestCommentReactFlow(t *testing.T) {
 	r = runGo([]string{"comment", "unreact", "87", "c1", "r1"})
 	if r.code != 0 || r.stdout != "reaction r1 removed\n" {
 		t.Fatalf("%+v", r)
+	}
+}
+
+func TestCommentReactJSON(t *testing.T) {
+	srv, _ := commentServer(t)
+	editEnv(t, srv)
+	r := runGo([]string{"--json", "comment", "react", "87", "c1", "ok"})
+	want := "{\n  \"comment_id\": \"c1\",\n  \"content\": \"ok\"\n}\n"
+	if r.code != 0 || r.stdout != want {
+		t.Fatalf("%+v", r)
+	}
+}
+
+func TestCommentReactDryRun(t *testing.T) {
+	srv, calls := commentServer(t)
+	editEnv(t, srv)
+	r := runGo([]string{"--dry-run", "comment", "react", "87", "c1", "ok"})
+	if r.code != 0 || !strings.Contains(r.stdout, "nothing sent") || strings.Contains(r.stdout, "None") {
+		t.Fatalf("%+v", r)
+	}
+	r = runGo([]string{"--dry-run", "--json", "comment", "react", "87", "c1", "ok"})
+	if r.code != 0 || !strings.Contains(r.stdout, `"dry_run": true`) || !strings.Contains(r.stdout, `"comment_id": "c1"`) || strings.Contains(r.stdout, "null") {
+		t.Fatalf("%+v", r)
+	}
+	if len(calls()) != 0 {
+		t.Errorf("sent %+v", calls())
 	}
 }
 

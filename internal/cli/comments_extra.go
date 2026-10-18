@@ -62,7 +62,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "react NUMBER COMMENT_ID TEXT",
 			Short:   "react to a comment",
-			Long:    "Add a reaction to a comment. The text is at most 16 characters.",
+			Long:    "Add a reaction to a comment. The text is at most 16 characters. Fizzy does not send back the new reaction's id; comment reactions lists it.",
 			Example: examples(`fz comment react 87 03abc123def456ghi789jkl0mn "ok"`),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentReact),
@@ -182,11 +182,13 @@ func commentReact(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	id, err := fz.ReactToComment(n, a[1], a[2])
-	if err != nil {
+	// Fizzy answers 201 with no body and no Location, so there is no
+	// reaction id to print. comment reactions lists the ids.
+	if _, err := fz.ReactToComment(n, a[1], a[2]); err != nil {
 		return err
 	}
-	return emit(c.cmd, c.dry(obj{{"id", orNull(id)}}), c.wrote("reaction added: "+orNone(id), "add a reaction to comment "+a[1]))
+	return emit(c.cmd, c.dry(obj{{"comment_id", a[1]}, {"content", a[2]}}),
+		c.wrote("reaction added to comment "+a[1], "add a reaction to comment "+a[1]))
 }
 
 func commentReactions(c *cmdContext, a []string) error {
