@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"unicode"
@@ -229,6 +230,17 @@ func checkName(what, name string) error {
 		return usagef("%s cannot be empty", what)
 	}
 	return nil
+}
+
+// readDescriptionFile reads the Markdown file a --description-file flag
+// names, with Windows and old Mac line ends turned into newlines. A file
+// that cannot be read is a usage error.
+func readDescriptionFile(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", usagef("argument --description-file: %v", err)
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n"), nil
 }
 
 // cardNumber parses a card number argument.

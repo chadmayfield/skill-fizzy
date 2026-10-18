@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 
@@ -308,6 +307,14 @@ func cardCreate(c *cmdContext, a []string) error {
 			return usagef("--tag cannot be empty")
 		}
 	}
+	desc, _ := fl.GetString("description")
+	if file, _ := fl.GetString("description-file"); file != "" {
+		d, err := readDescriptionFile(file)
+		if err != nil {
+			return err
+		}
+		desc = d
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
@@ -315,14 +322,6 @@ func cardCreate(c *cmdContext, a []string) error {
 	b, err := fz.Board(a[0])
 	if err != nil {
 		return err
-	}
-	desc, _ := fl.GetString("description")
-	if file, _ := fl.GetString("description-file"); file != "" {
-		raw, err := os.ReadFile(file)
-		if err != nil {
-			return err
-		}
-		desc = strings.ReplaceAll(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\r", "\n")
 	}
 	html := ""
 	if desc != "" {
