@@ -105,3 +105,37 @@ func TestDryRunLine(t *testing.T) {
 		}
 	}
 }
+
+// Every list command added in plan 2 prints a placeholder when the list is
+// empty, as card list prints "(no cards)".
+func TestEmptyListsSayNone(t *testing.T) {
+	routes := map[string]string{
+		"GET /1/boards":                           `[{"id":"b1","name":"Home"}]`,
+		"GET /1/boards/b1/columns":                `[{"id":"c1","name":"Next"}]`,
+		"GET /1/boards/b1/columns/c1/cards":       `[]`,
+		"GET /1/cards/87/comments":                `[]`,
+		"GET /1/cards/87/comments/c1/reactions":   `[]`,
+		"GET /1/boards/b1/webhooks":               `[]`,
+		"GET /1/boards/b1/webhooks/H1/deliveries": `[]`,
+	}
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"comment", "list", "87"}, "(no comments)"},
+		{[]string{"comment", "reactions", "87", "c1"}, "(no reactions)"},
+		{[]string{"column", "cards", "Home", "Next"}, "(no cards)"},
+		{[]string{"webhook", "list", "Home"}, "(no webhooks)"},
+		{[]string{"webhook", "deliveries", "Home", "H1"}, "(no deliveries)"},
+	} {
+		acctServer(t, routes)
+		r := runGo(c.args)
+		if r.code != 0 || r.stdout != c.want+"\n" {
+			t.Errorf("%s: got %+v", strings.Join(c.args, " "), r)
+		}
+		r = runGo(append([]string{"--json"}, c.args...))
+		if r.code != 0 || r.stdout != "[]\n" {
+			t.Errorf("--json %s: got %+v", strings.Join(c.args, " "), r)
+		}
+	}
+}

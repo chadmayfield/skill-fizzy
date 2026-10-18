@@ -171,9 +171,5 @@ func columnCards(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(cards))
-	for i, card := range cards {
-		lines[i] = cardLine(card)
-	}
-	return emit(c.cmd, rawList(cards), strings.Join(lines, "\n"))
+	return emit(c.cmd, rawList(cards), listText(cards, cardLine, "(no cards)"))
 }

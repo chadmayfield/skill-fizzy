@@ -189,15 +189,11 @@ func webhookList(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
-	lines := make([]string, len(hooks))
-	for i, h := range hooks {
-		lines[i] = webhookLine(h)
-	}
 	stripped := make([]json.RawMessage, len(hooks))
 	for i, h := range hooks {
 		stripped[i] = stripSecret(h.Raw())
 	}
-	return emit(c.cmd, stripped, strings.Join(lines, "\n"))
+	return emit(c.cmd, stripped, listText(hooks, webhookLine, "(no webhooks)"))
 }
 
 func webhookShow(c *cmdContext, a []string) error {
@@ -397,9 +393,5 @@ func webhookDeliveries(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
-	lines := make([]string, len(ds))
-	for i, d := range ds {
-		lines[i] = deliveryLine(d)
-	}
-	return emit(c.cmd, rawList(ds), strings.Join(lines, "\n"))
+	return emit(c.cmd, rawList(ds), listText(ds, deliveryLine, "(no deliveries)"))
 }

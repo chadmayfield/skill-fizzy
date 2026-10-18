@@ -113,11 +113,8 @@ func commentList(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(cs))
-	for i, cm := range cs {
-		lines[i] = commentHead(cm) + "  " + firstLine(cm.Body.PlainText)
-	}
-	return emit(c.cmd, rawList(cs), strings.Join(lines, "\n"))
+	line := func(cm fizzy.Comment) string { return commentHead(cm) + "  " + firstLine(cm.Body.PlainText) }
+	return emit(c.cmd, rawList(cs), listText(cs, line, "(no comments)"))
 }
 
 func commentShow(c *cmdContext, a []string) error {
@@ -205,11 +202,8 @@ func commentReactions(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	lines := make([]string, len(rs))
-	for i, r := range rs {
-		lines[i] = fmt.Sprintf("%s  %s  %s", r.ID, r.Reacter.Name, r.Content)
-	}
-	return emit(c.cmd, rawList(rs), strings.Join(lines, "\n"))
+	line := func(r fizzy.Reaction) string { return fmt.Sprintf("%s  %s  %s", r.ID, r.Reacter.Name, r.Content) }
+	return emit(c.cmd, rawList(rs), listText(rs, line, "(no reactions)"))
 }
 
 func commentUnreact(c *cmdContext, a []string) error {
