@@ -191,6 +191,7 @@ type reqOpts struct {
 	noAuth        bool
 	notAccountScp bool
 	upload        bool
+	deadline      time.Time
 }
 
 // Option adjusts one request.
@@ -224,6 +225,9 @@ func Headers(h map[string]string) Option {
 
 // NoAuth omits the Authorization header.
 func NoAuth() Option { return func(o *reqOpts) { o.noAuth = true } }
+
+// deadline ends the request at t, if that comes before its own timeout.
+func deadline(t time.Time) Option { return func(o *reqOpts) { o.deadline = t } }
 
 // NotAccountScoped leaves the account prefix off the path.
 func NotAccountScoped() Option { return func(o *reqOpts) { o.notAccountScp = true } }
@@ -410,6 +414,11 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	// returns.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	if !o.deadline.IsZero() {
+		var cancelAt context.CancelFunc
+		ctx, cancelAt = context.WithDeadline(ctx, o.deadline)
+		defer cancelAt()
+	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
 		return 0, nil, nil, redactErr(err)
@@ -489,7 +498,7 @@ func (c *Client) Get(path string, v any) error {
 	if v == nil || len(payload) == 0 {
 		return nil
 	}
-	return json.Unmarshal(payload, v)
+	return ReplyError(http.MethodGet, c.RequestPath(path, true), json.Unmarshal(payload, v))
 }
 
 // GetAll GETs a list endpoint and follows every page. On any error it
@@ -499,7 +508,7 @@ func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
 	err := c.EachPage(path, func(payload []byte) (bool, error) {
 		var page []json.RawMessage
 		if err := json.Unmarshal(payload, &page); err != nil {
-			return false, err
+			return false, ReplyError(http.MethodGet, c.RequestPath(path, true), err)
 		}
 		items = append(items, page...)
 		return false, nil
@@ -509,6 +518,10 @@ func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
 	}
 	return items, nil
 }
+
+// ListTimeout caps one list read, all its pages together. It is a variable
+// so a test can lower it.
+var ListTimeout = 10 * time.Minute
 
 // MaxPages caps how many pages one list may follow.
 const MaxPages = 1000
@@ -526,12 +539,18 @@ var maxListBytes = 256 << 20
 // and port. A link that starts with one "/" resolves against the configured
 // origin as it stands, with no account prefix added. Any other link, a link
 // seen before, and a page past MaxPages are errors, and nothing is sent for
-// them. So is a list whose pages pass 256 MiB together.
+// them. So is a list whose pages pass 256 MiB together, or that takes
+// longer than ListTimeout.
 func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err error)) error {
 	next := c.URL(path, true)
 	seen := map[string]bool{}
 	total := 0
+	end := time.Now().Add(ListTimeout)
+	tooSlow := fmt.Errorf("pagination: the list took more than %v; fz stopped", ListTimeout)
 	for pages := 0; next != ""; pages++ {
+		if !time.Now().Before(end) {
+			return tooSlow
+		}
 		if pages == MaxPages {
 			return fmt.Errorf("pagination: more than %d pages; fz stopped", MaxPages)
 		}
@@ -539,8 +558,11 @@ func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err e
 			return fmt.Errorf("pagination loop: %s linked again", redactURL(next))
 		}
 		seen[next] = true
-		_, hdr, payload, err := c.Do(http.MethodGet, next, nil)
+		_, hdr, payload, err := c.Do(http.MethodGet, next, nil, deadline(end))
 		if err != nil {
+			if !time.Now().Before(end) {
+				return tooSlow
+			}
 			return err
 		}
 		if total += len(payload); total > maxListBytes {

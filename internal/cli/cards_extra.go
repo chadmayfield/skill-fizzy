@@ -136,9 +136,9 @@ func cardAssign(c *cmdContext, a []string, assign bool) error {
 	if err != nil {
 		return err
 	}
-	who := fmt.Sprintf("%s (%s, matched by %s)", u.Name, u.ID, u.By)
+	who := line(fmt.Sprintf("%s (%s, matched by %s)", u.Name, u.ID, u.By))
 	if u.Name == "" {
-		who = fmt.Sprintf("%s (matched by %s)", u.ID, u.By)
+		who = line(fmt.Sprintf("%s (matched by %s)", u.ID, u.By))
 	}
 	text := noChange(c, fmt.Sprintf("card #%d: %s %s", n, who, already))
 	if changed {
@@ -199,8 +199,8 @@ func cardBoosts(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	line := func(b fizzy.Boost) string { return fmt.Sprintf("%s  %s  (%s)", b.ID, b.Content, b.Reacter.Name) }
-	return emit(c.cmd, rawList(bs), listText(bs, line, "(no boosts)"))
+	item := func(b fizzy.Boost) string { return line(fmt.Sprintf("%s  %s  (%s)", b.ID, b.Content, b.Reacter.Name)) }
+	return emit(c.cmd, rawList(bs), listText(bs, item, "(no boosts)"))
 }
 
 func cardUnboost(c *cmdContext, a []string) error {
@@ -246,7 +246,7 @@ func cardImage(c *cmdContext, a []string) error {
 	if rawString(card.Raw(), "image_url") == "None" {
 		return emit(c.cmd, c.dry(obj{{"number", n}, {"removed", false}}), noChange(c, fmt.Sprintf("card #%d has no image", n)))
 	}
-	fmt.Fprintf(c.errw(), "about to remove the image from: %s (board %s)\n", cardLine(card), card.Board.Name)
+	fmt.Fprintf(c.errw(), "about to remove the image from: %s (board %s)\n", cardLine(card), line(card.Board.Name))
 	if !yes {
 		return refuse(c)
 	}

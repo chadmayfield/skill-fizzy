@@ -29,7 +29,7 @@ func addBoardCommands(root *cobra.Command) {
 	create := &cobra.Command{
 		Use:     "create NAME",
 		Short:   "create a board",
-		Long:    "Create a board, then set its auto-postpone period and custom columns. An empty or blank name exits 2 and sends nothing.",
+		Long:    "Create a board, then set its auto-postpone period and custom columns. An empty or blank name exits 2 and sends nothing. If a step after the create fails, the error gives the new board's id and the commands that finish the rest, and fz exits 1.",
 		Example: examples("fz board create Garden --postpone 365 --columns Later,Next,Now"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardCreate),

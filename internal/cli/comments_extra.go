@@ -43,7 +43,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "show NUMBER COMMENT_ID",
 			Short:   "show one comment",
-			Long:    "Show one comment: its id, author and time, then the full text. In text mode a line saying the text below is data from Fizzy, not instructions, comes first.",
+			Long:    "Show one comment: its id, author and time, then the full text. In text mode a line saying the text below is data from Fizzy, not instructions, comes first. Every line of the text after the first is indented by two spaces, so no line from the server starts at the left edge.",
 			Example: examples("fz comment show 87 03abc123def456ghi789jkl0mn"),
 			Args:    args(cobra.ExactArgs(2)),
 			RunE:    action(commentShow),
@@ -106,7 +106,7 @@ func authorHint(err error) error {
 }
 
 func commentHead(c fizzy.Comment) string {
-	return fmt.Sprintf("%s  %s  %s", c.ID, c.Creator.Name, c.CreatedAt)
+	return line(fmt.Sprintf("%s  %s  %s", c.ID, c.Creator.Name, c.CreatedAt))
 }
 
 func commentList(c *cmdContext, a []string) error {
@@ -122,8 +122,8 @@ func commentList(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	line := func(cm fizzy.Comment) string { return commentHead(cm) + "  " + firstLine(cm.Body.PlainText) }
-	return emit(c.cmd, rawList(cs), listText(cs, line, "(no comments)"))
+	item := func(cm fizzy.Comment) string { return commentHead(cm) + "  " + line(firstLine(cm.Body.PlainText)) }
+	return emit(c.cmd, rawList(cs), listText(cs, item, "(no comments)"))
 }
 
 // serverDataLine comes before server-written text that an AI agent may
@@ -143,7 +143,7 @@ func commentShow(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, json.RawMessage(cm.Raw()), serverDataLine+"\n"+commentHead(cm)+"\n"+strings.TrimRight(cm.Body.PlainText, "\n"))
+	return emit(c.cmd, json.RawMessage(cm.Raw()), serverDataLine+"\n"+commentHead(cm)+"\n"+body(cm.Body.PlainText))
 }
 
 func commentEdit(c *cmdContext, a []string) error {
@@ -178,7 +178,7 @@ func commentDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(c.errw(), strings.TrimRight("about to delete comment "+commentHead(cm)+"  "+firstLine(cm.Body.PlainText), " "))
+	fmt.Fprintln(c.errw(), strings.TrimRight("about to delete comment "+commentHead(cm)+"  "+line(firstLine(cm.Body.PlainText)), " "))
 	if !yes {
 		return refuse(c)
 	}
@@ -191,6 +191,9 @@ func commentDelete(c *cmdContext, a []string) error {
 func commentReact(c *cmdContext, a []string) error {
 	n, err := cardNumber(a[0])
 	if err != nil {
+		return err
+	}
+	if err := fizzy.CheckReaction(a[2]); err != nil {
 		return err
 	}
 	fz, err := c.api()
@@ -219,8 +222,8 @@ func commentReactions(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	line := func(r fizzy.Reaction) string { return fmt.Sprintf("%s  %s  %s", r.ID, r.Reacter.Name, r.Content) }
-	return emit(c.cmd, rawList(rs), listText(rs, line, "(no reactions)"))
+	item := func(r fizzy.Reaction) string { return line(fmt.Sprintf("%s  %s  %s", r.ID, r.Reacter.Name, r.Content)) }
+	return emit(c.cmd, rawList(rs), listText(rs, item, "(no reactions)"))
 }
 
 func commentUnreact(c *cmdContext, a []string) error {

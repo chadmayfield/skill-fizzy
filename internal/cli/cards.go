@@ -66,13 +66,15 @@ func addCardCommands(root *cobra.Command) {
 		Short: "create a card",
 		Long: "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing. " +
 			"fz checks --column before the create, so a missing, shared or reserved column name sends nothing. A tag given twice is sent once. " +
-			"If a call after the create fails, the error names the new card number.",
+			"If a check after the create refuses, the error says the card was created and names its number. " +
+			"Any other failure after the create prints the request that failed, whose path holds the card number, such as /1/cards/90/triage. " +
+			"Finish that card by hand rather than creating it again.",
 		Example: examples(`fz card create Home "Fix the gate"`, `fz card create Home "Fix the gate" --column Next --tag buy`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardCreate),
 	}
 	create.Flags().String("description", "", "description as Markdown")
-	create.Flags().String("description-file", "", "read the Markdown description from a file")
+	create.Flags().String("description-file", "", "read the Markdown description from a file of at most 4 MiB")
 	create.Flags().String("column", "", "column name, or maybe (default)")
 	create.Flags().StringArray("tag", nil, "tag to add; repeat for more")
 
@@ -319,6 +321,9 @@ func cardCreate(c *cmdContext, a []string) error {
 			return usagef("--tag cannot be empty")
 		}
 	}
+	if fl.Changed("description") && fl.Changed("description-file") {
+		return usagef("argument --description-file: not allowed with argument --description")
+	}
 	desc, _ := fl.GetString("description")
 	if file, _ := fl.GetString("description-file"); file != "" {
 		d, err := readDescriptionFile(file)
@@ -398,7 +403,7 @@ func cardCreate(c *cmdContext, a []string) error {
 	text := "dry-run: card not created"
 	var number any
 	if n != 0 {
-		text = fmt.Sprintf("card #%d created on %s", n, b.Name)
+		text = fmt.Sprintf("card #%d created on %s", n, line(b.Name))
 		number = n
 	}
 	return emit(c.cmd, obj{{"number", number}}, text)
@@ -410,14 +415,14 @@ func cardMove(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fz, err := c.api()
-	if err != nil {
-		return err
-	}
 	to, _ := fl.GetString("to")
 	name, _ := fl.GetString("board")
 	if to == "" && name == "" {
 		return usagef("card move needs --to, --board or both")
+	}
+	fz, err := c.api()
+	if err != nil {
+		return err
 	}
 	if name == "" {
 		if err := fz.MoveCard(n, to, ""); err != nil {
@@ -511,6 +516,9 @@ func cardTag(c *cmdContext, a []string) error {
 		return err
 	}
 	remove, _ := c.cmd.Flags().GetBool("remove")
+	if err := fizzy.CheckTag(a[1]); err != nil {
+		return err
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err

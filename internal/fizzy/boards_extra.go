@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/chadmayfield/skill-fizzy/internal/client"
 )
 
 // BoardInfo is one board as GET /boards/:id returns it. The list endpoint
@@ -108,7 +110,7 @@ func (f *Fizzy) PublishBoard(boardID string) (string, error) {
 	}
 	var b BoardInfo
 	if err := json.Unmarshal(raw, &b); err != nil {
-		return "", err
+		return "", client.ReplyError(http.MethodPost, f.C.RequestPath("/boards/"+url.PathEscape(boardID)+"/publication", true), err)
 	}
 	return b.PublicURL, nil
 }
@@ -178,7 +180,7 @@ func (f *Fizzy) BoardAccesses(boardID string) (BoardAccess, error) {
 			Users     []AccessUser `json:"users"`
 		}
 		if err := json.Unmarshal(payload, &page); err != nil {
-			return false, err
+			return false, client.ReplyError(http.MethodGet, f.C.RequestPath("/boards/"+url.PathEscape(boardID)+"/accesses", true), err)
 		}
 		out.BoardID, out.AllAccess = page.BoardID, page.AllAccess
 		out.Users = append(out.Users, page.Users...)

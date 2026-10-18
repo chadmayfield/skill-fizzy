@@ -276,9 +276,13 @@ func TestBoardLookup(t *testing.T) {
 	if b, err := f.Board("HOME"); err != nil || b.ID != "B1" {
 		t.Errorf("by name: %+v %v", b, err)
 	}
-	// An ambiguous name is a Refusal, so it exits 2 like an ambiguous
-	// column, tag or user.
-	if _, err := f.Board("shop"); !IsRefusal(err) || !strings.Contains(err.Error(), "2 boards are named") {
+	// An exact name wins over one that matches only ignoring case.
+	if b, err := f.Board("shop"); err != nil || b.ID != "B3" {
+		t.Errorf("exact: %+v %v", b, err)
+	}
+	// A name that matches two only ignoring case is a Refusal, so it
+	// exits 2 like an ambiguous column, tag or user.
+	if _, err := f.Board("SHOP"); !IsRefusal(err) || !strings.Contains(err.Error(), "2 boards are named") {
 		t.Errorf("ambiguous: %v", err)
 	}
 	_, err := f.Board("zzz")

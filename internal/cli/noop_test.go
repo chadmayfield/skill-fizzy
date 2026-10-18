@@ -95,3 +95,46 @@ func TestNoChangeBoardAccessSameUsers(t *testing.T) {
 		t.Errorf("a real change: %+v", r)
 	}
 }
+
+// board publish on a board that is already published, and webhook edit
+// with the values the webhook has, print that no change is needed, send
+// nothing and exit 0, without --yes. A dry run marks the same.
+func TestPublishAndWebhookEditNoChange(t *testing.T) {
+	routes := map[string]string{}
+	for k, v := range dryRunRoutes {
+		routes[k] = v
+	}
+	routes["GET /1/boards/b1"] = `{"id":"b1","name":"Home","all_access":false,"public_url":"https://fizzy.example.com/1/public/boards/xyz"}`
+	routes["GET /1/boards/b1/webhooks/H1"] = testWebhook
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"board", "publish", "Home"}, "board Home is already published: https://fizzy.example.com/1/public/boards/xyz; no change needed\n"},
+		{[]string{"webhook", "edit", "Home", "H1", "--name", "Gate alerts"}, "webhook H1 already has these values; no change needed\n"},
+		{[]string{"webhook", "edit", "Home", "H1", "--actions", "comment_created,card_closed"}, "webhook H1 already has these values; no change needed\n"},
+		{[]string{"--dry-run", "board", "publish", "Home"}, "dry-run: nothing sent; no change needed\n"},
+		{[]string{"--dry-run", "webhook", "edit", "Home", "H1", "--name", "Gate alerts", "--actions", "card_closed,comment_created"}, "dry-run: nothing sent; no change needed\n"},
+	} {
+		_, calls := acctServer(t, routes)
+		r := runGo(c.args)
+		if r.code != 0 || r.stdout != c.want {
+			t.Errorf("%q: got %+v, want %q", c.args, r, c.want)
+		}
+		for _, call := range calls() {
+			if call.method != "GET" {
+				t.Errorf("%q sent %s %s", c.args, call.method, call.path)
+			}
+		}
+	}
+	_, _ = acctServer(t, routes)
+	r := runGo([]string{"--json", "--dry-run", "board", "publish", "Home"})
+	if r.code != 0 || !strings.Contains(r.stdout, `"changed": false`) || !strings.Contains(r.stdout, `"dry_run": true`) {
+		t.Errorf("json: %+v", r)
+	}
+	// A real change still needs --yes.
+	_, _ = acctServer(t, routes)
+	if r := runGo([]string{"webhook", "edit", "Home", "H1", "--name", "Hinge alerts"}); r.code != 2 {
+		t.Errorf("a change without --yes: %+v", r)
+	}
+}

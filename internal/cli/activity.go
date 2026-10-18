@@ -117,11 +117,11 @@ func activityLine(a fizzy.Activity) string {
 	if a.Eventable.Number != 0 {
 		what += fmt.Sprintf(" #%d", a.Eventable.Number)
 	}
-	line := fmt.Sprintf("%s  %s  %s", a.CreatedAt, a.Action, what)
+	text := fmt.Sprintf("%s  %s  %s", a.CreatedAt, a.Action, what)
 	if s := particularsText(a.Particulars); s != "" {
-		line += "  " + s
+		text += "  " + s
 	}
-	return line
+	return line(text)
 }
 
 func activityList(c *cmdContext, _ []string) error {
@@ -161,11 +161,11 @@ func notificationLine(n fizzy.Notification) string {
 	if n.Read {
 		state = "read"
 	}
-	line := fmt.Sprintf("%s [%s] %s  %s", n.ID, state, n.CreatedAt, n.Title)
+	text := fmt.Sprintf("%s [%s] %s  %s", n.ID, state, n.CreatedAt, n.Title)
 	if n.Body != "" {
-		line += ": " + n.Body
+		text += ": " + n.Body
 	}
-	return line
+	return line(text)
 }
 
 func notificationList(c *cmdContext, _ []string) error {
@@ -239,5 +239,5 @@ func notificationSettings(c *cmdContext, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, s.Raw(), "email: "+s.BundleEmailFrequency)
+	return emit(c.cmd, s.Raw(), "email: "+line(s.BundleEmailFrequency))
 }

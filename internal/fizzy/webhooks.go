@@ -190,7 +190,10 @@ func (f *Fizzy) CreateWebhook(boardID, name, hookURL string, actions []string) (
 	if json.Valid(payload) && json.Unmarshal(payload, &w) == nil && w.ID != "" {
 		return w, nil
 	}
-	return Webhook{ID: client.IDFromLocation(hdr.Get("Location"))}, nil
+	if id := client.IDFromLocation(hdr.Get("Location")); id != "" {
+		return Webhook{ID: id}, nil
+	}
+	return Webhook{}, fmt.Errorf("Fizzy created the webhook %s but its reply has no id and %w", PyRepr(name), ErrNoLocation)
 }
 
 // UpdateWebhook changes the name and the subscribed actions. Nil name and

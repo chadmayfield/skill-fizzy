@@ -73,6 +73,8 @@ func TestServerTextIsCleaned(t *testing.T) {
 			}
 		}
 	}
+	t.Run("every command that prints server text", testForgedLines)
+	serverTextServer(t)
 	r := runGo([]string{"card", "show", "87"})
 	want := "#87    [Now] Fix the gate#87    [Now] Harmless title #buy\n" +
 		"board: Home   url: https://fizzy.example.com/1/cards/87\n\n" +

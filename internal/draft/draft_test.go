@@ -138,6 +138,24 @@ func TestResolveImageFallsBackToInbox(t *testing.T) {
 	}
 }
 
+// A file of the same name in the draft's folder and in the inbox resolves
+// to the one beside the draft, which is tried first.
+func TestResolveImageDraftFolderFirst(t *testing.T) {
+	dir := t.TempDir()
+	inbox := filepath.Join(dir, "inbox")
+	if err := os.Mkdir(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, inbox, "a.jpg", "inbox")
+	writeFile(t, dir, "a.jpg", "draft")
+	d := &Draft{Path: filepath.Join(dir, "x.md")}
+	got, err := d.ResolveImage("a.jpg", inbox)
+	want, _ := filepath.EvalSymlinks(filepath.Join(dir, "a.jpg"))
+	if err != nil || got != want {
+		t.Fatalf("got %q %v, want %q", got, err, want)
+	}
+}
+
 func TestRequiresBoardAndTitle(t *testing.T) {
 	dir := t.TempDir()
 	for _, text := range []string{"---\ncolumn: Now\n---\n# T\n", "---\nboard: B\n---\nno title\n"} {

@@ -81,6 +81,9 @@ type syncServer struct {
 	fail map[string]int
 	// noLocation makes the card create reply 201 with no Location header.
 	noLocation bool
+	// uploads makes the direct upload reply usable, so an image upload
+	// succeeds. Without it the reply is {}.
+	uploads bool
 	// afterWrite changes the served card after a write "METHOD /path"
 	// succeeds, the way the real server would.
 	afterWrite map[string]func(*cardState)
@@ -124,6 +127,13 @@ func newSyncServer(t *testing.T) *syncServer {
 		io.WriteString(w, `[{"id":"b1","name":"Home"},{"id":"b2","name":"Garage"}]`)
 	})
 	mux.HandleFunc("POST /1/rails/active_storage/direct_uploads", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		uploads := s.uploads
+		s.mu.Unlock()
+		if uploads {
+			io.WriteString(w, `{"signed_id":"B","attachable_sgid":"att-sgid","direct_upload":{"url":"`+s.URL+`/put","headers":{}}}`)
+			return
+		}
 		io.WriteString(w, `{}`)
 	})
 	mux.HandleFunc("POST /1/boards/{id}/cards", func(w http.ResponseWriter, r *http.Request) {
@@ -579,8 +589,16 @@ func TestApplyNewCardRecordsCardAndSynced(t *testing.T) {
 	if err := json.Unmarshal([]byte(card90), &c90); err != nil {
 		t.Fatal(err)
 	}
+	d, err := draft.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dh, err := draftHash(d, "")
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := "---\nboard: Home\ncard: 90\nsynced: " + fingerprintOf(t, card90) + "\nsynced-fields: " + syncedFields(c90) +
-		"\n---\n# Oil the hinge\n\nOnce a year.\n"
+		"\nsynced-draft: " + dh + "\n---\n# Oil the hinge\n\nOnce a year.\n"
 	if text := syncReadDraft(t, path); text != want {
 		t.Errorf("draft after apply:\n%q\nwant\n%q", text, want)
 	}

@@ -85,3 +85,37 @@ func TestDraftCheckNeedsNoServer(t *testing.T) {
 		t.Errorf("check: %+v", got)
 	}
 }
+
+// apply prints the resolved path of each image before it sends the file,
+// so the user sees which file left the disk. A create prints one image:
+// line per image; an update prints it after the card number.
+func TestApplyPrintsImagePaths(t *testing.T) {
+	srv := newSyncServer(t)
+	srv.uploads = true
+	home, drafts := imageEnv(t, srv)
+	inboxImg := filepath.Join(home, "inbox", "hinge.jpg")
+	writeFile(t, inboxImg, "jpg")
+	draftImg := filepath.Join(drafts, "latch.jpg")
+	writeFile(t, draftImg, "jpg")
+	p := filepath.Join(drafts, "gate.md")
+	writeFile(t, p, "---\nboard: Home\n---\n# Fix the gate\n\n![a](../hinge.jpg)\n\n![b](latch.jpg)\n")
+	// The paths printed are the real ones, with symlinks resolved, as the
+	// temp folder is on macOS.
+	for _, img := range []*string{&inboxImg, &draftImg} {
+		real, err := filepath.EvalSymlinks(*img)
+		if err != nil {
+			t.Fatal(err)
+		}
+		*img = real
+	}
+	got := runGo([]string{"draft", "apply", p})
+	if got.code != 0 || !strings.HasPrefix(got.stdout, "image: "+inboxImg+"\nimage: "+draftImg+"\n#90 ") {
+		t.Errorf("create: %+v", got)
+	}
+	// Changed bytes, so the update sends both images again.
+	writeFile(t, inboxImg, "jpg2")
+	got = runGo([]string{"draft", "apply", "--update", "--force", p})
+	if got.code != 0 || !strings.Contains(got.stdout, "#90 image: "+inboxImg+"\n#90 image: "+draftImg+"\n") {
+		t.Errorf("update: %+v", got)
+	}
+}

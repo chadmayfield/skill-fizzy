@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
+	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
@@ -191,12 +191,30 @@ func orNone(s string) string {
 // a name: config.TerminalLine.
 func line(s string) string { return config.TerminalLine(s) }
 
+// body cleans server text that may run over several lines, such as a
+// comment body. It keeps the newlines and indents every line after the
+// first by two spaces, so no line from the server starts at column 0.
+// Trailing newlines are dropped.
+func body(s string) string {
+	lines := strings.Split(strings.TrimRight(config.TerminalText(s), "\n"), "\n")
+	for i := 1; i < len(lines); i++ {
+		if lines[i] != "" {
+			lines[i] = "  " + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // cardLine formats a card the way the Python _card_line does. Server text
 // is kept to the line, so a title cannot fake another card's line.
 func cardLine(c fizzy.Card) string {
 	state := "maybe"
 	if c.Column != nil && c.Column.Name != "" {
 		state = line(c.Column.Name)
+	}
+	// Fizzy reports a card in Not now with no column and postponed true.
+	if c.Postponed && c.Column == nil {
+		state = "not now"
 	}
 	if c.Closed {
 		state = "done"
@@ -250,7 +268,7 @@ func checkName(what, name string) error {
 // names, with Windows and old Mac line ends turned into newlines. A file
 // that cannot be read is a usage error.
 func readDescriptionFile(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := draft.ReadCapped(path)
 	if err != nil {
 		return "", usagef("argument --description-file: %v", err)
 	}

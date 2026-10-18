@@ -63,7 +63,8 @@ func addWebhookCommands(root *cobra.Command) {
 		Use:   "edit BOARD ID",
 		Short: "change a webhook's name or actions (needs --yes)",
 		Long: "Change a webhook's name or the actions it sends. The URL cannot change. " +
-			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes.",
+			"An empty or blank name exits 2 and sends nothing. Prints the URL and the new actions and refuses without --yes. " +
+			"When the webhook already has the name and actions given, it says no change is needed, sends nothing and exits 0.",
 		Example: examples("fz webhook edit Gate 03abc123def456ghi789jkl0mn --actions card_closed --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(webhookEdit),
@@ -127,7 +128,7 @@ func webhookLine(w fizzy.Webhook) string {
 	if !w.Active {
 		state = "inactive"
 	}
-	return fmt.Sprintf("%s  [%s] %s -> %s  %s", w.ID, state, w.Name, w.PayloadURL, strings.Join(w.SubscribedActions, ","))
+	return line(fmt.Sprintf("%s  [%s] %s -> %s  %s", w.ID, state, w.Name, w.PayloadURL, strings.Join(w.SubscribedActions, ",")))
 }
 
 func deliveryLine(d fizzy.WebhookDelivery) string {
@@ -138,7 +139,7 @@ func deliveryLine(d fizzy.WebhookDelivery) string {
 			result += ": " + *d.Response.Error
 		}
 	}
-	return fmt.Sprintf("%s  %s  %s  %s", d.ID, d.State, d.Event.Action, result)
+	return line(fmt.Sprintf("%s  %s  %s  %s", d.ID, d.State, d.Event.Action, result))
 }
 
 // stripSecret drops signing_secret from a webhook's raw JSON and keeps every
@@ -224,7 +225,7 @@ func webhookShow(c *cmdContext, a []string) error {
 // refuseWithoutYes prints what would be sent and where, then refuses unless
 // --yes is set.
 func refuseWithoutYes(c *cmdContext, summary string) error {
-	fmt.Fprintln(c.errw(), summary)
+	fmt.Fprintln(c.errw(), line(summary))
 	if yes, _ := c.cmd.Flags().GetBool("yes"); !yes {
 		return refuse(c)
 	}
@@ -271,13 +272,13 @@ func webhookCreate(c *cmdContext, a []string) error {
 	if c.dryRun {
 		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("", "create webhook "+pyRepr(name)))
 	}
-	text := "webhook created: " + orNone(h.ID)
+	text := "webhook created: " + line(orNone(h.ID))
 	if h.SigningSecret != "" {
 		// The secret goes to stderr, so stdout can be logged without it.
 		// With --json it stays in the JSON, because a script needs it.
 		fmt.Fprintln(c.errw(), "save the signing secret now; fz hides it from list and show")
 		if flagValue(c.cmd, "json") != "true" {
-			fmt.Fprintln(c.errw(), "signing secret: "+h.SigningSecret)
+			fmt.Fprintln(c.errw(), "signing secret: "+line(h.SigningSecret))
 		}
 	}
 	if h.Raw() != nil {
@@ -321,6 +322,10 @@ func webhookEdit(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
+	if (name == nil || *name == h.Name) && (actions == nil || sameIDs(actions, h.SubscribedActions)) {
+		return emit(c.cmd, c.dry(obj{{"id", h.ID}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("webhook %s already has these values; no change needed", line(h.ID))))
+	}
 	var changes []string
 	if name != nil {
 		changes = append(changes, "name "+pyRepr(*name))
@@ -328,7 +333,7 @@ func webhookEdit(c *cmdContext, a []string) error {
 	if actions != nil {
 		changes = append(changes, "actions "+strings.Join(actions, ","))
 	}
-	if err := refuseWithoutYes(c, fmt.Sprintf("about to change webhook %s sending to %s: %s", h.ID, h.PayloadURL, strings.Join(changes, "; "))); err != nil {
+	if err := refuseWithoutYes(c, fmt.Sprintf("about to change webhook %s sending to %s: %s", line(h.ID), line(h.PayloadURL), strings.Join(changes, "; "))); err != nil {
 		return err
 	}
 	upd, err := fz.UpdateWebhook(board, a[1], name, actions)

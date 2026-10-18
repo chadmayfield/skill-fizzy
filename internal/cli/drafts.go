@@ -63,9 +63,11 @@ func addDraftCommands(root *cobra.Command) {
 			"Matching steps are left alone, a draft tick ticks a card step, and nothing is ever unticked. " +
 			"New draft steps are added. Card steps and tags the draft does not have are kept and reported; " +
 			"--prune deletes the unticked steps and removes the tags. A closed card is never reopened. " +
-			"Images are uploaded again on every update.\n\n" +
+			"The images, title and description are sent only when the draft's title, body or image files changed since the last sync, " +
+			"or the card's title or description changed in Fizzy; otherwise fz prints title and description unchanged.\n\n" +
 			"After every apply, fz writes a fingerprint of the card's title, description, steps, tags, golden mark, " +
-			"column, board, closed state and Not now state into the draft's synced: line, and a short hash of each into synced-fields:. " +
+			"column, board, closed state and Not now state into the draft's synced: line, a short hash of each into synced-fields:, " +
+			"and a hash of the draft's title, body and image files into synced-draft:. " +
 			"If the card changed in Fizzy since then, or the draft has no synced: fingerprint, --update refuses that draft unless --force is given. " +
 			"The refusal names the fields that changed when synced-fields: is there.",
 		Example: examples("fz draft apply ~/.fizzy-inbox/drafts/batch/", "fz --dry-run draft apply gate.md",
@@ -308,7 +310,7 @@ func draftCheck(c *cmdContext, a []string) error {
 		}
 		if errors.Is(err, draft.ErrDraft) {
 			fmt.Fprintf(w, "✗ %s: %s\n", p, err)
-			if errors.Is(err, draft.ErrImagePath) {
+			if errors.Is(err, draft.ErrImagePath) || errors.Is(err, draft.ErrTooLarge) {
 				refused++
 			}
 			bad++
@@ -323,6 +325,11 @@ func draftCheck(c *cmdContext, a []string) error {
 			line += fmt.Sprintf(" (already created: #%d)", d.Card)
 		}
 		fmt.Fprintln(w, line)
+		// apply refuses such a draft, so check fails it now.
+		if note := creatingNote(d); note != "" {
+			fmt.Fprintln(w, "    "+note)
+			bad++
+		}
 		if links {
 			for _, u := range d.Links() {
 				s := checkLink(hc, u)
@@ -351,11 +358,22 @@ func draftCheck(c *cmdContext, a []string) error {
 	return nil
 }
 
+// creatingNote is the line check and preview print for a draft that still
+// has a creating: line, which apply refuses until the user resolves it, or
+// "" for a draft without one.
+func creatingNote(d *draft.Draft) string {
+	at, ok := d.Meta[draft.CreatingKey]
+	if !ok {
+		return ""
+	}
+	return "creating: pending since " + at + "; resolve before apply"
+}
+
 // parseDraft parses a draft for preview and apply. A front matter value fz
 // will not guess at, such as card: 87abc, is refused with exit 2.
 func parseDraft(path string) (*draft.Draft, error) {
 	d, err := draft.Parse(path)
-	if errors.Is(err, draft.ErrBadValue) {
+	if errors.Is(err, draft.ErrBadValue) || errors.Is(err, draft.ErrTooLarge) {
 		return nil, usageError{err}
 	}
 	return d, err
@@ -384,6 +402,9 @@ func draftPreview(c *cmdContext, a []string) error {
 			tags = "-"
 		}
 		fmt.Fprintf(w, "=== %s\nboard: %s   column: %s   tags: %s   golden: %s\n", d.Title, d.Board, d.Column, tags, pyBool(d.Golden))
+		if note := creatingNote(d); note != "" {
+			fmt.Fprintln(w, note)
+		}
 		fmt.Fprintln(w, d.DescriptionHTML(nil))
 		for _, s := range d.Steps {
 			fmt.Fprintf(w, "  [%s] %s\n", tick(s.Done), s.Content)
@@ -433,6 +454,12 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		path, err := d.ResolveImage(img, inbox)
 		if err != nil {
 			return 0, err
+		}
+		// Name the file before it is sent, so the user sees which file
+		// left the disk. A dry run sends no file, and the parity golden
+		// pins its output.
+		if !c.dryRun {
+			fmt.Fprintln(c.out(), "image: "+line(path))
 		}
 		if sgids[img], err = fz.Upload(path); err != nil {
 			return 0, err
@@ -544,12 +571,14 @@ func (e *createUnknown) Error() string {
 }
 
 // createNotSent reports whether a failed card create surely made no card:
-// the server refused it with a 3xx or 4xx, or the request never left fz.
-// Any other failure, such as a timeout, a reset or a 5xx, may have made one.
+// the server refused it with a 4xx, or the request never left fz. Any
+// other failure, such as a timeout, a reset, a 5xx or a 3xx, may have made
+// one. A 3xx counts because a server can answer a create that ran with a
+// redirect to the new record.
 func createNotSent(err error) bool {
 	var api *client.APIError
 	if errors.As(err, &api) {
-		return api.Status >= 300 && api.Status < 500
+		return api.Status >= 400 && api.Status < 500
 	}
 	var op *net.OpError
 	if errors.As(err, &op) && op.Op == "dial" {
@@ -607,6 +636,23 @@ func draftApply(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	// Lock every draft this run may write before reading it for real, so a
+	// second fz cannot parse it in the window before creating: or card: is
+	// written. A dry run writes nothing and takes no lock.
+	if !c.dryRun {
+		var want []string
+		for _, p := range paths {
+			if d, err := parseDraft(p); err == nil && d.Card != 0 && !update {
+				continue
+			}
+			want = append(want, p)
+		}
+		unlock, err := lockDrafts(want)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
 	// Validate every draft first: a parse error, a missing image or a draft
 	// fz could not write card: back into stops the batch before any card is
 	// created.
@@ -621,8 +667,12 @@ func draftApply(c *cmdContext, a []string) error {
 				"Look on board %s. If the card is there, replace the line with card: N; if it is not, delete the line. fz sends nothing until then",
 				p, at, d.Board))
 		}
-		if err := d.CheckImages(cfg.InboxPath()); err != nil {
-			return refuseImage(err)
+		// A draft that will be skipped sends nothing, so its images do
+		// not need to be there.
+		if d.Card == 0 || update {
+			if err := d.CheckImages(cfg.InboxPath()); err != nil {
+				return refuseImage(err)
+			}
 		}
 		if d.Card == 0 || update {
 			if err := draft.CheckWritable(p); err != nil {
@@ -659,6 +709,16 @@ func draftApply(c *cmdContext, a []string) error {
 	w := c.out()
 	for i, d := range drafts {
 		name := filepath.Base(d.Path)
+		// The draft's hash is taken before anything is sent, so an edit
+		// made while fz runs is sent by the next --update.
+		dh := ""
+		if !c.dryRun && (d.Card == 0 || update) {
+			h, err := draftHash(d, cfg.InboxPath())
+			if err != nil {
+				return failApply(c, refuseImage(err), summary)
+			}
+			dh = h
+		}
 		if d.Card != 0 {
 			if !update {
 				summary[i] = fmt.Sprintf("%s: card #%d, skipped", name, d.Card)
@@ -682,7 +742,7 @@ func draftApply(c *cmdContext, a []string) error {
 				finish := "fz draft apply --update " + shellArg(d.Path)
 				msg := fmt.Errorf("card #%d: the update stopped partway: %w\nfz: synced: is recorded from the card as it is now. Finish it with: %s",
 					d.Card, err, finish)
-				if rerr := recordSynced(fz, d.Path, d.Card); rerr != nil {
+				if rerr := recordSynced(fz, d.Path, d.Card, ""); rerr != nil {
 					msg = fmt.Errorf("card #%d: the update stopped partway: %w\nfz: reading the card back failed (%s), so synced: is unchanged; check the card, then finish it with: %s --force",
 						d.Card, err, errorText(rerr), finish)
 				}
@@ -693,7 +753,7 @@ func draftApply(c *cmdContext, a []string) error {
 				return failApply(c, err, summary)
 			}
 			if !c.dryRun {
-				if err := recordSynced(fz, d.Path, d.Card); err != nil {
+				if err := recordSynced(fz, d.Path, d.Card, dh); err != nil {
 					summary[i] = fmt.Sprintf("%s: card #%d, updated, synced: not recorded", name, d.Card)
 					return failApply(c, err, summary)
 				}
@@ -714,7 +774,7 @@ func draftApply(c *cmdContext, a []string) error {
 			// --update needs no --force.
 			finish := "fz draft apply --update " + shellArg(d.Path)
 			msg := fmt.Errorf("%w\nfz: card: %d is written into %s. Finish it with: %s", err, n, name, finish)
-			if rerr := recordSynced(fz, d.Path, n); rerr != nil {
+			if rerr := recordSynced(fz, d.Path, n, ""); rerr != nil {
 				msg = fmt.Errorf("%w\nfz: card: %d is written into %s, but reading the card back failed (%s). Finish it with: fz draft apply --update --force %s",
 					err, n, name, errorText(rerr), shellArg(d.Path))
 			}
@@ -732,7 +792,7 @@ func draftApply(c *cmdContext, a []string) error {
 			continue
 		}
 		summary[i] = fmt.Sprintf("%s: card #%d", name, n)
-		if err := recordSynced(fz, d.Path, n); err != nil {
+		if err := recordSynced(fz, d.Path, n, dh); err != nil {
 			summary[i] = fmt.Sprintf("%s: card #%d, synced: not recorded", name, n)
 			return failApply(c, fmt.Errorf("card #%d was created and card: %d written into %s, but reading it back for synced: failed (%s); the next --update needs --force",
 				n, n, name, errorText(err)), summary)
@@ -742,18 +802,68 @@ func draftApply(c *cmdContext, a []string) error {
 	return nil
 }
 
+// lockPath is the apply lock of the draft at p: .<name>.fzlock beside the
+// file, with symlinks resolved, so every path to one draft shares it.
+func lockPath(p string) string {
+	key := draftKey(p)
+	return filepath.Join(filepath.Dir(key), "."+filepath.Base(key)+".fzlock")
+}
+
+// lockDrafts creates the apply lock of each existing draft in paths with
+// O_EXCL and returns a function that removes the locks it made. A lock that
+// already exists is a Refusal that names it. A folder where no lock can be
+// made is left unlocked: fz cannot write the draft there either, and
+// CheckWritable refuses it before anything is sent.
+func lockDrafts(paths []string) (func(), error) {
+	var held []string
+	unlock := func() {
+		for _, l := range held {
+			os.Remove(l)
+		}
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		l := lockPath(p)
+		f, err := os.OpenFile(l, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if errors.Is(err, os.ErrExist) {
+			unlock()
+			return nil, fizzy.Refuse(fmt.Sprintf("%s: another fz draft apply holds the lock %s, so fz sends nothing. "+
+				"If no apply is running, the lock was left by one that stopped: check the draft's front matter, then delete the lock", p, l))
+		}
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(f, "%d\n", os.Getpid())
+		f.Close()
+		held = append(held, l)
+	}
+	return unlock, nil
+}
+
 // recordSynced writes the card's fingerprint into the draft as synced:,
 // and its per-field hashes as synced-fields:, read after every write so the
 // next --update can tell whether someone changed the card in Fizzy since,
 // and which fields.
-func recordSynced(fz *fizzy.Fizzy, path string, n int) error {
+//
+// dh is the draft's draftHash, taken before anything was sent, and is
+// written as synced-draft: when it is not "". A sync that stopped partway
+// passes "", so the line keeps its old value and the next --update sends
+// the title and description unless the draft is as it was then.
+func recordSynced(fz *fizzy.Fizzy, path string, n int, dh string) error {
 	// Known limit: an edit made in Fizzy between fz's writes and this read is
 	// folded into the new fingerprint, so the next --update cannot see it.
 	card, err := fz.Card(n)
 	if err != nil {
 		return err
 	}
-	return draft.RecordFields(path,
-		draft.KV{Key: "synced", Value: cardFingerprint(card)},
-		draft.KV{Key: "synced-fields", Value: syncedFields(card)})
+	kvs := []draft.KV{
+		{Key: "synced", Value: cardFingerprint(card)},
+		{Key: "synced-fields", Value: syncedFields(card)},
+	}
+	if dh != "" {
+		kvs = append(kvs, draft.KV{Key: syncedDraftKey, Value: dh})
+	}
+	return draft.RecordFields(path, kvs...)
 }

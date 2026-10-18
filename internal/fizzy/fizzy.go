@@ -57,7 +57,7 @@ func list[T any](c *client.Client, path string) ([]T, error) {
 	for _, r := range raw {
 		var v T
 		if err := json.Unmarshal(r, &v); err != nil {
-			return nil, err
+			return nil, client.ReplyError(http.MethodGet, c.RequestPath(path, true), err)
 		}
 		out = append(out, v)
 	}
@@ -71,7 +71,9 @@ func wrap(key string, v any) map[string]any { return map[string]any{key: v} }
 // Boards lists every board.
 func (f *Fizzy) Boards() ([]Board, error) { return list[Board](f.C, "/boards") }
 
-// Board finds a board by id, or by name ignoring case.
+// Board finds a board by id, then by exact name, then by name ignoring
+// case. A name that two boards share ignoring case, with no exact match, is
+// a Refusal.
 func (f *Fizzy) Board(nameOrID string) (Board, error) {
 	boards, err := f.Boards()
 	if err != nil {
@@ -82,15 +84,10 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 			return b, nil
 		}
 	}
-	var matches []Board
-	for _, b := range boards {
-		if strings.EqualFold(b.Name, nameOrID) {
-			matches = append(matches, b)
-		}
-	}
-	switch len(matches) {
+	b, n := pickByName(boards, nameOrID, func(b Board) string { return b.Name })
+	switch n {
 	case 1:
-		return matches[0], nil
+		return b, nil
 	case 0:
 		names := make([]string, len(boards))
 		for i, b := range boards {
@@ -98,7 +95,7 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 		}
 		return Board{}, fmt.Errorf("no board named %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 	}
-	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), PyRepr(nameOrID))
+	return Board{}, refusef("%d boards are named %s; use the board id", n, PyRepr(nameOrID))
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
@@ -129,28 +126,63 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (st
 	if len(columns) > 0 {
 		lost = append(lost, "its columns were not created")
 	}
+	if id == "" {
+		if len(lost) == 0 {
+			return "", fmt.Errorf("Fizzy created the board %s but %w", PyRepr(name), ErrNoLocation)
+		}
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", PyRepr(name), strings.Join(lost, " and "))
+	}
 	if len(lost) == 0 {
 		return id, nil
 	}
-	if id == "" {
-		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", PyRepr(name), strings.Join(lost, " and "))
-	}
 	if err := CheckIDs(id); err != nil {
 		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", PyRepr(name), err, strings.Join(lost, " and "))
+	}
+	// unfinished says the board exists, which step failed, and the
+	// commands that finish the rest, so a retry does not make a second
+	// board. It is not a Refusal: the board was created, so it exits 1.
+	unfinished := func(step string, err error, left []string) error {
+		return fmt.Errorf("board %s was created (id %s), but %s did not finish: %v; to finish, run: %s",
+			PyRepr(name), id, step, err, strings.Join(left, "; "))
+	}
+	var left []string
+	if postponeDays != 0 {
+		left = append(left, fmt.Sprintf("fz board edit %s --postpone %d", shellWord(id), postponeDays))
+	}
+	for _, col := range columns {
+		left = append(left, "fz column create "+shellWord(id)+" "+shellWord(col))
 	}
 	if postponeDays != 0 {
 		if _, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
 			Days int `json:"auto_postpone_period_in_days"`
 		}{postponeDays})); err != nil {
-			return id, err
+			return id, unfinished("setting the auto-postpone period", err, left)
 		}
+		left = left[1:]
 	}
 	for _, col := range columns {
 		if _, err := f.CreateColumn(id, col, ""); err != nil {
-			return id, err
+			return id, unfinished("creating column "+PyRepr(col), err, left)
 		}
+		left = left[1:]
 	}
 	return id, nil
+}
+
+// shellWord returns s as one word for a POSIX shell: as it is when it
+// holds only letters, digits and -_.,/:@%+=, otherwise in single quotes.
+func shellWord(s string) string {
+	safe := s != ""
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.,/:@%+=", r)) {
+			safe = false
+			break
+		}
+	}
+	if safe {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Columns lists a board's custom columns.
@@ -231,7 +263,7 @@ func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
 		}
 		body.Color = v
 	}
-	return f.C.Create("/boards/"+url.PathEscape(boardID)+"/columns", wrap("column", body))
+	return f.created("/boards/"+url.PathEscape(boardID)+"/columns", wrap("column", body), "column")
 }
 
 // ColumnCards lists the cards in one column, following every page.
@@ -339,6 +371,9 @@ func (f *Fizzy) MoveCard(n int, target, boardID string) error {
 		c, err := f.Card(n)
 		if err != nil {
 			return err
+		}
+		if c.Board.ID == "" {
+			return refusef("card #%d names no board in Fizzy's reply, so fz cannot find its columns; give --board", n)
 		}
 		boardID = c.Board.ID
 	}
@@ -491,11 +526,20 @@ func TagTitle(tag string) string {
 	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(tag), "#")))
 }
 
-func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
-	tag = TagTitle(tag)
-	if tag == "" {
-		return false, refusef("the tag cannot be empty")
+// CheckTag refuses a tag that is empty once TagTitle has cleaned it, such
+// as "#". It sends nothing.
+func CheckTag(tag string) error {
+	if TagTitle(tag) == "" {
+		return refusef("the tag cannot be empty")
 	}
+	return nil
+}
+
+func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
+	if err := CheckTag(tag); err != nil {
+		return false, err
+	}
+	tag = TagTitle(tag)
 	c, err := f.Card(n)
 	if err != nil {
 		return false, err
@@ -607,6 +651,10 @@ func (f *Fizzy) storageURL(raw string) (string, error) {
 	return "", bad
 }
 
+// statUpload is os.Stat. A test replaces it to make a file seem to change
+// size while fz reads it.
+var statUpload = os.Stat
+
 // Upload sends a file and returns the sgid to embed as
 // <action-text-attachment sgid=...>. In dry-run mode it prints the blob
 // request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
@@ -617,7 +665,7 @@ func (f *Fizzy) storageURL(raw string) (string, error) {
 // read twice, once for the checksum and once as the PUT body, and never
 // held in memory whole.
 func (f *Fizzy) Upload(path string) (string, error) {
-	fi, err := os.Stat(path)
+	fi, err := statUpload(path)
 	if err != nil {
 		return "", err
 	}

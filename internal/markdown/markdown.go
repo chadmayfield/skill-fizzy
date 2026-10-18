@@ -562,17 +562,29 @@ func underscoreEm(text string) string {
 // not followed by a blocked character. The run may not cross a newline.
 func emphasis(text string, marker rune, blocked func(rune) bool) string {
 	r := []rune(text)
+	// closer[k] is the first index at or after k where a marker can close,
+	// and nl[k] the first newline at or after k, or len(r) for either. An
+	// opener reads them instead of scanning to the end of the line, which
+	// made a line of openers that never close quadratic.
+	closer, nl := make([]int, len(r)+1), make([]int, len(r)+1)
+	closer[len(r)], nl[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		closer[k], nl[k] = closer[k+1], nl[k+1]
+		if r[k] == marker && k > 0 && !isSpace(r[k-1]) && (k+1 >= len(r) || !blocked(r[k+1])) {
+			closer[k] = k
+		}
+		if r[k] == '\n' {
+			nl[k] = k
+		}
+	}
 	var b strings.Builder
-scan:
 	for i := 0; i < len(r); {
 		if r[i] == marker && (i == 0 || !blocked(r[i-1])) && i+1 < len(r) && !isSpace(r[i+1]) {
-			for k := i + 1; k < len(r) && r[k] != '\n'; k++ {
-				j := k + 1
-				if j < len(r) && r[j] == marker && !isSpace(r[k]) && (j+1 >= len(r) || !blocked(r[j+1])) {
-					b.WriteString("<em>" + string(r[i+1:j]) + "</em>")
-					i = j + 1
-					continue scan
-				}
+			// The run has at least one character and may not cross a newline.
+			if j := closer[i+2]; j < nl[i+1] {
+				b.WriteString("<em>" + string(r[i+1:j]) + "</em>")
+				i = j + 1
+				continue
 			}
 		}
 		b.WriteRune(r[i])
