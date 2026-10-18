@@ -147,7 +147,9 @@ the docs catch up. `fz help <noun>` must name a real command.
   `card image --remove`, `comment delete`, `board delete`, `board publish`,
   `board access --all` and `--users`, `column delete`, `account postpone`,
   `user edit`, and `webhook create`, `edit` and `delete`. Without it they
-  print what they would do and exit 2.
+  print what they would do and exit 2. When the change is already in place,
+  as with `user edit` to the current name, they print that no change is
+  needed, send nothing and exit 0.
 - These send a DELETE and need no `--yes`: `card unboost`, `card unwatch`,
   `card unpin`, `card reopen`, `card golden --off`, `card move --to maybe`
   (or `--to "Maybe?"`), `comment unreact`, `notification unread` and
