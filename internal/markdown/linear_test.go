@@ -16,6 +16,8 @@ func TestToHTMLLinear(t *testing.T) {
 		"links without ends":           "[a](https://",
 		"stars that never close":       ".*a",
 		"underscores that never close": "._a",
+		"tildes":                       "~~a",
+		"tildes that never close":      "~~a ",
 	} {
 		in := strings.Repeat(unit, size/len(unit))
 		start := time.Now()

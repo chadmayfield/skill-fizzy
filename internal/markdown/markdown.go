@@ -303,7 +303,8 @@ func task(item string) (checked bool, text string, ok bool) {
 	return r[1] != ' ', text, ok
 }
 
-// Inline escapes text, then applies inline code, links, bold and italic.
+// Inline escapes text, then applies inline code, links, bold, strikethrough
+// and italic.
 func Inline(text string) string {
 	var codes []string
 	text = stashCode(text, &codes)
@@ -311,6 +312,7 @@ func Inline(text string) string {
 	text = links(text)
 	text = bareURLs(text, &codes)
 	text = bold(text)
+	text = strike(text)
 	text = starEm(text)
 	text = underscoreEm(text)
 	return restoreCode(text, codes)
@@ -538,6 +540,48 @@ scan:
 					i = k + 3
 					continue scan
 				}
+			}
+		}
+		b.WriteRune(r[i])
+		i++
+	}
+	return b.String()
+}
+
+// strike replaces ~~text~~ with <del>. Each marker is a run of exactly two
+// tildes. The opener must not be followed by whitespace, the closer must not
+// follow it, and the run may not cross a newline. It runs after bareURLs, so
+// tildes in a URL are already stashed.
+func strike(text string) string {
+	if !strings.Contains(text, "~~") {
+		return text
+	}
+	r := []rune(text)
+	pair := func(k int) bool {
+		return k+1 < len(r) && r[k] == '~' && r[k+1] == '~' &&
+			(k == 0 || r[k-1] != '~') && (k+2 >= len(r) || r[k+2] != '~')
+	}
+	// closer[k] is the first closing marker at or after k, and nl[k] the
+	// first newline at or after k, or len(r) for either, so an opener that
+	// never closes does not scan to the end of the line.
+	closer, nl := make([]int, len(r)+1), make([]int, len(r)+1)
+	closer[len(r)], nl[len(r)] = len(r), len(r)
+	for k := len(r) - 1; k >= 0; k-- {
+		closer[k], nl[k] = closer[k+1], nl[k+1]
+		if k > 0 && pair(k) && !isSpace(r[k-1]) {
+			closer[k] = k
+		}
+		if r[k] == '\n' {
+			nl[k] = k
+		}
+	}
+	var b strings.Builder
+	for i := 0; i < len(r); {
+		if pair(i) && i+2 < len(r) && !isSpace(r[i+2]) {
+			if j := closer[i+3]; j < nl[i+2] {
+				b.WriteString("<del>" + string(r[i+2:j]) + "</del>")
+				i = j + 2
+				continue
 			}
 		}
 		b.WriteRune(r[i])
