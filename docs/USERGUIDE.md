@@ -931,7 +931,9 @@ fz draft apply ~/.fizzy-inbox/drafts/
   rewrite the draft file before it creates anything. A read-only draft, or
   one in a read-only folder, stops the run with exit 1 and nothing is sent.
   A draft with more than one hard link stops it with exit 2, because the
-  rewrite would split the links. Copy it to a file of its own.
+  rewrite would split the links. Copy it to a file of its own. A draft that
+  already has `card:` and will be skipped, because there is no `--update`, is
+  not checked for its images or for being writable.
 - `fz` rewrites a draft by renaming a new file over it. The new file keeps
   the old one's mode, and its owner and group where the system allows. It
   does not keep ACLs or extended attributes.

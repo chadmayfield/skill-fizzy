@@ -667,8 +667,12 @@ func draftApply(c *cmdContext, a []string) error {
 				"Look on board %s. If the card is there, replace the line with card: N; if it is not, delete the line. fz sends nothing until then",
 				p, at, d.Board))
 		}
-		if err := d.CheckImages(cfg.InboxPath()); err != nil {
-			return refuseImage(err)
+		// A draft that will be skipped sends nothing, so its images do
+		// not need to be there.
+		if d.Card == 0 || update {
+			if err := d.CheckImages(cfg.InboxPath()); err != nil {
+				return refuseImage(err)
+			}
 		}
 		if d.Card == 0 || update {
 			if err := draft.CheckWritable(p); err != nil {

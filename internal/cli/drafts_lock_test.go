@@ -88,3 +88,17 @@ func TestCheckAndPreviewShowCreating(t *testing.T) {
 		t.Errorf("preview: %+v", r)
 	}
 }
+
+// A draft that already has card: is skipped without --update, so its
+// images are not checked: a moved image file does not block the new draft
+// beside it.
+func TestApplySkippedDraftImagesNotChecked(t *testing.T) {
+	srv := newSyncServer(t)
+	_, drafts := imageEnv(t, srv)
+	writeFile(t, filepath.Join(drafts, "a.md"), "---\nboard: Home\ncard: 87\n---\n# Fix the gate\n\n![x](gone.png)\n")
+	writeFile(t, filepath.Join(drafts, "b.md"), "---\nboard: Home\n---\n# Oil the hinge\n")
+	r := runGo([]string{"draft", "apply", drafts})
+	if r.code != 0 || !strings.Contains(r.stdout, "skip a.md: already card #87") || !strings.Contains(r.stdout, "#90 Oil the hinge") {
+		t.Errorf("got %+v", r)
+	}
+}
