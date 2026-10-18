@@ -129,6 +129,10 @@ func accessSummary(d fizzy.BoardInfo) string {
 	if d.AllAccess {
 		return "all users"
 	}
+	// A reply without user_ids does not say who has access.
+	if d.UserIDs == nil {
+		return "selected users"
+	}
 	if len(d.UserIDs) == 1 {
 		return "1 user"
 	}

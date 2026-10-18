@@ -84,7 +84,11 @@ func addPeopleCommands(root *cobra.Command) {
 }
 
 func userLine(u fizzy.User) string {
-	line := fmt.Sprintf("%s  %s <%s> %s", u.ID, u.Name, u.EmailAddress, u.Role)
+	line := u.ID + "  " + u.Name
+	if u.EmailAddress != "" {
+		line += " <" + u.EmailAddress + ">"
+	}
+	line += " " + u.Role
 	if !u.Active {
 		line += " (inactive)"
 	}

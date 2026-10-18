@@ -279,6 +279,9 @@ func webhookEdit(c *cmdContext, a []string) error {
 	var name *string
 	if c.cmd.Flags().Changed("name") {
 		n, _ := c.cmd.Flags().GetString("name")
+		if strings.TrimSpace(n) == "" {
+			return usagef("--name cannot be empty")
+		}
 		name = &n
 	}
 	var actions []string

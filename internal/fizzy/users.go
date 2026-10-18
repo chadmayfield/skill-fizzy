@@ -54,10 +54,7 @@ func (f *Fizzy) RenameUser(id, name string) (User, error) {
 		Name string `json:"name"`
 	}{name}))
 	var u User
-	if err != nil || raw == nil {
-		return u, err
-	}
-	err = json.Unmarshal(raw, &u)
+	err = decodeWrite(raw, err, &u)
 	return u, err
 }
 

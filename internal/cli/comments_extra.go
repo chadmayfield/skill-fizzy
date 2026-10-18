@@ -27,7 +27,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 	del := &cobra.Command{
 		Use:     "delete NUMBER COMMENT_ID",
 		Short:   "delete a comment (needs --yes)",
-		Long:    "Delete a comment. Only its author can. Prints the comment first and refuses without --yes.",
+		Long:    "Delete a comment. The Fizzy API docs say only the comment's creator can delete it. Prints the comment first and refuses without --yes.",
 		Example: examples("fz comment delete 87 03abc123def456ghi789jkl0mn --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(commentDelete),
@@ -78,7 +78,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "unreact NUMBER COMMENT_ID REACTION_ID",
 			Short:   "remove your reaction from a comment",
-			Long:    "Remove a reaction from a comment. Only the person who reacted can.",
+			Long:    "Remove your reaction from a comment. comment reactions prints the reaction ids.",
 			Example: examples("fz comment unreact 87 03abc123def456ghi789jkl0mn 03def456ghi789jkl0mn123abc"),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentUnreact),
