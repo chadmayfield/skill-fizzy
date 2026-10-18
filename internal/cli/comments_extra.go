@@ -193,6 +193,9 @@ func commentReact(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	if err := fizzy.CheckReaction(a[2]); err != nil {
+		return err
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err

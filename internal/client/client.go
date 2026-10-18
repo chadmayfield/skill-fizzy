@@ -498,7 +498,7 @@ func (c *Client) Get(path string, v any) error {
 	if v == nil || len(payload) == 0 {
 		return nil
 	}
-	return json.Unmarshal(payload, v)
+	return ReplyError(http.MethodGet, c.RequestPath(path, true), json.Unmarshal(payload, v))
 }
 
 // GetAll GETs a list endpoint and follows every page. On any error it
@@ -508,7 +508,7 @@ func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
 	err := c.EachPage(path, func(payload []byte) (bool, error) {
 		var page []json.RawMessage
 		if err := json.Unmarshal(payload, &page); err != nil {
-			return false, err
+			return false, ReplyError(http.MethodGet, c.RequestPath(path, true), err)
 		}
 		items = append(items, page...)
 		return false, nil

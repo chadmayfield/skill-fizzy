@@ -57,11 +57,12 @@ func (f *Fizzy) RenameUser(id, name string) (User, error) {
 	if err := CheckIDs(id); err != nil {
 		return User{}, err
 	}
-	raw, err := f.C.Write(http.MethodPut, "/users/"+url.PathEscape(id), wrap("user", struct {
+	path := "/users/" + url.PathEscape(id)
+	raw, err := f.C.Write(http.MethodPut, path, wrap("user", struct {
 		Name string `json:"name"`
 	}{name}))
 	var u User
-	err = decodeWrite(raw, err, &u)
+	err = decodeWrite(f.C, http.MethodPut, path, raw, err, &u)
 	return u, err
 }
 

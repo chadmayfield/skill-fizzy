@@ -65,7 +65,28 @@ func NewRoot() *cobra.Command {
 	for _, f := range registrations {
 		f(root)
 	}
+	root.SetHelpCommand(helpCommand())
 	return root
+}
+
+// helpCommand is cobra's help command, except that a topic that names no
+// command is a usage error, so fz help nope exits 2 as fz nope does.
+func helpCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "help [command]",
+		Short: "Help about any command",
+		Long:  "Help prints the help for any command. Run fz help followed by the command's words, such as fz help card list.",
+		Args:  args(cobra.ArbitraryArgs),
+		RunE: func(c *cobra.Command, a []string) error {
+			cmd, rest, err := c.Root().Find(a)
+			if cmd == nil || err != nil || len(rest) > 0 {
+				return usagef("unknown help topic %s; fz help lists the commands", pyRepr(strings.Join(a, " ")))
+			}
+			cmd.InitDefaultHelpFlag()
+			cmd.InitDefaultVersionFlag()
+			return cmd.Help()
+		},
+	}
 }
 
 // run rewrites old command forms, executes root with args and returns the

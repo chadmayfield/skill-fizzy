@@ -241,7 +241,7 @@ prints the `fz board edit` and `fz column create` commands that finish the
 rest. It exits 1. Run those commands rather than the create again, which
 would make a second board.
 
-A board is named by its name or its id in every board command. Case does not matter. A name that two boards share in any case exits 2; use the board id.
+A board is named by its name or its id in every board command. Case does not matter, but a name that matches exactly wins. A name that two boards share ignoring case, with neither an exact match, exits 2; use the board id.
 
 Show and edit:
 
@@ -409,7 +409,8 @@ fz card edit 87 --status published
   images survive.
 - `--replace` matches only the text you can read. It never matches a tag
   name or an attribute, such as a link's address, and a match cannot cross
-  formatting. OLD must not be empty.
+  formatting. OLD must not be empty. A phrase that is not found, or that
+  matches more than once without `--all`, exits 2 and sends nothing.
 - `--status` takes `drafted` or `published`.
 
 Move, close and reopen:

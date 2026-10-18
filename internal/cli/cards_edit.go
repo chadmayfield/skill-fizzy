@@ -25,7 +25,7 @@ func addCardEditCommand(root *cobra.Command) {
 			"--replace swaps one phrase in the current description and leaves the rest alone. " +
 			"Give the phrase and its replacement after the number. The phrase must not be empty. " +
 			"It matches only text, never tag names or attributes such as a link's address, " +
-			"and a match cannot cross formatting.",
+			"and a match cannot cross formatting. A phrase that is not found, or that matches more than once without --all, exits 2 and sends nothing.",
 		Example: examples(
 			`fz card edit 87 --title "Fix the gate hinge"`,
 			`fz card edit 87 --replace "50% off" "up to 50% off"`,
@@ -125,12 +125,10 @@ func cardEdit(c *cmdContext, a []string) error {
 		src := richtext.UnwrapActionText(card.DescriptionHTML)
 		html, err := richtext.ReplaceText(src, a[1], a[2], all)
 		if err != nil {
-			// A phrase that matches more than once is a refusal, exit 2:
-			// it succeeds with --all.
-			if _, again := richtext.ReplaceText(src, a[1], a[2], true); !all && again == nil {
-				return fizzy.Refuse(err.Error())
-			}
-			return err
+			// Every ReplaceText error stops the edit before anything is
+			// sent, such as a phrase that is not found or that matches
+			// more than once, so each is a refusal and exits 2.
+			return fizzy.Refuse(err.Error())
 		}
 		if emptyDescription(html) && !allowEmpty {
 			return usagef("the new description is empty; add --allow-empty to clear it")

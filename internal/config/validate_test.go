@@ -87,7 +87,7 @@ func TestAccountSlug(t *testing.T) {
 			t.Errorf("%q refused: %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"/", " 1 ", "1 2", "1\t", "1/2", "1?x=", "1#x", "1%2F", "1/../../admin", "..", "a..b"} {
+	for _, bad := range []string{"/", " 1 ", "1 2", "1\t", "1/2", "1?x=", "1#x", "1%2F", "1/../../admin", "..", "a..b", "."} {
 		_, err := loadEnv(t, "https://fizzy.example.com", bad)
 		if err == nil {
 			t.Errorf("%q accepted", bad)

@@ -68,6 +68,8 @@ func checkAccount(account string) error {
 		return bad("must not contain /, ?, # or %")
 	case strings.Contains(account, ".."):
 		return bad("must not contain ..")
+	case account == ".":
+		return bad("must not be .")
 	}
 	return nil
 }

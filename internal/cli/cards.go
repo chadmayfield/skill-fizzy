@@ -410,14 +410,14 @@ func cardMove(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fz, err := c.api()
-	if err != nil {
-		return err
-	}
 	to, _ := fl.GetString("to")
 	name, _ := fl.GetString("board")
 	if to == "" && name == "" {
 		return usagef("card move needs --to, --board or both")
+	}
+	fz, err := c.api()
+	if err != nil {
+		return err
 	}
 	if name == "" {
 		if err := fz.MoveCard(n, to, ""); err != nil {
@@ -511,6 +511,9 @@ func cardTag(c *cmdContext, a []string) error {
 		return err
 	}
 	remove, _ := c.cmd.Flags().GetBool("remove")
+	if err := fizzy.CheckTag(a[1]); err != nil {
+		return err
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err

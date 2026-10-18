@@ -57,7 +57,7 @@ func list[T any](c *client.Client, path string) ([]T, error) {
 	for _, r := range raw {
 		var v T
 		if err := json.Unmarshal(r, &v); err != nil {
-			return nil, err
+			return nil, client.ReplyError(http.MethodGet, c.RequestPath(path, true), err)
 		}
 		out = append(out, v)
 	}
@@ -71,7 +71,9 @@ func wrap(key string, v any) map[string]any { return map[string]any{key: v} }
 // Boards lists every board.
 func (f *Fizzy) Boards() ([]Board, error) { return list[Board](f.C, "/boards") }
 
-// Board finds a board by id, or by name ignoring case.
+// Board finds a board by id, then by exact name, then by name ignoring
+// case. A name that two boards share ignoring case, with no exact match, is
+// a Refusal.
 func (f *Fizzy) Board(nameOrID string) (Board, error) {
 	boards, err := f.Boards()
 	if err != nil {
@@ -82,15 +84,10 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 			return b, nil
 		}
 	}
-	var matches []Board
-	for _, b := range boards {
-		if strings.EqualFold(b.Name, nameOrID) {
-			matches = append(matches, b)
-		}
-	}
-	switch len(matches) {
+	b, n := pickByName(boards, nameOrID, func(b Board) string { return b.Name })
+	switch n {
 	case 1:
-		return matches[0], nil
+		return b, nil
 	case 0:
 		names := make([]string, len(boards))
 		for i, b := range boards {
@@ -98,7 +95,7 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 		}
 		return Board{}, fmt.Errorf("no board named %s (have: %s)", PyRepr(nameOrID), strings.Join(names, ", "))
 	}
-	return Board{}, refusef("%d boards are named %s; use the board id", len(matches), PyRepr(nameOrID))
+	return Board{}, refusef("%d boards are named %s; use the board id", n, PyRepr(nameOrID))
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
@@ -372,6 +369,9 @@ func (f *Fizzy) MoveCard(n int, target, boardID string) error {
 		if err != nil {
 			return err
 		}
+		if c.Board.ID == "" {
+			return refusef("card #%d names no board in Fizzy's reply, so fz cannot find its columns; give --board", n)
+		}
 		boardID = c.Board.ID
 	}
 	t, err := f.ResolveMoveTarget(boardID, target)
@@ -523,11 +523,20 @@ func TagTitle(tag string) string {
 	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(tag), "#")))
 }
 
-func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
-	tag = TagTitle(tag)
-	if tag == "" {
-		return false, refusef("the tag cannot be empty")
+// CheckTag refuses a tag that is empty once TagTitle has cleaned it, such
+// as "#". It sends nothing.
+func CheckTag(tag string) error {
+	if TagTitle(tag) == "" {
+		return refusef("the tag cannot be empty")
 	}
+	return nil
+}
+
+func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
+	if err := CheckTag(tag); err != nil {
+		return false, err
+	}
+	tag = TagTitle(tag)
 	c, err := f.Card(n)
 	if err != nil {
 		return false, err
