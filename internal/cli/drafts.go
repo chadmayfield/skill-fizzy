@@ -227,11 +227,14 @@ func linkAddrBlocked(ip netip.Addr) bool {
 // proxy, so the address it checks is the one it reaches. It never sends a
 // token or a cookie.
 func linkClient() *http.Client {
+	// Read the check once: a dial can still run after the request returns,
+	// and must not read linkDialBlocked while a test swaps it.
+	blocked := linkDialBlocked
 	d := &net.Dialer{
 		Timeout: 15 * time.Second,
 		Control: func(network, address string, _ syscall.RawConn) error {
 			ap, err := netip.ParseAddrPort(address)
-			if err != nil || linkDialBlocked(ap) {
+			if err != nil || blocked(ap) {
 				return errLocalAddress
 			}
 			return nil
