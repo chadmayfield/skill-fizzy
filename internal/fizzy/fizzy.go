@@ -181,6 +181,9 @@ func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	case n > 1:
 		return Column{}, refusef("%d columns are named %s; use the column id", n, PyRepr(nameOrID))
 	}
+	if len(cols) == 0 {
+		return Column{}, fmt.Errorf("no column %s (no custom columns)", PyRepr(nameOrID))
+	}
 	names := make([]string, len(cols))
 	for i, c := range cols {
 		names[i] = config.TerminalLine(c.Name)

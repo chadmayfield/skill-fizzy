@@ -255,7 +255,18 @@ func cardShow(c *cmdContext, a []string) error {
 	}
 	w := c.out()
 	fmt.Fprintln(w, cardLine(card))
-	fmt.Fprintf(w, "board: %s   url: %s\n", line(card.Board.Name), line(rawString(card.Raw(), "url")))
+	// The line leaves out a missing board or url rather than print an
+	// empty name or None.
+	var where []string
+	if name := line(card.Board.Name); name != "" {
+		where = append(where, "board: "+name)
+	}
+	if u := rawString(card.Raw(), "url"); u != "None" {
+		where = append(where, "url: "+line(u))
+	}
+	if len(where) > 0 {
+		fmt.Fprintln(w, strings.Join(where, "   "))
+	}
 	if card.Description != "" {
 		fmt.Fprintln(w, "\n"+pyStrip(card.Description))
 	}
