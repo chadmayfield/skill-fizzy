@@ -133,12 +133,10 @@ func writeFile(t *testing.T, path, text string) {
 	}
 }
 
-// pythonGolden holds what the Python fz printed for each parity case. It was
-// captured once from the Python fz (bin/fz, Python 3.9) on 2026-10-17, while
-// that code still existed, by parity_capture_test.go, added in commit af6689c
-// and removed with the Python code. It is the reference the Go fz must match. Nothing regenerates it, since
-// writing this file from Go output would turn the test into Go checking
-// itself. Fix Go, not the file.
+// pythonGolden holds what the earlier Python fz printed for each parity
+// case. It is the reference the Go fz must match. Never regenerate it from Go
+// output, which would turn the test into Go checking itself. Fix Go, not the
+// file.
 const pythonGolden = "testdata/parity/python-fz.json"
 
 // URL, DIR and HOME placeholders stand for the per-run fake server URL, the

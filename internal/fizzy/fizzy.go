@@ -1,7 +1,7 @@
 // Package fizzy holds the high-level Fizzy operations built on client.
 //
-// Notes on Fizzy behaviour this package works around (verified against Fizzy
-// source and docs, 2026-10):
+// Notes on Fizzy behaviour this package works around, from the Fizzy source
+// and API docs:
 //   - Creating a board with auto_postpone_period_in_days in the same request
 //     can fail 422 "Account must exist"; boards are created by name, then
 //     updated.

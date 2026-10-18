@@ -1,7 +1,7 @@
 // Package markdown converts card-draft Markdown to the HTML Fizzy stores.
 //
-// It is a port of the Python fz's markdown.py (removed in 562a4a9) and must
-// produce the same bytes.
+// It produces the same bytes as the earlier Python fz's converter, which the
+// golden files in testdata pin.
 // It supports what card drafts need and nothing more: ATX headings,
 // paragraphs, bullet and numbered lists (one level), task-list items, fenced
 // code blocks, blockquotes, links, bold, italic, inline code, horizontal
@@ -461,8 +461,8 @@ func hrefFrom(escaped string, quote bool) string {
 
 // bareURLs links a URL that is not already inside an anchor. Python:
 // (?<!["=>])\b(https?://[^\s<]+[^\s<.,;:!?)])
-// Unlike Python, the URL also ends at a quote and at an escaped < or >,
-// because Python's pattern let a " close the href and add an attribute.
+// The URL also ends at a quote and at an escaped < or >, so a " can never
+// close the href and add an attribute.
 //
 // It also stashes each anchor's opening tag, and each bare URL's whole
 // anchor, in codes the way stashCode does, so bold and emphasis never run

@@ -3,8 +3,7 @@ package fizzy
 // Card extras: assignments, watching, pins, boosts, the header image and the
 // lookups card list filters need.
 //
-// Notes on Fizzy behaviour (verified against basecamp/fizzy source,
-// 2026-10-17):
+// Notes on Fizzy behaviour, from the basecamp/fizzy source:
 //   - POST /cards/:n/assignments toggles. Assign and Unassign read the card's
 //     assignees first so they are idempotent.
 //   - The card JSON lists at most 5 assignees and sets has_more_assignees

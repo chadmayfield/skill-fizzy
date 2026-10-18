@@ -3,9 +3,8 @@
 // A draft starts with front matter (board, and optionally column, tags,
 // golden, card, synced, synced-fields), then a "# Title" line, then a body.
 // The "## Steps" section becomes Fizzy steps and everything else except the
-// title becomes the card description. This is a port of the Python fz's draft.py (removed in
-// 562a4a9); the whitespace and regular expression rules follow Python's so
-// both parsers agree.
+// title becomes the card description. The whitespace and pattern rules
+// follow the earlier Python fz, whose output the draft goldens pin.
 package draft
 
 import (
