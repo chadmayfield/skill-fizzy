@@ -738,6 +738,11 @@ This writes one man page per command, such as `fz.1` and `fz-card-list.1`,
 into `DIR/man1`. The default DIR is `~/.local/share/man`. It needs no config
 file.
 
+If a page path is a symlink, `fz man` writes nothing and exits 1. After
+writing, it removes each `fz.1` or `fz-*.1` file in `DIR/man1` that it did
+not write, such as the page of a command that no longer exists, and prints
+its path. Other files in the folder are left alone.
+
 ### Shell completion
 
 ```sh
