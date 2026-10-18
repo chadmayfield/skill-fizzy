@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
@@ -53,7 +54,9 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "apply DRAFT...",
 		Short: "create cards from drafts, or --update them",
 		Long: "Create a card for each draft and write card: N and synced: back into it. " +
-			"card: N is written right after the create, before any step, tag, move or golden call, so a draft never makes a second card. " +
+			"Just before the create, fz writes creating: and the time into the draft. card: N replaces it right after the create, before any step, tag, move or golden call. " +
+			"If fz cannot tell whether the create reached Fizzy, as after a timeout, the line stays and fz exits 1 and names the board to check. " +
+			"A draft that still has creating: is refused with exit 2 until you replace the line with card: N or delete it, so a draft never makes a second card. " +
 			"If a later call fails, fz names the card and what was not sent; fz draft apply --update FILE finishes it. " +
 			"Drafts that already have card: are skipped, unless --update is given.\n\n" +
 			"With --update, a draft with card: N pushes its board, title, description, tags, column, golden mark and steps to card N. " +
@@ -435,14 +438,20 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 			return 0, err
 		}
 	}
+	if !c.dryRun {
+		// creating: marks a create that may have reached Fizzy. It is
+		// replaced by card: on success and removed when the server
+		// refused the create; an unknown outcome leaves it, and the next
+		// apply refuses the draft, so it cannot make a second card.
+		if err := draft.RecordCreating(d.Path, time.Now().UTC().Format(time.RFC3339)); err != nil {
+			return 0, fmt.Errorf("%s: fz could not write creating: into the draft (%v), so it sent no create", d.Path, err)
+		}
+	}
 	n, err := fz.CreateCard(board.ID, d.Title, d.DescriptionHTML(sgids), "")
-	if errors.Is(err, fizzy.ErrNoLocation) {
-		n, err = 0, nil
-	}
-	if err != nil {
-		return 0, err
-	}
 	if c.dryRun {
+		if err != nil {
+			return 0, err
+		}
 		for _, s := range d.Steps {
 			if _, err := fz.AddStep(0, s.Content, s.Done); err != nil {
 				return 0, err
@@ -459,9 +468,18 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}
 		return 0, nil
 	}
-	if n == 0 {
-		return 0, fmt.Errorf("%s: the server's reply to the create had no card number (no Location header), "+
-			"so a card may exist that the draft does not name; look on board %s before you apply it again", filepath.Base(d.Path), d.Board)
+	switch {
+	case errors.Is(err, fizzy.ErrNoLocation):
+		return 0, &createUnknown{fmt.Sprintf("%s: the server's reply to the create had no card number (%s), "+
+			"so a card may exist that the draft does not name", filepath.Base(d.Path), errorText(err)), d}
+	case err != nil && createNotSent(err):
+		if cerr := draft.ClearCreating(d.Path); cerr != nil {
+			return 0, fmt.Errorf("%w; no card was created, but fz could not remove the creating: line from %s (%v); delete it by hand", err, d.Path, cerr)
+		}
+		return 0, err
+	case err != nil:
+		return 0, &createUnknown{fmt.Sprintf("%s: the create may have reached Fizzy (%s), so a card may exist that the draft does not name",
+			filepath.Base(d.Path), errorText(err)), d}
 	}
 	if err := draft.RecordCard(d.Path, n); err != nil {
 		return n, fmt.Errorf("card #%d was created, but fz could not write card: %d into %s (%v); "+
@@ -510,6 +528,34 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}
 	}
 	return n, nil
+}
+
+// createUnknown is a card create whose outcome fz cannot tell: the request
+// may have reached Fizzy, and a card may exist. The creating: line stays in
+// the draft, so the next apply refuses it.
+type createUnknown struct {
+	what string
+	d    *draft.Draft
+}
+
+func (e *createUnknown) Error() string {
+	return fmt.Sprintf("%s. Look on board %s. The draft keeps its creating: line, so fz will not apply it again until you resolve it: "+
+		"if the card is there, replace that line with card: N; if it is not, delete the line. Then apply the draft again", e.what, e.d.Board)
+}
+
+// createNotSent reports whether a failed card create surely made no card:
+// the server refused it with a 3xx or 4xx, or the request never left fz.
+// Any other failure, such as a timeout, a reset or a 5xx, may have made one.
+func createNotSent(err error) bool {
+	var api *client.APIError
+	if errors.As(err, &api) {
+		return api.Status >= 300 && api.Status < 500
+	}
+	var op *net.OpError
+	if errors.As(err, &op) && op.Op == "dial" {
+		return true
+	}
+	return errors.Is(err, config.ErrConfig) || fizzy.IsRefusal(err)
 }
 
 // shellArg quotes a path for a command line the user can paste.
@@ -569,6 +615,11 @@ func draftApply(c *cmdContext, a []string) error {
 		d, err := parseDraft(p)
 		if err != nil {
 			return err
+		}
+		if at, ok := d.Meta[draft.CreatingKey]; ok {
+			return fizzy.Refuse(fmt.Sprintf("%s: the draft has creating: %s, left by an apply whose create may have made its card. "+
+				"Look on board %s. If the card is there, replace the line with card: N; if it is not, delete the line. fz sends nothing until then",
+				p, at, d.Board))
 		}
 		if err := d.CheckImages(cfg.InboxPath()); err != nil {
 			return refuseImage(err)
@@ -652,7 +703,11 @@ func draftApply(c *cmdContext, a []string) error {
 		}
 		n, err := applyDraft(c, fz, d, cfg.InboxPath())
 		var u *unfinished
+		var unknown *createUnknown
 		switch {
+		case errors.As(err, &unknown):
+			summary[i] = name + ": a card may exist, creating: kept"
+			return failApply(c, err, summary)
 		case errors.As(err, &u):
 			summary[i] = fmt.Sprintf("%s: card #%d, not finished", name, n)
 			// Record synced: from the card as it is now, so the retry with

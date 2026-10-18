@@ -72,7 +72,9 @@ Go binary and must be on the PATH.
    Links & media text and the steps, in plain Markdown (not raw HTML).
 7. **On the user's go:** `fz draft apply <file>`, then give the card link.
    `apply` writes `card: <number>` back into the draft so it is never created
-   twice.
+   twice. If `apply` says a card may exist and keeps a `creating:` line,
+   do not edit that line yourself. Tell the user, and look on the board
+   with them.
 8. **Changing the card later:** edit the draft, then run
    `fz draft apply --update <file>`. It pushes the draft to the card and
    refuses a card that changed in Fizzy since the last sync unless you add

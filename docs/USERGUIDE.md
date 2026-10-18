@@ -908,9 +908,19 @@ fz draft apply ~/.fizzy-inbox/drafts/
 - `fz` rewrites a draft by renaming a new file over it. The new file keeps
   the old one's mode, and its owner and group where the system allows. It
   does not keep ACLs or extended attributes.
-- Then it creates one card per draft. It writes `card: N` into the draft
-  right after the create, before it adds steps or tags, moves the card or
-  marks it golden, so the same draft never makes a second card.
+- Then it creates one card per draft. Just before each create, it writes
+  `creating: <time>` into the draft's front matter. Right after the create,
+  before it adds steps or tags, moves the card or marks it golden, it
+  replaces that line with `card: N`.
+- If `fz` cannot tell whether a create reached Fizzy, as after a timeout,
+  a dropped connection, a 5xx reply or a reply with no card number, it
+  keeps the `creating:` line and exits 1. The message says a card may exist
+  and names the board to look on. A create the server refused, with a 4xx
+  reply, made no card, so `fz` removes the line.
+- A draft that still has a `creating:` line is refused with exit 2, and
+  nothing is sent. Look on the board. If the card is there, replace the line
+  with `card: N`. If it is not, delete the line. Then apply the draft again.
+  So the same draft never makes a second card.
 - If one of those later calls fails, `apply` exits 1. The message names the
   card, says what was not sent, and gives the command that finishes it,
   `fz draft apply --update FILE`. A run over several drafts stops at the

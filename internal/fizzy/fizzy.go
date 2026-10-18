@@ -269,28 +269,40 @@ func (f *Fizzy) Card(n int) (Card, error) {
 	return c, err
 }
 
-// ErrNoLocation marks a create whose reply had no Location header: the
-// object exists, but fz cannot name it. Callers can add advice with
+// ErrNoLocation marks a create whose reply had no usable Location header:
+// the object exists, but fz cannot name it. Callers can add advice with
 // errors.Is.
 var ErrNoLocation = errors.New("sent no Location header, so fz cannot tell its id")
 
+// locationError is a create whose Location fz cannot use. It matches
+// ErrNoLocation.
+type locationError struct{ msg string }
+
+func (e locationError) Error() string        { return e.msg }
+func (e locationError) Is(target error) bool { return target == ErrNoLocation }
+
 // created POSTs body and returns the new object's id from the Location
-// header, or "" in dry-run mode. A reply with no Location is an error: the
-// object exists, but fz cannot name it. what names the object.
+// header, or "" in dry-run mode. A 2xx reply with a Location returns its id
+// even when reading the reply body failed: a create needs no body. A 2xx
+// reply with no Location is an error: the object exists, but fz cannot name
+// it. what names the object.
 func (f *Fizzy) created(path string, body any, what string) (string, error) {
 	status, hdr, _, err := f.C.Do(http.MethodPost, path, body)
+	if status >= 200 && status < 300 {
+		if id := client.IDFromLocation(hdr.Get("Location")); id != "" {
+			return id, nil
+		}
+		return "", fmt.Errorf("Fizzy created the %s but %w", what, ErrNoLocation)
+	}
 	if err != nil || status == 0 {
 		return "", err
 	}
-	id := client.IDFromLocation(hdr.Get("Location"))
-	if id == "" {
-		return "", fmt.Errorf("Fizzy created the %s but %w", what, ErrNoLocation)
-	}
-	return id, nil
+	return "", fmt.Errorf("POST %s -> HTTP %d", path, status)
 }
 
 // CreateCard creates a card and returns its number, 0 in dry-run mode. A
-// reply with no Location is an error.
+// reply with no Location, or with one that holds no card number, is an
+// error that matches ErrNoLocation.
 func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error) {
 	if err := CheckIDs(boardID); err != nil {
 		return 0, err
@@ -305,8 +317,8 @@ func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error)
 		return 0, err
 	}
 	n, err := strconv.Atoi(id)
-	if err != nil {
-		return 0, fmt.Errorf("card id %q is not a number", id)
+	if err != nil || n <= 0 {
+		return 0, locationError{fmt.Sprintf("Fizzy created the card, but its Location names %q, not a card number, so fz cannot tell its id", id)}
 	}
 	return n, nil
 }

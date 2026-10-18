@@ -127,6 +127,16 @@ func trimEnding(s string) string {
 // lines use too. The file is replaced by a rename, so a failed write leaves
 // the old draft whole. A symlink is followed and stays a symlink.
 func RecordFields(path string, fields ...KV) error {
+	keys := make([]string, len(fields))
+	for i, f := range fields {
+		keys[i] = f.Key
+	}
+	return rewriteFront(path, keys, fields)
+}
+
+// rewriteFront drops every front matter line whose key is in drop, any
+// case, and writes fields as RecordFields does.
+func rewriteFront(path string, drop []string, fields []KV) error {
 	src, err := readSource(path)
 	if err != nil {
 		return err
@@ -136,10 +146,10 @@ func RecordFields(path string, fields ...KV) error {
 		return errf("%s: missing front matter", path)
 	}
 	start, end := src.rawAt[m[2]], src.rawAt[m[3]]
-	drop := func(piece string) bool {
+	dropped := func(piece string) bool {
 		lower := strings.ToLower(pyStrip(trimEnding(piece)))
-		for _, f := range fields {
-			if strings.HasPrefix(lower, strings.ToLower(f.Key)+":") {
+		for _, k := range drop {
+			if strings.HasPrefix(lower, strings.ToLower(k)+":") {
 				return true
 			}
 		}
@@ -151,7 +161,7 @@ func RecordFields(path string, fields ...KV) error {
 		ending := line[len(body):]
 		var b strings.Builder
 		for _, piece := range subLines(body) {
-			if !drop(piece) {
+			if !dropped(piece) {
 				b.WriteString(piece)
 			}
 		}
@@ -293,7 +303,23 @@ func CheckWritable(path string) error {
 	return os.Remove(tmp.Name())
 }
 
-// RecordCard writes card: n into the draft's front matter.
+// RecordCard writes card: n into the draft's front matter, in place of a
+// creating: line.
 func RecordCard(path string, n int) error {
-	return RecordFields(path, KV{"card", strconv.Itoa(n)})
+	return rewriteFront(path, []string{"card", CreatingKey}, []KV{{"card", strconv.Itoa(n)}})
+}
+
+// CreatingKey is the front matter key draft apply writes, with the time,
+// just before it sends a card create. It is replaced by card: when the
+// create succeeds. A draft that still has it may already have its card.
+const CreatingKey = "creating"
+
+// RecordCreating writes creating: at into the draft's front matter.
+func RecordCreating(path, at string) error {
+	return RecordFields(path, KV{CreatingKey, at})
+}
+
+// ClearCreating removes the creating: line from the draft's front matter.
+func ClearCreating(path string) error {
+	return rewriteFront(path, []string{CreatingKey}, nil)
 }
