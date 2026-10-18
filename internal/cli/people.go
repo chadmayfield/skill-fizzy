@@ -42,7 +42,7 @@ func addPeopleCommands(root *cobra.Command) {
 	edit := &cobra.Command{
 		Use:     "edit USER",
 		Short:   "rename a user (needs --yes)",
-		Long:    "Change a user's display name. " + userArgHelp + " Prints the current and new name, and refuses without --yes.",
+		Long:    "Change a user's display name. " + userArgHelp + " Prints the current and new name, and refuses without --yes. A user who already has the name needs no change, so fz sends nothing.",
 		Example: examples(`fz user edit 03abc123def456ghi789jkl0mn --name "Gate Keeper" --yes`),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(userEdit),
@@ -180,6 +180,10 @@ func userEdit(c *cmdContext, a []string) error {
 	u, err := findUser(fz, a[0])
 	if err != nil {
 		return err
+	}
+	if u.Name == name {
+		return emit(c.cmd, c.dry(obj{{"id", u.ID}, {"name", name}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("user %s is already named %s; no change needed", u.ID, name)))
 	}
 	fmt.Fprintf(c.errw(), "about to rename user %s from %s to %s\n", u.ID, u.Name, name)
 	if !yes {

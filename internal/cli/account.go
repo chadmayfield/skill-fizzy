@@ -20,7 +20,7 @@ func addAccountCommands(root *cobra.Command) {
 	postpone := &cobra.Command{
 		Use:     "postpone DAYS",
 		Short:   "set the account's auto-postpone default (needs --yes)",
-		Long:    "Set how many days without activity move a card to Not now, for boards that do not set their own period. DAYS is one of 3, 7, 11, 30, 90 or 365. Prints the current and new period, and refuses without --yes. Needs the admin role.",
+		Long:    "Set how many days without activity move a card to Not now, for boards that do not set their own period. DAYS is one of 3, 7, 11, 30, 90 or 365. Prints the current and new period, and refuses without --yes. A period that is already DAYS needs no change, so fz sends nothing. Needs the admin role.",
 		Example: examples("fz account postpone 30 --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(accountPostpone),
@@ -109,6 +109,10 @@ func accountPostpone(c *cmdContext, a []string) error {
 	from := "none"
 	if cur.AutoPostponePeriodInDays != nil {
 		from = strconv.Itoa(*cur.AutoPostponePeriodInDays)
+		if *cur.AutoPostponePeriodInDays == days {
+			return emit(c.cmd, c.dry(obj{{"auto_postpone_period_in_days", days}, {"changed", false}}),
+				noChange(c, fmt.Sprintf("the auto-postpone period of %s is already %d days; no change needed", cur.Name, days)))
+		}
 	}
 	fmt.Fprintf(c.errw(), "about to change the auto-postpone period of %s from %s to %d days\n", cur.Name, from, days)
 	if !yes {

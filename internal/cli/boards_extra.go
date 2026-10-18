@@ -85,7 +85,7 @@ func addBoardExtraCommands(root *cobra.Command) {
 			"fz refuses a USER that matches nobody or more than one user, and sends nothing. " +
 			"Either change prints what it would do, naming each user with their id, and refuses without --yes. " +
 			"The --users preview lists who keeps access, who gains it and who loses it, or says the current list is unknown when Fizzy's reply has none. " +
-			"--all on a board that every user can already reach says no change is needed and sends nothing.",
+			"--all on a board that every user can already reach, or --users with the board's current list, says no change is needed and sends nothing, without --yes.",
 		Example: examples("fz board access Home", "fz board access Home --all --yes", "fz board access Home --users 03abc123def456ghi789jkl0mn --yes", "fz board access Home --users Alex,Sam --yes"),
 		Args:    args(cobra.ExactArgs(1)),
 		RunE:    action(boardAccess),
@@ -344,6 +344,10 @@ func boardAccess(c *cmdContext, a []string) error {
 		return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", true}, {"changed", false}}),
 			noChange(c, fmt.Sprintf("board %s already gives all users access; no change needed", b.Name)))
 	}
+	if !all && !d.AllAccess && d.UserIDs != nil && sameIDs(ids, d.UserIDs) {
+		return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", false}, {"user_ids", ids}, {"changed", false}}),
+			noChange(c, fmt.Sprintf("board %s already gives access to exactly these users; no change needed", b.Name)))
+	}
 	w := c.errw()
 	fmt.Fprintf(w, "about to change access to board %s (%s)\n  now: %s\n", b.Name, b.ID, accessSummary(d))
 	if all {
@@ -365,6 +369,22 @@ func boardAccess(c *cmdContext, a []string) error {
 	}
 	text := c.wrote(fmt.Sprintf("board %s access set to %s", b.Name, to), fmt.Sprintf("set board %s access to %s", b.Name, to))
 	return emit(c.cmd, c.dry(obj{{"id", b.ID}, {"all_access", all}, {"user_ids", ids}}), text)
+}
+
+// sameIDs reports whether a and b hold the same ids, in any order and
+// ignoring repeats.
+func sameIDs(a, b []string) bool {
+	for _, id := range a {
+		if !slices.Contains(b, id) {
+			return false
+		}
+	}
+	for _, id := range b {
+		if !slices.Contains(a, id) {
+			return false
+		}
+	}
+	return true
 }
 
 // accessChanges prints who keeps, gains and loses access when the board's

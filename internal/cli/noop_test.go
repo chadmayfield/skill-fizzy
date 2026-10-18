@@ -48,3 +48,50 @@ func TestNoChangeUnderDryRunWebhookActivate(t *testing.T) {
 	parityEnv(t, srv)
 	checkNoChange(t, []string{"webhook", "activate", "B1", "H1"}, func() int { return len(writes(calls())) })
 }
+
+// checkNoChangeLive runs args without --dry-run, with and without --yes. A
+// change that is already in place needs no --yes: it prints want, exits 0
+// and sends nothing.
+func checkNoChangeLive(t *testing.T, args []string, want string, writes func() int) {
+	t.Helper()
+	for _, argv := range [][]string{args, append(append([]string{}, args...), "--yes")} {
+		r := runGo(argv)
+		if r.code != 0 || r.stdout != want+"\n" || r.stderr != "" {
+			t.Errorf("%q: %+v", argv, r)
+		}
+	}
+	if n := writes(); n != 0 {
+		t.Errorf("%q sent %d writes", args, n)
+	}
+}
+
+func TestNoChangeUserEditSameName(t *testing.T) {
+	_, calls := acctServer(t, map[string]string{"GET /1/users": "[" + acctUser + "," + acctUser2 + "]", "GET /1/users/U1": acctUser, "PUT /1/users/U1": acctUser})
+	n := func() int { return len(writes(calls())) }
+	args := []string{"user", "edit", "U1", "--name", "Alex"}
+	checkNoChangeLive(t, args, "user U1 is already named Alex; no change needed", n)
+	checkNoChange(t, append(args, "--yes"), n)
+}
+
+func TestNoChangeAccountPostponeSameDays(t *testing.T) {
+	_, calls := acctServer(t, map[string]string{"GET /1/account/settings": acctSettings, "PUT /1/account/entropy": acctSettings})
+	n := func() int { return len(writes(calls())) }
+	args := []string{"account", "postpone", "30"}
+	checkNoChangeLive(t, args, "the auto-postpone period of Gate Works is already 30 days; no change needed", n)
+	checkNoChange(t, append(args, "--yes"), n)
+}
+
+func TestNoChangeBoardAccessSameUsers(t *testing.T) {
+	srv, calls := bxServer(t, false)
+	editEnv(t, srv)
+	n := func() int { return len(writes(calls())) }
+	// The board's list is u1 and u2. Order and repeats do not matter.
+	args := []string{"board", "access", "Home", "--users", "Sam,u1,Pat"}
+	checkNoChangeLive(t, args, "board Home already gives access to exactly these users; no change needed", n)
+	checkNoChange(t, append(args, "--yes"), n)
+	// A different set is still a change and still needs --yes.
+	r := runGo([]string{"board", "access", "Home", "--users", "u1"})
+	if r.code != 2 {
+		t.Errorf("a real change: %+v", r)
+	}
+}

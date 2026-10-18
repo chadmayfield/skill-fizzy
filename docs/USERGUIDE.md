@@ -267,7 +267,8 @@ name and id, and refuse without `--yes`. The `--users` preview lists who
 keeps access, who gains it and who loses it. When Fizzy's reply does not say
 who has access now, the preview says the current list is unknown. `--all` on a board that every user
 can already reach prints that no change is needed, exits 0 and sends
-nothing.
+nothing. So does `--users` with the board's current list, in any order.
+Neither needs `--yes` then.
 
 Delete:
 
@@ -584,6 +585,8 @@ fz user timezone America/Denver
 ```
 
 `user edit` prints the current and new name and refuses without `--yes`.
+When the user already has that name, it prints that no change is needed,
+exits 0 and sends nothing, with or without `--yes`.
 `user timezone` takes an IANA name, which Fizzy uses for times in
 notification emails. `fz` checks the name exists before sending it, and the
 server checks its case.
@@ -626,8 +629,9 @@ fz account postpone 30 --yes
 `account show` prints the account's name, id, card count, default
 auto-postpone period and creation time. `account postpone` sets that default
 for boards that do not set their own. It takes 3, 7, 11, 30, 90 or 365 days,
-prints the current and new period, and refuses without `--yes`. It needs the
-admin role.
+prints the current and new period, and refuses without `--yes`. When the
+period is already DAYS, it prints that no change is needed, exits 0 and
+sends nothing, with or without `--yes`. It needs the admin role.
 
 ```sh
 fz export account
