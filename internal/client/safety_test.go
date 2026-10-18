@@ -510,3 +510,26 @@ func TestListByteCap(t *testing.T) {
 		t.Errorf("%d requests, want 4: the page that passes the cap is the last", got)
 	}
 }
+
+// A storage request names only the host and the status in its error. The
+// storage service's reply can echo signing details, so its body is never
+// printed.
+func TestStorageErrorHasNoBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, `<Error><Code>SignatureDoesNotMatch</Code><AWSAccessKeyId>GATEKEY</AWSAccessKeyId><StringToSign>HINGE</StringToSign></Error>`)
+	}))
+	defer srv.Close()
+	c, _, _ := newTestClient(t, srv, false)
+	status, _, payload, err := c.Do(http.MethodPut, srv.URL+"/bucket/object", nil,
+		Stream(strings.NewReader("jpg"), 3), NoAuth(), NotAccountScoped(), Upload(), LogHost())
+	if status != http.StatusForbidden || err == nil {
+		t.Fatalf("status %d, err %v", status, err)
+	}
+	if msg := err.Error(); strings.Contains(msg, "GATEKEY") || strings.Contains(msg, "HINGE") || strings.Contains(msg, "Signature") || !strings.Contains(msg, "HTTP 403") {
+		t.Errorf("error %q", msg)
+	}
+	if len(payload) != 0 {
+		t.Errorf("payload %q", payload)
+	}
+}

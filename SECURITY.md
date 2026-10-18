@@ -23,6 +23,9 @@ Please do not open a public issue for a security problem.
   bodies or response bodies. For the upload of a file's bytes it holds the
   storage host instead of the path, because that path can carry a signed
   key. `fz` creates it with mode 0600.
+- If the storage service refuses an upload, the error names its host and
+  the HTTP status only. Its reply can echo signing details, so `fz` never
+  prints it.
 - If the token command fails, the error gives its exit status, or says it
   was not found or timed out. It leaves out everything the command printed,
   on stdout and stderr, because a broken command may print the token.

@@ -448,6 +448,11 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 		return resp.StatusCode, resp.Header, nil, fmt.Errorf("%s %s: the response is larger than 32 MiB", method, logPath)
 	}
 	if resp.StatusCode >= 300 {
+		// A storage service's error reply can echo signing details, so for
+		// a request logged by host only the status is kept.
+		if o.logHost {
+			return resp.StatusCode, resp.Header, nil, &APIError{resp.StatusCode, method, logPath, ""}
+		}
 		return resp.StatusCode, resp.Header, payload, &APIError{resp.StatusCode, method, logPath, string(payload)}
 	}
 	return resp.StatusCode, resp.Header, payload, nil
