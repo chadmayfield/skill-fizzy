@@ -21,7 +21,7 @@ func TestCreateBoardLocationIDIsChecked(t *testing.T) {
 		}
 		w.WriteHeader(204)
 	})
-	if _, err := f.CreateBoard("Gate", 30); err != nil {
+	if _, err := f.CreateBoard("Gate", 30, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.calls) != 2 || s.calls[1].Path != "/1/boards/abc?all_access=false" || s.calls[1].Query != "" {
@@ -30,7 +30,7 @@ func TestCreateBoardLocationIDIsChecked(t *testing.T) {
 
 	loc = "/1/boards/...json"
 	s.calls = nil
-	if _, err := f.CreateBoard("Gate", 30); err == nil || !strings.Contains(err.Error(), "board 'Gate' was created") {
+	if _, err := f.CreateBoard("Gate", 30, nil); err == nil || !strings.Contains(err.Error(), "board 'Gate' was created") {
 		t.Errorf("dot id: %v", err)
 	}
 	if len(s.calls) != 1 {
@@ -42,7 +42,7 @@ func TestCreateBoardLocationIDIsChecked(t *testing.T) {
 // instead of reporting success.
 func TestCreateBoardNoLocationWithPostpone(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) { w.WriteHeader(201) })
-	_, err := f.CreateBoard("Gate", 30)
+	_, err := f.CreateBoard("Gate", 30, nil)
 	if err == nil || err.Error() != "board 'Gate' was created, but Fizzy sent no id for it, so the auto-postpone period was not set" {
 		t.Errorf("err = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestCreateBoardNoLocationWithPostpone(t *testing.T) {
 		t.Errorf("calls %+v", s.calls)
 	}
 	s.calls = nil
-	if id, err := f.CreateBoard("Gate", 0); err != nil || id != "" {
+	if id, err := f.CreateBoard("Gate", 0, nil); err != nil || id != "" {
 		t.Errorf("no postpone: %q %v", id, err)
 	}
 }

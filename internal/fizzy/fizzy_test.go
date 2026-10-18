@@ -63,7 +63,7 @@ func TestCreateBoardThenPostpone(t *testing.T) {
 		}
 		jsonOK(w, map[string]any{})
 	})
-	id, err := f.CreateBoard("Home", 365)
+	id, err := f.CreateBoard("Home", 365, nil)
 	if err != nil || id != "B1" {
 		t.Fatalf("id=%q err=%v", id, err)
 	}
@@ -81,7 +81,7 @@ func TestCreateBoardThenPostpone(t *testing.T) {
 
 func TestCreateBoardBadPostpone(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, nil)
-	if _, err := f.CreateBoard("Home", 5); err == nil {
+	if _, err := f.CreateBoard("Home", 5, nil); err == nil {
 		t.Error("expected error")
 	}
 	if len(s.calls) != 0 {
@@ -94,7 +94,7 @@ func TestCreateBoardNoPostpone(t *testing.T) {
 		w.Header().Set("Location", "/1/boards/B1.json")
 		w.WriteHeader(201)
 	})
-	if _, err := f.CreateBoard("Home", 0); err != nil {
+	if _, err := f.CreateBoard("Home", 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.calls) != 1 {

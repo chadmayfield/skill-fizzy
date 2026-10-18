@@ -217,7 +217,9 @@ fz board create Garden --postpone 365 --columns Later,Next,Now
 `--postpone` is the number of days without activity before Fizzy moves a card
 to Not now. `--columns` takes custom columns, left to right. `fz` creates the
 board first and then sets the period, because Fizzy can refuse both in one
-request.
+request. The period and the columns need the new board's id from Fizzy's
+reply. If the reply has none, `fz` says the board was created without them
+and exits 1.
 
 A board is named by its name or its id in every board command. Case does not matter. A name that two boards share in any case exits 2; use the board id.
 

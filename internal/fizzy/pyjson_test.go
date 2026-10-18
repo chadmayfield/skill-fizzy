@@ -106,7 +106,7 @@ func TestErrorTextsMatchPython(t *testing.T) {
 	check("column", err, "no column 'later' (have: Now, Café)")
 	_, err = f.Column("B1", "l'a")
 	check("column dq", err, `no column "l'a" (have: Now, Café)`)
-	_, err = f.CreateBoard("x", 5)
+	_, err = f.CreateBoard("x", 5, nil)
 	check("postpone", err, "auto-postpone must be one of (3, 7, 11, 30, 90, 365)")
 	err = f.UpdateCard(1, CardFields{})
 	check("nothing", err, "nothing to update")

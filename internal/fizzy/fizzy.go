@@ -100,11 +100,12 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 }
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
-// a second request when postponeDays is not 0. It returns the new id, empty
-// in dry-run mode. The id comes from the Location header. When it is
-// missing, or cannot be a path segment, and a period was asked for, the
-// error says the board was created without it.
-func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
+// a second request when postponeDays is not 0, then creates each of columns
+// in order. It returns the new id, empty in dry-run mode, where only the
+// first request is printed. The id comes from the Location header. When it
+// is missing, or cannot be a path segment, and a period or columns were
+// asked for, the error says the board was created without them.
+func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (string, error) {
 	if postponeDays != 0 {
 		if err := ValidPostponeDays(postponeDays); err != nil {
 			return "", err
@@ -119,19 +120,35 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
 		return "", err
 	}
 	id := client.IDFromLocation(hdr.Get("Location"))
-	if postponeDays == 0 {
+	var lost []string
+	if postponeDays != 0 {
+		lost = append(lost, "the auto-postpone period was not set")
+	}
+	if len(columns) > 0 {
+		lost = append(lost, "its columns were not created")
+	}
+	if len(lost) == 0 {
 		return id, nil
 	}
 	if id == "" {
-		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so the auto-postpone period was not set", pyRepr(name))
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so %s", pyRepr(name), strings.Join(lost, " and "))
 	}
 	if err := CheckIDs(id); err != nil {
-		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so the auto-postpone period was not set", pyRepr(name), err)
+		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", pyRepr(name), err, strings.Join(lost, " and "))
 	}
-	_, err = f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
-		Days int `json:"auto_postpone_period_in_days"`
-	}{postponeDays}))
-	return id, err
+	if postponeDays != 0 {
+		if _, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
+			Days int `json:"auto_postpone_period_in_days"`
+		}{postponeDays})); err != nil {
+			return id, err
+		}
+	}
+	for _, col := range columns {
+		if _, err := f.CreateColumn(id, col, ""); err != nil {
+			return id, err
+		}
+	}
+	return id, nil
 }
 
 // Columns lists a board's custom columns.

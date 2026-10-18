@@ -105,10 +105,6 @@ func boardCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	id, err := fz.CreateBoard(name, days)
-	if err != nil {
-		return err
-	}
 	spec, _ := c.cmd.Flags().GetString("columns")
 	cols := []string{}
 	for _, name := range strings.Split(spec, ",") {
@@ -116,12 +112,9 @@ func boardCreate(c *cmdContext, a []string) error {
 			cols = append(cols, name)
 		}
 	}
-	if id != "" {
-		for _, name := range cols {
-			if _, err := fz.CreateColumn(id, name, ""); err != nil {
-				return err
-			}
-		}
+	id, err := fz.CreateBoard(name, days, cols)
+	if err != nil {
+		return err
 	}
 	return emit(c.cmd, obj{{"id", orNull(id)}, {"columns", cols}},
 		fmt.Sprintf("board %s created: %s", pyRepr(name), orNone(id)))
