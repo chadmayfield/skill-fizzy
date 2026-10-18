@@ -14,6 +14,12 @@ import (
 // cardStates are the values Fizzy's indexed_by filter takes.
 var cardStates = []string{"all", "maybe", "closed", "not_now", "stalled", "postponing_soon", "golden"}
 
+// cardSorts are the values Fizzy's sorted_by filter takes.
+var cardSorts = []string{"latest", "newest", "oldest"}
+
+// cardWindows are the values Fizzy's creation and closure filters take.
+var cardWindows = []string{"today", "yesterday", "thisweek", "lastweek", "thismonth", "lastmonth", "thisyear", "lastyear"}
+
 func init() { register(addCardCommands) }
 
 func addCardCommands(root *cobra.Command) {
@@ -25,16 +31,25 @@ func addCardCommands(root *cobra.Command) {
 	root.AddCommand(g)
 
 	list := &cobra.Command{
-		Use:     "list",
-		Short:   "list cards (every page)",
-		Long:    "List cards, newest activity first. Fizzy returns pages; fz reads all of them.",
-		Example: examples("fz card list --board Home", "fz card list --state golden", `fz card list --search "first aid"`),
-		Args:    args(cobra.NoArgs),
-		RunE:    action(cardList),
+		Use:   "list",
+		Short: "list cards (every page)",
+		Long: "List cards, newest activity first. Fizzy returns pages; fz reads all of them. " +
+			"Filters combine with AND. --column needs --board. --assignee takes a user id, an exact name or an email address.",
+		Example: examples("fz card list --board Home", "fz card list --state golden", `fz card list --search "first aid"`,
+			"fz card list --board Home --column Next --tag waiting", "fz card list --unassigned --created thisweek --sort oldest"),
+		Args: args(cobra.NoArgs),
+		RunE: action(cardList),
 	}
 	list.Flags().String("board", "", "board name or id")
 	list.Flags().String("state", "", "Fizzy's index filter (default all)")
 	list.Flags().String("search", "", "search terms")
+	list.Flags().String("column", "", "column name or id on --board")
+	list.Flags().String("tag", "", "tag name")
+	list.Flags().String("assignee", "", "assigned to this user: id, exact name or email")
+	list.Flags().Bool("unassigned", false, "only cards with no assignee")
+	list.Flags().String("sort", "", "latest (default), newest or oldest")
+	list.Flags().String("created", "", "created in a window: "+strings.Join(cardWindows, ", "))
+	list.Flags().String("closed", "", "closed in a window: "+strings.Join(cardWindows, ", "))
 
 	show := &cobra.Command{
 		Use:     "show NUMBER",
@@ -119,13 +134,35 @@ func cardList(c *cmdContext, _ []string) error {
 			return err
 		}
 	}
+	// fixed lists the flags that take a fixed set of values, with their query keys.
+	fixed := []struct {
+		flag, key string
+		allowed   []string
+	}{{"sort", "sorted_by", cardSorts}, {"created", "creation", cardWindows}, {"closed", "closure", cardWindows}}
+	for _, w := range fixed {
+		if v, _ := fl.GetString(w.flag); fl.Changed(w.flag) {
+			if err := choice(w.flag, v, w.allowed); err != nil {
+				return err
+			}
+		}
+	}
+	board, _ := fl.GetString("board")
+	column, _ := fl.GetString("column")
+	assignee, _ := fl.GetString("assignee")
+	unassigned, _ := fl.GetBool("unassigned")
+	if column != "" && board == "" {
+		return usagef("--column needs --board")
+	}
+	if assignee != "" && unassigned {
+		return usagef("use --assignee or --unassigned, not both")
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
 	}
 	boardID := ""
-	if name, _ := fl.GetString("board"); name != "" {
-		b, err := fz.Board(name)
+	if board != "" {
+		b, err := fz.Board(board)
 		if err != nil {
 			return err
 		}
@@ -138,6 +175,35 @@ func cardList(c *cmdContext, _ []string) error {
 	if fl.Changed("search") {
 		s, _ := fl.GetString("search")
 		filters = append(filters, fizzy.Param{Key: "terms[]", Value: s})
+	}
+	if column != "" {
+		col, err := fz.Column(boardID, column)
+		if err != nil {
+			return err
+		}
+		filters = append(filters, fizzy.Param{Key: "column_ids[]", Value: col.ID})
+	}
+	if name, _ := fl.GetString("tag"); name != "" {
+		t, err := fz.FindTag(name)
+		if err != nil {
+			return err
+		}
+		filters = append(filters, fizzy.Param{Key: "tag_ids[]", Value: t.ID})
+	}
+	if assignee != "" {
+		u, err := fz.MatchUser(assignee)
+		if err != nil {
+			return err
+		}
+		filters = append(filters, fizzy.Param{Key: "assignee_ids[]", Value: u.ID})
+	}
+	if unassigned {
+		filters = append(filters, fizzy.Param{Key: "assignment_status", Value: "unassigned"})
+	}
+	for _, w := range fixed {
+		if v, _ := fl.GetString(w.flag); fl.Changed(w.flag) {
+			filters = append(filters, fizzy.Param{Key: w.key, Value: v})
+		}
 	}
 	cards, err := fz.Cards(boardID, filters)
 	if err != nil {
