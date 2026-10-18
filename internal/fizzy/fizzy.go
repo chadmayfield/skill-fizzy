@@ -281,24 +281,26 @@ func (f *Fizzy) UpdateCard(n int, fields CardFields) error {
 // board. boardID may be empty; the card is fetched to find its board.
 func (f *Fizzy) MoveCard(n int, target, boardID string) error {
 	p := "/cards/" + strconv.Itoa(n)
-	t := strings.TrimRight(strings.ToLower(strings.TrimSpace(target)), "?")
-	switch t {
-	case maybe:
-		_, err := f.C.Write(http.MethodDelete, p+"/triage", nil)
-		return err
-	case notNow, "not now":
-		_, err := f.C.Write(http.MethodPost, p+"/not_now", nil)
-		return err
-	case done:
-		_, err := f.C.Write(http.MethodPost, p+"/closure", nil)
-		return err
-	}
 	if boardID == "" {
 		c, err := f.Card(n)
 		if err != nil {
 			return err
 		}
 		boardID = c.Board.ID
+	}
+	if err := f.CheckMoveTarget(boardID, target); err != nil {
+		return err
+	}
+	switch moveKeyword(target) {
+	case maybe:
+		_, err := f.C.Write(http.MethodDelete, p+"/triage", nil)
+		return err
+	case notNow:
+		_, err := f.C.Write(http.MethodPost, p+"/not_now", nil)
+		return err
+	case done:
+		_, err := f.C.Write(http.MethodPost, p+"/closure", nil)
+		return err
 	}
 	col, err := f.Column(boardID, target)
 	if err != nil {
@@ -308,6 +310,49 @@ func (f *Fizzy) MoveCard(n int, target, boardID string) error {
 		ColumnID string `json:"column_id"`
 	}{col.ID})
 	return err
+}
+
+// moveKeyword returns maybe, notNow or done when target is that move keyword:
+// case, the spaces around it and a trailing ? are ignored, and "not now" is
+// notNow. Any other target gives "".
+func moveKeyword(target string) string {
+	switch t := strings.TrimRight(strings.ToLower(strings.TrimSpace(target)), "?"); t {
+	case maybe, done:
+		return t
+	case notNow, "not now":
+		return notNow
+	}
+	return ""
+}
+
+// CheckMoveTarget refuses a move keyword that a custom column on the board
+// is also named, such as a column called Done, because fz cannot tell
+// whether the user means the column or the keyword. A target that is not a
+// keyword is not checked and reads nothing.
+func (f *Fizzy) CheckMoveTarget(boardID, target string) error {
+	kw := moveKeyword(target)
+	if kw == "" {
+		return nil
+	}
+	cols, err := f.Columns(boardID)
+	if err != nil {
+		return err
+	}
+	for _, col := range cols {
+		if moveKeyword(col.Name) == kw {
+			return refusef("the board has a column named '%s', so '%s' could mean that column or the %s keyword; "+
+				"to move the card into the column, use --to with the column id (%s); "+
+				"to %s, rename the column first", col.Name, strings.TrimSpace(target), kw, col.ID, keywordAction[kw])
+		}
+	}
+	return nil
+}
+
+// keywordAction says what each move keyword does to a card.
+var keywordAction = map[string]string{
+	maybe:  "send the card back to Maybe? with the keyword",
+	notNow: "move the card to Not now with the keyword",
+	done:   "close the card with the keyword",
 }
 
 // MoveCardToBoard moves a card to another board.

@@ -229,6 +229,11 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 	if err != nil {
 		return 0, err
 	}
+	if !isMaybe(d.Column) {
+		if err := fz.CheckMoveTarget(board.ID, d.Column); err != nil {
+			return 0, err
+		}
+	}
 	sgids := map[string]string{}
 	for _, img := range d.Images() {
 		path, err := d.ResolveImage(img, inbox)

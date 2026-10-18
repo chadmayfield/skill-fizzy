@@ -67,20 +67,27 @@ func syncCard(n int, st cardState) string {
 		`{"id":"` + stepDone + `","content":"Done elsewhere","completed":true}]}`
 }
 
-// syncServer serves cards 87 and 88 (same content) and 90, and the boards
-// list, accepts every write, and records each request as "METHOD /path".
-// Writes do not change what it serves.
+// syncServer serves cards 87 and 88 (same content) and 90, the boards list
+// and the columns in columns, accepts every write, and records each request
+// as "METHOD /path". Writes do not change what it serves.
 type syncServer struct {
 	*httptest.Server
-	mu    sync.Mutex
-	calls []string
-	state cardState
+	mu      sync.Mutex
+	calls   []string
+	state   cardState
+	columns string
 }
 
 func newSyncServer(t *testing.T) *syncServer {
 	t.Helper()
-	s := &syncServer{state: defaultCardState()}
+	s := &syncServer{state: defaultCardState(), columns: `[{"id":"c-now","name":"Now"}]`}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /1/boards/{id}/columns", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		cols := s.columns
+		s.mu.Unlock()
+		io.WriteString(w, cols)
+	})
 	mux.HandleFunc("GET /1/cards/{n}", func(w http.ResponseWriter, r *http.Request) {
 		switch r.PathValue("n") {
 		case "87", "88":

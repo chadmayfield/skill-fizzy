@@ -123,6 +123,11 @@ func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool)
 	if err != nil {
 		return nil, err
 	}
+	if !card.Closed && cardLane(card) != lane(d.Column) {
+		if err := fz.CheckMoveTarget(board.ID, d.Column); err != nil {
+			return nil, err
+		}
+	}
 	// Upload first, so a failed upload leaves the card untouched.
 	sgids := map[string]string{}
 	for _, img := range d.Images() {

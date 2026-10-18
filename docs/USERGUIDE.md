@@ -395,6 +395,14 @@ fz card reopen 87
 name wins. A name that two columns share in any case, with no exact match,
 exits 2. `--board` moves the card to another board. `card reopen` moves a closed card out of Done.
 
+A board can have a column of its own named Done, Maybe, Maybe? or Not now.
+Then `--to` with that name could mean the column or the keyword, so `fz`
+refuses it with exit 2 and sends nothing. Case does not matter. To move the
+card into that column, give `--to` the column's id. The refusal names it,
+and `fz --json column list Home` prints it. To close or triage the card with the keyword, rename the column
+first. `card create --column`, `draft apply` and `draft apply --update`
+refuse the same way, before they send anything.
+
 Golden:
 
 ```sh
@@ -764,7 +772,9 @@ The hinge pin is worn. The latch is fine.
 ```
 
 - The front matter needs `board`. `column`, `tags` and `golden` are
-  optional. A draft with no column goes to Maybe?.
+  optional. A draft with no column goes to Maybe?. When the board has a column of
+  its own named like a keyword, a draft that would move the card there by
+  that name is refused, as [`card move`](#cards) refuses it.
 - The `# ` line is the card title.
 - Everything except the title and the Steps section becomes the description.
 - Each `- [ ]` or `- [x]` line under `## Steps` becomes a step, ticked or not.

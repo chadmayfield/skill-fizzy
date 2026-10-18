@@ -167,11 +167,28 @@ func TestMoveSpecialTargets(t *testing.T) {
 		{"done", "POST", "/1/cards/5/closure"},
 	}
 	for _, c := range cases {
-		f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) { w.WriteHeader(204) })
+		f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) {
+			switch {
+			case r.Method != http.MethodGet:
+				w.WriteHeader(204)
+			case strings.HasSuffix(r.URL.Path, "/columns"):
+				jsonOK(w, []map[string]any{{"id": "C1", "name": "Now"}})
+			default:
+				jsonOK(w, map[string]any{"number": 5, "board": map[string]any{"id": "B1"}})
+			}
+		})
 		if err := f.MoveCard(5, c.target, ""); err != nil {
 			t.Fatal(err)
 		}
-		if len(s.calls) != 1 || s.calls[0].Method != c.method || s.calls[0].Path != c.path {
+		// The GETs read the board's columns, to refuse a column named like
+		// the keyword. The one write is the keyword's.
+		var writes []call
+		for _, x := range s.calls {
+			if x.Method != http.MethodGet {
+				writes = append(writes, x)
+			}
+		}
+		if len(writes) != 1 || writes[0].Method != c.method || writes[0].Path != c.path {
 			t.Errorf("%s: %+v", c.target, s.calls)
 		}
 	}
