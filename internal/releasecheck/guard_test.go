@@ -49,7 +49,8 @@ func TestReleaseGuard(t *testing.T) {
 	gitIn(t, repo, "push", "-q", "origin", "main")
 	gitIn(t, repo, "checkout", "-q", "-b", "side")
 	onSide := commit("on a side branch")
-	// The same fetch the workflow runs.
+	// release.yml gets origin/main from fetch-depth 0; this fetch gives the
+	// test the same ref.
 	gitIn(t, repo, "fetch", "-q", "origin", "main")
 
 	cases := []struct {
