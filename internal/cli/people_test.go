@@ -247,3 +247,14 @@ func TestUserShowAndEditUnknownOrAmbiguous(t *testing.T) {
 		}
 	}
 }
+
+// whoami leaves out the angle brackets when a user has no email, as
+// userLine does.
+func TestWhoamiWithoutEmail(t *testing.T) {
+	acctServer(t, map[string]string{"GET /my/identity": strings.Replace(acctIdentity, `"email_address":"alex@example.com"`, `"email_address":""`, 1)})
+	r := runGo([]string{"whoami"})
+	want := "  2  Other  Sam <sam@example.com> member\n* 1  Gate Works  Alex owner\n"
+	if r.code != 0 || r.stdout != want {
+		t.Fatalf("got %+v", r)
+	}
+}

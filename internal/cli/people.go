@@ -241,7 +241,11 @@ func whoami(c *cmdContext, _ []string) error {
 			mark = "*"
 		}
 		u := a.User
-		return fmt.Sprintf("%s %s  %s  %s <%s> %s", mark, slug, a.Name, u.Name, u.EmailAddress, u.Role)
+		who := u.Name
+		if u.EmailAddress != "" {
+			who += " <" + u.EmailAddress + ">"
+		}
+		return fmt.Sprintf("%s %s  %s  %s %s", mark, slug, a.Name, who, u.Role)
 	}, "(no accounts)")
 	return emit(c.cmd, id.Raw(), text)
 }
