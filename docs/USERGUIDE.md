@@ -885,6 +885,11 @@ fz draft apply ~/.fizzy-inbox/drafts/
 - `apply` parses every draft, finds its images and checks that it can
   rewrite the draft file before it creates anything. A read-only draft, or
   one in a read-only folder, stops the run with exit 1 and nothing is sent.
+  A draft with more than one hard link stops it with exit 2, because the
+  rewrite would split the links. Copy it to a file of its own.
+- `fz` rewrites a draft by renaming a new file over it. The new file keeps
+  the old one's mode, and its owner and group where the system allows. It
+  does not keep ACLs or extended attributes.
 - Then it creates one card per draft. It writes `card: N` into the draft
   right after the create, before it adds steps or tags, moves the card or
   marks it golden, so the same draft never makes a second card.
@@ -894,8 +899,8 @@ fz draft apply ~/.fizzy-inbox/drafts/
   first failure and lists each draft and its card.
 - A draft that already has `card:` is skipped, unless you pass `--update`.
 - Each command takes files, folders or both. A folder means the `.md` files
-  directly inside it. A draft named twice, by another path or through a
-  symlink, is read once.
+  directly inside it. A draft named twice, by another path, through a
+  symlink or through a second hard link, is read once.
 
 ### Updating a card from its draft
 

@@ -93,17 +93,29 @@ func pyPath(p string) string {
 }
 
 // draftPaths expands targets: a folder becomes its *.md files in name order.
-// A draft named more than once, by any path or through a symlink, is kept
-// once, where it first appears.
+// A draft named more than once, by any path, through a symlink or through
+// a second hard link, is kept once, where it first appears.
 func draftPaths(targets []string) ([]string, error) {
 	var paths []string
 	seen := map[string]bool{}
+	var files []os.FileInfo
 	add := func(p string) {
 		key := draftKey(p)
-		if !seen[key] {
-			seen[key] = true
-			paths = append(paths, p)
+		if seen[key] {
+			return
 		}
+		seen[key] = true
+		// os.SameFile compares the device and inode, so it also catches a
+		// hard link, which has a path of its own.
+		if st, err := os.Stat(p); err == nil {
+			for _, f := range files {
+				if os.SameFile(f, st) {
+					return
+				}
+			}
+			files = append(files, st)
+		}
+		paths = append(paths, p)
 	}
 	for _, t := range targets {
 		p := pyPath(config.ExpandTilde(t))
@@ -536,7 +548,11 @@ func draftApply(c *cmdContext, a []string) error {
 		}
 		if d.Card == 0 || update {
 			if err := draft.CheckWritable(p); err != nil {
-				return fmt.Errorf("%s: fz cannot write card: and synced: back into this draft (%v), so it sends nothing", p, err)
+				msg := fmt.Sprintf("%s: fz cannot write card: and synced: back into this draft (%v), so it sends nothing", p, err)
+				if errors.Is(err, draft.ErrLinked) {
+					return fizzy.Refuse(msg)
+				}
+				return errors.New(msg)
 			}
 		}
 		drafts = append(drafts, d)

@@ -2,12 +2,18 @@ package draft
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
+
+// ErrLinked is matched by errors.Is when a draft has more than one hard
+// link. fz rewrites a draft by renaming a new file over it, which would
+// leave the other links with the old text, so it refuses.
+var ErrLinked = errors.New("the draft has more than one hard link, and fz would split them by rewriting it; copy it to a file of its own")
 
 // bom is the UTF-8 byte order mark. Parse skips it and RecordFields keeps it.
 const bom = "\xef\xbb\xbf"
@@ -202,7 +208,9 @@ func endingOf(s string) string {
 
 // writeAtomic replaces the file at path, or the file a symlink there points
 // to, with data: it writes a temp file in the same folder, syncs it, gives
-// it the old file's mode and renames it over the old file.
+// it the old file's mode, and its owner and group where the system allows,
+// and renames it over the old file. A file with more than one hard link is
+// refused with ErrLinked. ACLs and extended attributes are not copied.
 func writeAtomic(path string, data []byte) (err error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -211,6 +219,9 @@ func writeAtomic(path string, data []byte) (err error) {
 	st, err := os.Stat(real)
 	if err != nil {
 		return err
+	}
+	if linkCount(st) > 1 {
+		return fmt.Errorf("%s: %w", path, ErrLinked)
 	}
 	f, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".fz-*")
 	if err != nil {
@@ -223,6 +234,9 @@ func writeAtomic(path string, data []byte) (err error) {
 		}
 	}()
 	if _, err = f.Write(data); err != nil {
+		return err
+	}
+	if err = keepOwner(f, st); err != nil {
 		return err
 	}
 	if err = f.Chmod(st.Mode().Perm()); err != nil {
@@ -247,8 +261,10 @@ func writeAtomic(path string, data []byte) (err error) {
 }
 
 // CheckWritable fails unless RecordFields could rewrite the draft at path:
-// it must be a regular file (a symlink to one is fine) that fz can open for
-// writing, in a folder where fz can make the temp file. It changes nothing.
+// it must be a regular file (a symlink to one is fine) with one hard link,
+// that fz can open for writing, in a folder where fz can make the temp
+// file. A file with more than one hard link fails with ErrLinked. It
+// changes nothing.
 func CheckWritable(path string) error {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -260,6 +276,9 @@ func CheckWritable(path string) error {
 	}
 	if !st.Mode().IsRegular() {
 		return fmt.Errorf("%s is not a regular file", path)
+	}
+	if linkCount(st) > 1 {
+		return ErrLinked
 	}
 	f, err := os.OpenFile(real, os.O_WRONLY, 0)
 	if err != nil {
