@@ -375,8 +375,10 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 			if err != nil {
 				return 0, nil, nil, err
 			}
+			// Long bodies are cut so the line stays readable; the marker says
+			// how much was left out, so a cut body never looks complete.
 			if r := []rune(s); len(r) > 400 {
-				s = string(r[:400])
+				s = fmt.Sprintf("%s ... (+%d more characters not shown)", string(r[:400]), len(r)-400)
 			}
 			shown = s
 		case len(o.raw) > 0:

@@ -131,8 +131,19 @@ func TestDryRunFormats(t *testing.T) {
 	}
 	line := strings.TrimSuffix(out.String(), "\n")
 	prefix := "[dry-run] POST " + srv.URL + "/1/x "
-	if got := len(strings.TrimPrefix(line, prefix)); got != 400 {
-		t.Errorf("body length = %d, want 400", got)
+	sent := `{"k": "` + strings.Repeat("z", 500) + `"}`
+	wantLine := prefix + sent[:400] + " ... (+109 more characters not shown)"
+	if line != wantLine {
+		t.Errorf("long body: got %q\nwant %q", line, wantLine)
+	}
+
+	// A body of exactly 400 characters is shown whole, with no marker.
+	out.Reset()
+	if _, err := c.Write("POST", "/x", map[string]string{"k": strings.Repeat("z", 391)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSuffix(out.String(), "\n"); strings.Contains(got, "more characters") || len(strings.TrimPrefix(got, prefix)) != 400 {
+		t.Errorf("400-character body: got %q", got)
 	}
 }
 
