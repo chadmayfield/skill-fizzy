@@ -56,7 +56,10 @@ func TestParseAndRecord(t *testing.T) {
 		t.Fatalf("links %v", d.Links())
 	}
 	got, err := d.ResolveImage("rear.jpg", filepath.Join(dir, "inbox"))
-	if err != nil || got != filepath.Join(dir, "rear.jpg") {
+	// ResolveImage returns the real path, with symlinks such as macOS's
+	// /var resolved.
+	want, _ := filepath.EvalSymlinks(filepath.Join(dir, "rear.jpg"))
+	if err != nil || got != want {
 		t.Fatalf("resolve %q %v", got, err)
 	}
 	html := d.DescriptionHTML(map[string]string{"rear.jpg": "SG"})
@@ -129,7 +132,8 @@ func TestResolveImageFallsBackToInbox(t *testing.T) {
 	writeFile(t, inbox, "a.jpg", "x")
 	d := &Draft{Path: filepath.Join(dir, "x.md")}
 	got, err := d.ResolveImage("a.jpg", inbox)
-	if err != nil || got != filepath.Join(inbox, "a.jpg") {
+	want, _ := filepath.EvalSymlinks(filepath.Join(inbox, "a.jpg"))
+	if err != nil || got != want {
 		t.Fatalf("got %q %v", got, err)
 	}
 }

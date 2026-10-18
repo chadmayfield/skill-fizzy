@@ -62,6 +62,9 @@ Go binary and must be on the PATH.
    - Steps are concrete actions, `- [ ] ...`.
    - Put each image on a line by itself, `![alt](file.jpg)`, not in a list
      item. Otherwise it shows as text instead of a photo.
+   - An image path is relative to the draft's folder or the inbox and stays
+     inside them. `fz` refuses an absolute path, a `~/` path, or a `..` or
+     symlink that leads out of them.
    - Big projects get fewer, bigger cards with the work in their steps.
 5. **Check it:** `fz draft check <file> --links`. Fix or remove every link
    that does not return OK. Dead links are bugs.

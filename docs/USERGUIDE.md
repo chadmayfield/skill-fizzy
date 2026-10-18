@@ -155,8 +155,9 @@ does the same for one command and wins over `FIZZY_CONFIG`.
 ### The inbox
 
 The inbox is a folder for drafts and the images they use. The skill writes
-drafts to `<inbox>/drafts/`. When a draft names an image by a relative path,
-`fz` looks next to the draft first, then in the inbox.
+drafts to `<inbox>/drafts/`. A draft names an image by a path relative to
+the draft's folder or the inbox. `fz` looks next to the draft first, then in
+the inbox, and never outside those two folders.
 
 ### The rules card
 
@@ -856,6 +857,22 @@ draft, then under the inbox, so `gate/hinge.jpg` can mean
 `~/.fizzy-inbox/gate/hinge.jpg`. A web image cannot be embedded. Link to it
 with a normal link instead.
 
+The file must sit inside the draft's folder or the inbox. `fz` resolves
+symlinks first, then checks that the real path is still inside one of the
+two. `check`, `preview` and `apply` refuse these with exit 2, before
+anything is sent:
+
+- an absolute path, such as `/tmp/hinge.jpg`
+- a path that starts with `~/`
+- a path whose `..` leaves both folders
+- a symlink that leads out of both folders
+- a path that holds `-->`, `<` or `>`
+
+There is no flag to allow more. Copy the file into the inbox instead.
+
+An image line inside a fenced code block is code. It is shown as text, and
+`fz` neither checks nor uploads its file.
+
 `apply` uploads each image and embeds it in the description.
 
 ### Check, preview, apply
@@ -868,7 +885,8 @@ fz draft apply gate.md
 fz draft apply ~/.fizzy-inbox/drafts/
 ```
 
-- `check` parses each draft and finds its images. `--links` also fetches
+- `check` parses each draft and finds its images. It reads only the inbox
+  setting, so it needs no server URL or account. `--links` also fetches
   every link and reports its status. Those fetches carry no token and no
   cookie, and use no proxy. Links inside code are not fetched.
 - `--links` never connects to this machine or a private network. A link

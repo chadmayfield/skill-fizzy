@@ -32,6 +32,9 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "check DRAFT...",
 		Short: "validate drafts, and --links",
 		Long: "Parse each draft, resolve its images, and with --links fetch every link outside code. " +
+			"It needs no server URL or account. " +
+			"An image must be a path relative to the draft's folder or the inbox that stays inside one of them after symlinks are resolved; " +
+			"any other image is refused with exit 2. " +
 			"A link to a loopback, private, link-local, multicast, unspecified or other special-purpose address, such as 100.64.0.0/10, or one that redirects there, is skipped and printed as skipped (local address).",
 		Example: examples("fz draft check ~/.fizzy-inbox/drafts/", "fz draft check gate.md --links"),
 		Args:    args(cobra.MinimumNArgs(1)),
@@ -41,7 +44,7 @@ func addDraftCommands(root *cobra.Command) {
 	preview := &cobra.Command{
 		Use:     "preview DRAFT...",
 		Short:   "show the card a draft would make",
-		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing.",
+		Long:    "Print the title, board, column, tags, description HTML and steps. Sends nothing. An image path outside the draft's folder and the inbox is refused with exit 2.",
 		Example: examples("fz draft preview gate.md"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftPreview),
@@ -273,8 +276,17 @@ func checkLink(hc *http.Client, url string) linkStatus {
 	return linkStatus{code: resp.StatusCode}
 }
 
+// refuseImage turns an image target the draft package refuses into a
+// Refusal, so the command exits 2.
+func refuseImage(err error) error {
+	if errors.Is(err, draft.ErrImagePath) {
+		return fizzy.Refuse(err.Error())
+	}
+	return err
+}
+
 func draftCheck(c *cmdContext, a []string) error {
-	cfg, err := c.config()
+	inbox, err := c.inbox()
 	if err != nil {
 		return err
 	}
@@ -285,14 +297,17 @@ func draftCheck(c *cmdContext, a []string) error {
 	}
 	hc := linkClient()
 	w := c.out()
-	bad := 0
+	bad, refused := 0, 0
 	for _, p := range paths {
 		d, err := draft.Parse(p)
 		if err == nil {
-			err = d.CheckImages(cfg.InboxPath())
+			err = d.CheckImages(inbox)
 		}
 		if errors.Is(err, draft.ErrDraft) {
 			fmt.Fprintf(w, "✗ %s: %s\n", p, err)
+			if errors.Is(err, draft.ErrImagePath) {
+				refused++
+			}
 			bad++
 			continue
 		}
@@ -322,6 +337,11 @@ func draftCheck(c *cmdContext, a []string) error {
 			}
 		}
 	}
+	// A refused image path is a refusal, so it exits 2, as preview and
+	// apply do for it.
+	if refused > 0 {
+		return exitCode(2)
+	}
 	if bad > 0 {
 		return exitCode(1)
 	}
@@ -343,11 +363,18 @@ func draftPreview(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	inbox, err := c.inbox()
+	if err != nil {
+		return err
+	}
 	w := c.out()
 	for _, p := range paths {
 		d, err := parseDraft(p)
 		if err != nil {
 			return err
+		}
+		if err := d.CheckImagePaths(inbox); err != nil {
+			return refuseImage(err)
 		}
 		tags := strings.Join(d.Tags, ", ")
 		if tags == "" {
@@ -544,7 +571,7 @@ func draftApply(c *cmdContext, a []string) error {
 			return err
 		}
 		if err := d.CheckImages(cfg.InboxPath()); err != nil {
-			return err
+			return refuseImage(err)
 		}
 		if d.Card == 0 || update {
 			if err := draft.CheckWritable(p); err != nil {

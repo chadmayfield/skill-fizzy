@@ -62,6 +62,15 @@ func (c *cmdContext) config() (*config.Config, error) {
 	return c.cfg, nil
 }
 
+// inbox returns the inbox folder. It reads only the inbox setting, so a
+// command that never reaches the server needs no URL or account.
+func (c *cmdContext) inbox() (string, error) {
+	if c.cfg != nil {
+		return c.cfg.InboxPath(), nil
+	}
+	return config.LoadInbox(flagValue(c.cmd, "config"))
+}
+
 // api returns the Fizzy operations over a client for the loaded config.
 // Dry-run lines go to stderr, as in the Python client.
 func (c *cmdContext) api() (*fizzy.Fizzy, error) {

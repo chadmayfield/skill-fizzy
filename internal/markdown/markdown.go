@@ -26,7 +26,7 @@ import (
 
 // ToHTML converts a draft body to HTML.
 func ToHTML(md string) string {
-	lines := strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+	lines := lines(md)
 	var out, para []string
 	listTag := "" // "ul" or "ol"
 
@@ -146,6 +146,41 @@ func ToHTML(md string) string {
 	flushPara()
 	closeList()
 	return strings.Join(out, "\n")
+}
+
+// lines splits md into lines the way ToHTML does: \r\n becomes \n, and only
+// \n ends a line.
+func lines(md string) []string {
+	return strings.Split(strings.ReplaceAll(md, "\r\n", "\n"), "\n")
+}
+
+// TextLines returns the lines of md that ToHTML does not treat as code: it
+// splits lines as ToHTML does and leaves out each fenced code block, fences
+// included.
+func TextLines(md string) []string {
+	ls := lines(md)
+	var out []string
+	for i := 0; i < len(ls); i++ {
+		if strings.HasPrefix(strip(ls[i]), "```") {
+			for i++; i < len(ls) && !strings.HasPrefix(strip(ls[i]), "```"); i++ {
+			}
+			continue
+		}
+		out = append(out, ls[i])
+	}
+	return out
+}
+
+// ImageTargets returns the target of each line that ToHTML turns into an
+// <!--attach:target--> placeholder, in order.
+func ImageTargets(md string) []string {
+	out := []string{}
+	for _, line := range TextLines(md) {
+		if _, target, ok := ImageLine(line); ok {
+			out = append(out, target)
+		}
+	}
+	return out
 }
 
 // ImageLine reports whether line is only an image, ![alt](target), and

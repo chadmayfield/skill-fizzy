@@ -11,6 +11,7 @@ package draft
 import (
 	"errors"
 	"fmt"
+	"html"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,6 +26,11 @@ import (
 // ErrDraft is matched by errors.Is for every problem found in a draft.
 var ErrDraft = errors.New("draft error")
 
+// ErrImagePath is matched by errors.Is for an image target fz refuses: one
+// that resolves outside the draft's folder and the inbox, or that holds
+// -->, < or >. Such an error also matches ErrDraft.
+var ErrImagePath = errors.New("image path refused")
+
 // ErrBadValue is matched by errors.Is for a front matter value that fz
 // refuses rather than guess at, such as card: 87abc or golden: maybe. Every
 // such error also matches ErrDraft.
@@ -37,6 +43,19 @@ func (e *draftError) Is(target error) bool { return target == ErrDraft }
 
 func errf(format string, args ...any) error {
 	return &draftError{fmt.Sprintf(format, args...)}
+}
+
+// imageError is an image target fz refuses. It matches ErrImagePath and
+// ErrDraft.
+type imageError struct{ msg string }
+
+func (e *imageError) Error() string { return e.msg }
+func (e *imageError) Is(target error) bool {
+	return target == ErrImagePath || target == ErrDraft
+}
+
+func imagef(format string, args ...any) error {
+	return &imageError{fmt.Sprintf(format, args...)}
 }
 
 // pySpace is the class of characters Python's str.isspace and \s accept.
@@ -455,19 +474,15 @@ func (d *Draft) Links() []string {
 }
 
 // Images returns the targets of image lines; only these become attachments.
-func (d *Draft) Images() []string {
-	out := []string{}
-	for _, line := range splitLines(d.BodyMD) {
-		if _, target, ok := markdown.ImageLine(line); ok {
-			out = append(out, target)
-		}
-	}
-	return out
-}
+// It finds them as markdown.ToHTML does, so the files fz uploads are the
+// ones the description embeds: a line inside a code fence is code, and
+// only \n ends a line.
+func (d *Draft) Images() []string { return markdown.ImageTargets(d.BodyMD) }
 
-// CheckImages fails if an image would not embed or its file is missing.
+// CheckImages fails if an image would not embed, if its target is refused
+// (see ResolveImage), or if its file is missing.
 func (d *Draft) CheckImages(inbox string) error {
-	for _, line := range splitLines(d.BodyMD) {
+	for _, line := range markdown.TextLines(d.BodyMD) {
 		if imageRe.MatchString(line) {
 			if _, _, ok := markdown.ImageLine(line); !ok {
 				return errf("image must be on a line by itself to embed: %s", pyRepr(pyStrip(line)))
@@ -482,25 +497,78 @@ func (d *Draft) CheckImages(inbox string) error {
 	return nil
 }
 
-// ResolveImage finds an image file: relative paths try the draft's folder,
-// then the inbox.
-func (d *Draft) ResolveImage(target, inbox string) (string, error) {
-	p := target
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			p = filepath.Join(home, p[1:])
+// CheckImagePaths fails with an ErrImagePath error if any image target is
+// refused. A missing file is not an error here, so draft preview can show a
+// draft whose images are not there yet.
+func (d *Draft) CheckImagePaths(inbox string) error {
+	for _, img := range d.Images() {
+		if _, err := d.ResolveImage(img, inbox); errors.Is(err, ErrImagePath) {
+			return err
 		}
+	}
+	return nil
+}
+
+// ResolveImage finds an image file and returns its real path. A target is
+// a path relative to the draft's folder, tried first, or to the inbox, and
+// it must stay inside one of the two after symlinks are resolved. An
+// absolute path, a ~ path, a path whose .. leaves both folders, a symlink
+// out of them, and a target holding -->, < or > are refused with an
+// ErrImagePath error. A missing file is an ErrDraft error.
+func (d *Draft) ResolveImage(target, inbox string) (string, error) {
+	if strings.Contains(target, "-->") || strings.ContainsAny(target, "<>") {
+		return "", imagef("image %s: the path must not hold -->, < or >", pyRepr(target))
+	}
+	if filepath.IsAbs(target) || target == "~" || strings.HasPrefix(target, "~/") || filepath.VolumeName(target) != "" {
+		return "", imagef("image %s: give a path relative to the draft's folder or the inbox; fz does not attach an absolute or ~ path", pyRepr(target))
+	}
+	type root struct{ abs, real string }
+	var roots []root
+	for _, dir := range []string{filepath.Dir(d.Path), inbox} {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		real := abs
+		if r, err := filepath.EvalSymlinks(abs); err == nil {
+			real = r
+		}
+		roots = append(roots, root{abs, real})
+	}
+	inside := func(p string, real bool) bool {
+		for _, r := range roots {
+			base := r.abs
+			if real {
+				base = r.real
+			}
+			if rel, err := filepath.Rel(base, p); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return true
+			}
+		}
+		return false
 	}
 	var candidates []string
-	if filepath.IsAbs(p) {
-		candidates = []string{filepath.Clean(p)}
-	} else {
-		candidates = []string{filepath.Join(filepath.Dir(d.Path), p), filepath.Join(inbox, p)}
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(c); err == nil && st.Mode().IsRegular() {
-			return c, nil
+	for _, r := range roots {
+		c := filepath.Join(r.abs, target)
+		if !inside(c, false) {
+			continue
 		}
+		candidates = append(candidates, c)
+		st, err := os.Stat(c)
+		if err != nil || !st.Mode().IsRegular() {
+			continue
+		}
+		real, err := filepath.EvalSymlinks(c)
+		if err != nil {
+			continue
+		}
+		if !inside(real, true) {
+			return "", imagef("image %s: it leads to %s, outside the draft's folder and the inbox", pyRepr(target), real)
+		}
+		return real, nil
+	}
+	if len(candidates) == 0 {
+		return "", imagef("image %s: the path leaves the draft's folder and the inbox", pyRepr(target))
 	}
 	return "", errf("image not found: %s (looked in %s)", target, strings.Join(candidates, ", "))
 }
@@ -514,7 +582,7 @@ func (d *Draft) DescriptionHTML(sgids map[string]string) string {
 		if sgid, ok := sgids[target]; ok {
 			out = strings.ReplaceAll(out, placeholder, `<action-text-attachment sgid="`+sgid+`"></action-text-attachment>`)
 		} else {
-			out = strings.ReplaceAll(out, placeholder, "<p>[image: "+target+"]</p>")
+			out = strings.ReplaceAll(out, placeholder, "<p>[image: "+html.EscapeString(target)+"]</p>")
 		}
 	}
 	return out
