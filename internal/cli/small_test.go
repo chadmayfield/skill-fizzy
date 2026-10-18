@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,5 +97,30 @@ func TestUploadSignedIDFallbackWarnsOnStderr(t *testing.T) {
 	r := runGo([]string{"upload", p})
 	if r.code != 0 || r.stdout != "BLOB\n" || !strings.Contains(r.stderr, "the attachment may not render") {
 		t.Fatalf("got %+v", r)
+	}
+}
+
+// A comment with no text gets a preview line with no trailing spaces.
+func TestCommentDeletePreviewEmptyBody(t *testing.T) {
+	acctServer(t, map[string]string{
+		"GET /1/cards/87/comments/c1": `{"id":"c1","created_at":"2026-10-17T10:00:00Z","body":{"plain_text":"","html":""},"creator":{"id":"u1","name":"Alex"}}`,
+	})
+	r := runGo([]string{"comment", "delete", "87", "c1"})
+	if r.code != 2 || r.stderr != "about to delete comment c1  Alex  2026-10-17T10:00:00Z\nrefusing without --yes\n" {
+		t.Errorf("got %+v", r)
+	}
+}
+
+// A 403 on the board list says nothing about webhooks, so fz does not
+// blame the admin role for it.
+func TestWebhookBoardLookup403IsNotAboutAdmins(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+	parityEnv(t, srv)
+	r := runGo([]string{"webhook", "list", "Gate"})
+	if r.code != 1 || strings.Contains(r.stderr, "admins") || !strings.Contains(r.stderr, "GET /1/boards -> HTTP 403") {
+		t.Errorf("got %+v", r)
 	}
 }

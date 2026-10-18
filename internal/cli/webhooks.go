@@ -115,13 +115,11 @@ func webhookBoard(fz *fizzy.Fizzy, arg string) (string, error) {
 	return b.ID, err
 }
 
-// findWebhookBoard returns the board named by arg.
+// findWebhookBoard returns the board named by arg. A 403 here comes from
+// the board list, not from a webhook call, so it is not blamed on the admin
+// role.
 func findWebhookBoard(fz *fizzy.Fizzy, arg string) (fizzy.Board, error) {
-	b, err := fz.Board(arg)
-	if err != nil {
-		return b, adminOnly(err)
-	}
-	return b, nil
+	return fz.Board(arg)
 }
 
 func webhookLine(w fizzy.Webhook) string {

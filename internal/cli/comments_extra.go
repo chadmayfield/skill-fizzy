@@ -174,7 +174,7 @@ func commentDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(c.errw(), "about to delete comment %s  %s\n", commentHead(cm), firstLine(cm.Body.PlainText))
+	fmt.Fprintln(c.errw(), strings.TrimRight("about to delete comment "+commentHead(cm)+"  "+firstLine(cm.Body.PlainText), " "))
 	if !yes {
 		return refuse(c)
 	}
