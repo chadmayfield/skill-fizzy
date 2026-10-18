@@ -545,16 +545,10 @@ const MaxPages = 1000
 // variable so a test can lower it.
 var maxListBytes = 256 << 20
 
-// EachPage GETs the account-scoped path and then each rel="next" page,
-// passing every non-empty payload to fn. An empty body is an empty page and
-// is skipped. fn returns true to stop early.
-//
-// A next link is followed only when it has the configured URL's scheme, host
-// and port. A link that starts with one "/" resolves against the configured
-// origin as it stands, with no account prefix added. Any other link, a link
-// seen before, and a page past MaxPages are errors, and nothing is sent for
-// them. So is a list whose pages pass 256 MiB together, or that takes
-// longer than ListTimeout.
+// EachPage GETs path and each rel="next" page after it, passing every
+// non-empty payload to fn; fn returns true to stop. Next links must stay on
+// the configured origin, so the token never leaves it. A repeated link, more
+// than MaxPages pages, 256 MiB in total or ListTimeout is an error.
 func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err error)) error {
 	next := c.URL(path, true)
 	seen := map[string]bool{}

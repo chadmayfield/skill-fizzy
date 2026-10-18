@@ -31,6 +31,8 @@ var tokenCmdTimeout = 30 * time.Second
 // ErrConfig is wrapped by every error this package returns.
 var ErrConfig = errors.New("config error")
 
+// Default paths. The config file and the inbox can be set elsewhere (see
+// Load); the action log path is fixed. A leading ~ is the home directory.
 const (
 	DefaultConfigPath = "~/.config/fizzy-skill/config.json"
 	DefaultInbox      = "~/.fizzy-inbox"

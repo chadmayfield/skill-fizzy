@@ -8,7 +8,7 @@ import (
 )
 
 // --update on a read-only draft is refused before any write, because fz
-// could not record synced: afterwards. (Mutant 23 in opus-integrity.)
+// could not record synced: afterwards.
 func TestApplyUpdateRefusesUnwritableDraft(t *testing.T) {
 	srv := newSyncServer(t)
 	path := filepath.Join(t.TempDir(), "gate.md")

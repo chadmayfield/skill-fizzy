@@ -10,6 +10,7 @@ import (
 // Refusal, as it does for a usage error.
 type Refusal struct{ msg string }
 
+// Error returns the refusal message.
 func (e Refusal) Error() string { return e.msg }
 
 // refusef returns a Refusal with a formatted message.

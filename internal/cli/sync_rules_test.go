@@ -7,9 +7,7 @@ import (
 	"testing"
 )
 
-// Tests that kill mutations which survived the draft review.
-
-// M28: a closed card is never moved, even when the draft names a column.
+// A closed card is never moved, even when the draft names a column.
 func TestSyncLeavesClosedCardColumn(t *testing.T) {
 	text := strings.Replace(syncDraftText, "column: Maybe?\n", "column: Not now\n", 1)
 	srv := newSyncServer(t)
@@ -30,7 +28,7 @@ func TestSyncLeavesClosedCardColumn(t *testing.T) {
 	}
 }
 
-// M37: a draft without golden turns a golden card's mark off.
+// A draft without golden turns a golden card's mark off.
 func TestSyncTurnsGoldenOff(t *testing.T) {
 	srv := newSyncServer(t)
 	srv.edit(func(c *cardState) { c.golden = true })
@@ -45,7 +43,7 @@ func TestSyncTurnsGoldenOff(t *testing.T) {
 	}
 }
 
-// M45: a missing image in a later draft stops the batch before the first
+// A missing image in a later draft stops the batch before the first
 // draft's card is created.
 func TestApplyChecksEveryImageFirst(t *testing.T) {
 	srv := newSyncServer(t)

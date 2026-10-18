@@ -40,9 +40,8 @@ func (c *cmdContext) wrote(text, would string) string {
 	return text
 }
 
-// dry adds "dry_run": true to a command's JSON in dry-run mode. The
-// commands added after the Python port pass their JSON through it. The
-// commands the parity goldens pin do not.
+// dry adds "dry_run": true to a command's JSON in dry-run mode. Commands
+// whose output the parity goldens pin do not use it.
 func (c *cmdContext) dry(data any) any {
 	if o, ok := data.(obj); ok && c.dryRun {
 		return append(append(obj{}, o...), kv{"dry_run", true})

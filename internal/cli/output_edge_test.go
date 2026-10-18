@@ -47,7 +47,7 @@ func TestBoardShowWithoutUserIDs(t *testing.T) {
 // and no others. The docs say only the comment creator can update or delete
 // a comment. For removing a comment reaction they say only "Removes your
 // reaction", with no rule about anyone else's.
-func TestCommentHelpMakesNoUncitedClaims(t *testing.T) {
+func TestCommentHelpPermissionRules(t *testing.T) {
 	root := NewRoot()
 	for _, tc := range []struct {
 		path []string
@@ -80,7 +80,7 @@ func TestCommentHelpMakesNoUncitedClaims(t *testing.T) {
 }
 
 // An empty or blank name exits 2 and sends nothing, for every command that
-// sets a name, as user edit and webhook edit already did.
+// sets a name.
 func TestEmptyNamesRefuse(t *testing.T) {
 	_, calls := acctServer(t, map[string]string{
 		"GET /1/boards":             `[{"id":"B1","name":"Home"}]`,

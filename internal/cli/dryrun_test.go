@@ -22,7 +22,7 @@ var dryRunRoutes = map[string]string{
 	"GET /1/boards/b1/webhooks/H1":      strings.Replace(testWebhook, `"active":true`, `"active":false`, 1),
 }
 
-// Every write command added after the Python port says in dry-run mode
+// Every write command the parity goldens do not pin says in dry-run mode
 // that nothing was sent, and sends nothing.
 func TestDryRunTextSaysNothingSent(t *testing.T) {
 	for _, c := range []struct {

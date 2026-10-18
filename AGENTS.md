@@ -176,6 +176,13 @@ the docs catch up. `fz help <noun>` must name a real command.
 - The same rules cover `docs/USERGUIDE.md`, this file and code comments. One
   idea per sentence.
 
+### Comments
+
+- Every exported name has a doc comment that starts with its name.
+- A comment states what the code does, plus any gotcha or pitfall a developer must know: a server quirk, a limit, a security reason, an order that matters. Keep it to a line or two.
+- Comments describe the code as it is, never its history. Never restate the code, and never say how it came to be: no "used to", no review ids, finding or ruling numbers, plans, batches, model names or dates. History lives in git.
+- `internal/repocheck` fails on comments that do.
+
 ### Git
 
 - Feature work happens on a branch and merges to `main` by pull request. Never commit to `main` directly.

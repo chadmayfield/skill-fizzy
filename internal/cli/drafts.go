@@ -817,13 +817,9 @@ var errLockHeld = errors.New("lock held")
 // regular file, such as a planted symlink.
 var errLockUnsafe = errors.New("lock path unsafe")
 
-// lockDrafts takes the apply lock of each existing draft in paths and
-// returns a function that releases the locks it took and removes their
-// files. acquireLock, per system, takes one lock. A lock another apply
-// holds, or a lock path that is not a regular file, is a Refusal that
-// names it. A folder where no lock can be made is left unlocked: fz cannot
-// write the draft there either, and CheckWritable refuses it before
-// anything is sent.
+// lockDrafts takes the apply lock for each draft in paths and returns a
+// function that releases them. A lock another apply holds is a Refusal. A
+// folder where no lock can be made stays unlocked; CheckWritable refuses it.
 func lockDrafts(paths []string) (func(), error) {
 	var held []func()
 	unlock := func() {
@@ -854,16 +850,10 @@ func lockDrafts(paths []string) (func(), error) {
 	return unlock, nil
 }
 
-// recordSynced writes the card's fingerprint into the draft as synced:,
-// and its per-field hashes as synced-fields:, read after every write so the
-// next --update can tell whether someone changed the card in Fizzy since,
-// and which fields.
-//
-// dh is the draft's draftHash, taken before anything was sent, and is
-// written as synced-draft: when it is not "". A sync that stopped partway,
-// including one whose title and description send has an unknown outcome,
-// passes "", which deletes the line, so the next --update always sends the
-// title and description.
+// recordSynced re-reads card n and writes its fingerprint (synced:,
+// synced-fields:) into the draft, so the next --update can tell what changed
+// in Fizzy. dh is written as synced-draft:; "" removes the line, so a sync
+// that stopped partway always resends the title and description.
 func recordSynced(fz *fizzy.Fizzy, path string, n int, dh string) error {
 	// Known limit: an edit made in Fizzy between fz's writes and this read is
 	// folded into the new fingerprint, so the next --update cannot see it.

@@ -31,8 +31,7 @@ type Comment struct {
 }
 
 // Reaction is a reaction on a comment, and, as Boost, on a card. Fizzy's
-// API docs give both the same fields. The live server had no comment
-// reaction to read on 2026-10-17.
+// API docs give both the same fields.
 type Reaction struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`

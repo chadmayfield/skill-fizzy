@@ -1,7 +1,7 @@
 // Package fizzy holds the high-level Fizzy operations built on client.
 //
-// Notes on Fizzy behaviour this package works around (verified against Fizzy
-// source and docs, 2026-10):
+// Notes on Fizzy behaviour this package works around, from the Fizzy source
+// and API docs:
 //   - Creating a board with auto_postpone_period_in_days in the same request
 //     can fail 422 "Account must exist"; boards are created by name, then
 //     updated.
@@ -682,15 +682,9 @@ func CheckUpload(path string) (os.FileInfo, error) {
 // size while fz reads it.
 var statUpload = os.Stat
 
-// Upload sends a file and returns the sgid to embed as
-// <action-text-attachment sgid=...>. In dry-run mode it prints the blob
-// request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
-// it returns signed_id and prints a warning on the client's output.
-//
-// A path that is not a regular file, or a file over MaxUploadSize, is
-// refused before anything is read or sent, in dry-run mode too. The file is
-// read twice, once for the checksum and once as the PUT body, and never
-// held in memory whole.
+// Upload sends a file and returns the sgid for an <action-text-attachment>,
+// or "DRY-RUN-SGID" in dry-run mode. Non-regular files and files over
+// MaxUploadSize are refused first. The file is streamed, never held whole.
 func (f *Fizzy) Upload(path string) (string, error) {
 	fi, err := CheckUpload(path)
 	if err != nil {

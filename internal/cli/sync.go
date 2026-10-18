@@ -111,14 +111,11 @@ type partialSync struct{ err error }
 func (p *partialSync) Error() string { return p.err.Error() }
 func (p *partialSync) Unwrap() error { return p.err }
 
-// syncDraft pushes a draft onto its existing card d.Card and returns one
-// report line per change. It passes each line to say, when say is set, as
-// soon as the change is made. On an error it still returns the lines for
-// the changes made before it, and an error after the first card write is
-// a *partialSync. Unless force is set, it refuses a draft with no
-// usable synced: line, or one whose card changed in Fizzy since synced:,
-// before sending any write, and uploads images before any card write. Steps are never unticked. With prune, unticked card
-// steps and card tags the draft lacks are removed; ticked steps always stay.
+// syncDraft pushes a draft onto its existing card and returns one report
+// line per change, also passed to say as it happens. Without force it refuses,
+// before any write, when the card changed in Fizzy since synced:. An error
+// after the first write is a *partialSync. Steps are never unticked; prune
+// removes unticked steps and tags the draft lacks.
 func syncDraft(fz *fizzy.Fizzy, d *draft.Draft, inbox string, prune, force bool, say func(string)) (report []string, err error) {
 	return syncDraftHashed(fz, d, inbox, "", prune, force, say)
 }

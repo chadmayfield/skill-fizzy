@@ -49,13 +49,13 @@ func TestRecordFieldsKeepsBytes(t *testing.T) {
 			"---\nboard:   \"Home\"   # c\n# a comment\ncard: 9\n---\n# Fix the gate\n",
 		},
 		{
-			// Mutation M32: the key must match with its colon.
+			// The key must match with its colon.
 			"keys that start with card",
 			"---\nboard: Home\ncards: gate, hinge\ncardinal: north\ncard: 5\n---\n# Fix the gate\n",
 			"---\nboard: Home\ncards: gate, hinge\ncardinal: north\ncard: 9\n---\n# Fix the gate\n",
 		},
 		{
-			// opus-integrity-7: blank lines in the front matter are kept,
+			// Blank lines in the front matter are kept,
 			// and the new line goes after the last line with content.
 			"blank line before the closing delimiter",
 			"---\nboard: Home\n\n---\n# Fix the gate\n",

@@ -154,13 +154,9 @@ func trimEnding(s string) string {
 	})
 }
 
-// RecordFields writes key: value lines into the front matter. An existing line
-// for the same key (any case) is dropped, the rest keep their order, blank
-// lines included, and the new lines go after the last line with content, in
-// the order given. Every other byte of the file
-// stays as it was, including a BOM and the file's line endings, which the new
-// lines use too. The file is replaced by a rename, so a failed write leaves
-// the old draft whole. A symlink is followed and stays a symlink.
+// RecordFields sets key: value lines in the front matter, replacing any line
+// with the same key. Every other byte stays as it was, BOM and line endings
+// included. The file is replaced atomically, so a failed write leaves it whole.
 func RecordFields(path string, fields ...KV) error {
 	keys := make([]string, len(fields))
 	for i, f := range fields {

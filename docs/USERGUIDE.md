@@ -34,8 +34,8 @@ You need these:
 
 On macOS, a newly built `fz` may need Local Network permission before it can
 reach a server on your local network. Grant it in System Settings, under
-Privacy & Security, Local Network. An outbound firewall such as Little Snitch
-can also block a newly built binary, so allow `fz` there too.
+Privacy & Security, Local Network. An outbound firewall can also block a
+newly built binary, so allow `fz` there too.
 
 ## Setup
 
@@ -1239,8 +1239,8 @@ on a slow link can finish. A list that Fizzy sends in pages, such as
 an error. If every command times
 out but the server works in a browser, something on your machine is
 blocking `fz`. On macOS, check Local Network permission in System Settings,
-under Privacy & Security, Local Network. Check any outbound firewall, such
-as Little Snitch, too. A rebuilt binary may need permission again.
+under Privacy & Security, Local Network. Check any outbound firewall too.
+A rebuilt binary may need permission again.
 
 ### "Changed in Fizzy" refusals
 

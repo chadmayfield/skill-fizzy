@@ -32,7 +32,7 @@ func TestCardValues(t *testing.T) {
 }
 
 func TestCardValueRefused(t *testing.T) {
-	// "+87" and "-5" kill mutation M33, which drops the digits check.
+	// "+87" and "-5" are not plain digits.
 	for _, value := range []string{"87.0", "87abc", "99999999999999999999", "+87", "-5", "0", "##87", "#87x", "eighty-seven"} {
 		_, err := parseFrontText(t, "card: "+value)
 		if !errors.Is(err, ErrBadValue) || !errors.Is(err, ErrDraft) {
@@ -118,7 +118,7 @@ func TestHeadingsInsideFenceAreNotStructure(t *testing.T) {
 	}
 }
 
-// Mutation M55: a folder with the image's name is not an image.
+// A folder with the image's name is not an image.
 func TestResolveImageRejectsFolder(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "hinge.jpg"), 0o755); err != nil {

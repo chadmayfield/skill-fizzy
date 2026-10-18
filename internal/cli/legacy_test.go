@@ -81,8 +81,8 @@ func TestRewriteWithGlobalFlags(t *testing.T) {
 	}
 }
 
-// TestOldAndNewReachTheSameCommand ports the Python plan's TestParser: the
-// old form and the new form resolve to the same cobra command.
+// TestOldAndNewReachTheSameCommand checks that each 0.1 form and its new
+// form resolve to the same cobra command.
 func TestOldAndNewReachTheSameCommand(t *testing.T) {
 	pairs := [][2][]string{
 		{{"move", "5", "--to", "now"}, {"card", "move", "5", "--to", "now"}},
