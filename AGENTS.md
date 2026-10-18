@@ -116,8 +116,8 @@ the docs catch up. `fz help <noun>` must name a real command.
   `make dist` test is slow and runs only with `FZ_TEST_DIST=1`, which CI
   sets.
 - **Private text in man pages.** `TestManNoPrivateText` fails if a man page
-  holds `/Users/`, the home directory the test runs with, an `@` or
-  `github.com`. The tests run with a temporary HOME, so your own home
+  holds `/Users/`, `/home/`, the home directory the test runs with, an `@`
+  or `github.com`. The tests run with a temporary HOME, so your own home
   directory is not checked unless you add it to `FZ_PRIVATE_PATTERNS`. Set `FZ_PRIVATE_PATTERNS`
   to a comma-separated list to check more strings. Keep that list in your
   environment, never in the repo.

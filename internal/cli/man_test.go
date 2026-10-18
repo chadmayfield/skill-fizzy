@@ -143,7 +143,9 @@ func TestManNoPrivateText(t *testing.T) {
 	dir := t.TempDir()
 	runMan(t, dir)
 	home, _ := os.UserHomeDir()
-	bad := []string{"/Users/", "@", "github.com"}
+	// The tests run with a temporary HOME, so home below is not the real
+	// one. The fixed prefixes catch a real home path on macOS and Linux.
+	bad := []string{"/Users/", "/home/", "@", "github.com"}
 	if home != "" {
 		bad = append(bad, home)
 	}
