@@ -67,7 +67,7 @@ func addStepCommands(root *cobra.Command) {
 	del := &cobra.Command{
 		Use:     "delete NUMBER STEP_ID",
 		Short:   "delete a step (needs --yes)",
-		Long:    "Remove a step from the checklist.",
+		Long:    "Remove a step from the checklist. Without --yes it prints the step it would delete, deletes nothing and exits 2.",
 		Example: examples("fz step delete 87 03abc123def456ghi789jkl0mn --yes"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(stepDelete),
@@ -166,13 +166,26 @@ func stepDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	if yes, _ := c.cmd.Flags().GetBool("yes"); !yes {
-		fmt.Fprintln(c.errw(), "refusing without --yes")
-		return exitCode(2)
-	}
 	fz, err := c.api()
 	if err != nil {
 		return err
+	}
+	if yes, _ := c.cmd.Flags().GetBool("yes"); !yes {
+		// Show what would go, the way card delete does, then refuse.
+		card, err := fz.Card(n)
+		if err != nil {
+			return err
+		}
+		preview := fmt.Sprintf("about to delete step %s, which card #%d does not list", a[1], n)
+		for _, s := range card.Steps {
+			if s.ID == a[1] {
+				preview = fmt.Sprintf("about to delete step: [%s] %s  %s (card #%d)", tick(s.Completed), s.ID, s.Content, n)
+				break
+			}
+		}
+		fmt.Fprintln(c.errw(), preview)
+		fmt.Fprintln(c.errw(), "refusing without --yes")
+		return exitCode(2)
 	}
 	if err := fz.DeleteStep(n, a[1]); err != nil {
 		return err
