@@ -1,11 +1,14 @@
 // Package markdown converts card-draft Markdown to the HTML Fizzy stores.
 //
-// It produces the same bytes as the earlier Python fz's converter, which the
-// golden files in testdata pin.
 // It supports what card drafts need and nothing more: ATX headings,
-// paragraphs, bullet and numbered lists (one level), task-list items, fenced
-// code blocks, blockquotes, links, bold, italic, inline code, horizontal
-// rules, and image lines. Fizzy sanitizes rich text on its side as well.
+// paragraphs, bullet and numbered lists nested up to three levels, task-list
+// items, pipe tables without alignment, fenced code blocks, blockquotes,
+// links, bold, italic, ~~strikethrough~~, inline code, horizontal rules, and
+// image lines. Fizzy sanitizes rich text on its side as well.
+//
+// Input without tables, strikethrough or space-indented list items gives the
+// same bytes as the earlier Python fz's converter, which the golden files in
+// testdata pin.
 //
 // A line that is only ![alt](target) becomes the placeholder
 // <!--attach:target-->, which the draft layer replaces with an uploaded file.
