@@ -131,10 +131,14 @@ func exportLine(e fizzy.Export) string {
 }
 
 // emitStarted prints a new export, or a dry-run note when none was made.
-// what names the export for that note.
+// what names the export for that note. A reply with no body has no id, so
+// fz says so instead of printing a null.
 func emitStarted(c *cmdContext, e fizzy.Export, what string) error {
+	if c.dryRun {
+		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("", "start "+what))
+	}
 	if e.Raw() == nil {
-		return emit(c.cmd, c.dry(obj{{"id", nil}}), c.wrote("export started", "start "+what))
+		return emit(c.cmd, obj{{"started", true}}, "export started; the server sent no id")
 	}
 	return emit(c.cmd, e.Raw(), exportLine(e))
 }

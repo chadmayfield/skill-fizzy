@@ -120,9 +120,13 @@ func TestReactToCommentChecksContent(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		w.WriteHeader(http.StatusCreated)
 	})
-	for _, text := range []string{"", "seventeen letters"} {
-		if _, err := f.ReactToComment(87, "c1", text); !IsRefusal(err) {
-			t.Errorf("%q: want a Refusal, got %v", text, err)
+	for text, want := range map[string]string{
+		"":                  "a reaction cannot be empty",
+		"   ":               "a reaction cannot be empty",
+		"seventeen letters": "a reaction is at most 16 characters; this one is 17",
+	} {
+		if _, err := f.ReactToComment(87, "c1", text); !IsRefusal(err) || err.Error() != want {
+			t.Errorf("%q: want the Refusal %q, got %v", text, want, err)
 		}
 	}
 	if len(s.calls) != 0 {

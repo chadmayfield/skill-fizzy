@@ -85,7 +85,7 @@ func addPeopleCommands(root *cobra.Command) {
 
 // userArgHelp says how user show and user edit read their USER argument.
 const userArgHelp = "USER is a user id, a name or an email, matched as card assign matches one. " +
-	"A name two users share exits 2. An id that matches no active user is still tried, so a deactivated user's id works."
+	"A name two users share, or a USER that matches nobody, exits 2. An id that matches no active user is still tried, so a deactivated user's id works."
 
 func userLine(u fizzy.User) string {
 	line := u.ID + "  " + u.Name
@@ -164,10 +164,13 @@ func userShow(c *cmdContext, a []string) error {
 
 func userEdit(c *cmdContext, a []string) error {
 	fl := c.cmd.Flags()
+	if !fl.Changed("name") {
+		return usagef("user edit needs --name")
+	}
 	name, _ := fl.GetString("name")
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return usagef("user edit needs --name")
+	if err := checkName("--name", name); err != nil {
+		return err
 	}
 	yes, _ := fl.GetBool("yes")
 	fz, err := c.api()

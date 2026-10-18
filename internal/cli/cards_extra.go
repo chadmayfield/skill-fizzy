@@ -17,16 +17,17 @@ func addCardExtraCommands(root *cobra.Command) {
 	assign := &cobra.Command{
 		Use:   "assign NUMBER USER",
 		Short: "assign a user to a card",
-		Long: "Assign a user to a card. USER is a user id, a name, or an email address. fz tries an exact id, then an exact name, then a name ignoring case, then an email ignoring case. If two users have the name, fz refuses and exits 2. " +
+		Long: "Assign a user to a card. USER is a user id, a name, or an email address. fz tries an exact id, then an exact name, then a name ignoring case, then an email ignoring case. If two users have the name, or no user matches, fz refuses and exits 2. " +
 			"fz prints which user it matched and how. Fizzy's assign call toggles, so fz reads the card first and only sends a change when one is needed.",
 		Example: examples("fz card assign 87 03abc123def456ghi789jkl0mn", `fz card assign 87 "Gate Keeper"`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(func(c *cmdContext, a []string) error { return cardAssign(c, a, true) }),
 	}
 	unassign := &cobra.Command{
-		Use:     "unassign NUMBER USER",
-		Short:   "remove a user from a card",
-		Long:    "Remove a user from a card. USER is matched as in card assign. fz only sends a change when the user is assigned.",
+		Use:   "unassign NUMBER USER",
+		Short: "remove a user from a card",
+		Long: "Remove a user from a card. USER is matched as in card assign. An id that matches no active user is sent as it is, so a deactivated user can be removed. " +
+			"fz only sends a change when the user is assigned.",
 		Example: examples(`fz card unassign 87 "Gate Keeper"`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(func(c *cmdContext, a []string) error { return cardAssign(c, a, false) }),
@@ -54,7 +55,7 @@ func addCardExtraCommands(root *cobra.Command) {
 		Use:   "boost NUMBER TEXT",
 		Short: "add a boost to a card",
 		Long: fmt.Sprintf("Add a boost, a short reaction, to a card. TEXT is at most %d characters. "+
-			"fz counts characters as Fizzy does, one per Unicode code point, and refuses longer text before sending.", fizzy.MaxBoostChars),
+			"fz counts characters as Fizzy does, one per Unicode code point, and refuses empty, blank or longer text before sending.", fizzy.MaxBoostChars),
 		Example: examples(`fz card boost 87 "Nice hinge"`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardBoost),
@@ -139,7 +140,10 @@ func cardAssign(c *cmdContext, a []string, assign bool) error {
 		return err
 	}
 	who := fmt.Sprintf("%s (%s, matched by %s)", u.Name, u.ID, u.By)
-	text := fmt.Sprintf("card #%d: %s %s", n, who, already)
+	if u.Name == "" {
+		who = fmt.Sprintf("%s (matched by %s)", u.ID, u.By)
+	}
+	text := noChange(c, fmt.Sprintf("card #%d: %s %s", n, who, already))
 	if changed {
 		text = c.wrote(fmt.Sprintf("card #%d: %s %s", n, verb, who), fmt.Sprintf(would, who, n))
 	}
@@ -258,7 +262,7 @@ func cardImage(c *cmdContext, a []string) error {
 		return exitCode(2)
 	}
 	if rawString(card.Raw(), "image_url") == "None" {
-		return emit(c.cmd, c.dry(obj{{"number", n}, {"removed", false}}), fmt.Sprintf("card #%d has no image", n))
+		return emit(c.cmd, c.dry(obj{{"number", n}, {"removed", false}}), noChange(c, fmt.Sprintf("card #%d has no image", n)))
 	}
 	fmt.Fprintf(c.errw(), "about to remove the image from: %s (board %s)\n", cardLine(card), card.Board.Name)
 	if !yes {

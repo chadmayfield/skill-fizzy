@@ -82,6 +82,9 @@ func stepAdd(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkName("the step text", a[1]); err != nil {
+		return err
+	}
 	done, _ := c.cmd.Flags().GetBool("done")
 	fz, err := c.api()
 	if err != nil {

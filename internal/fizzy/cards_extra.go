@@ -32,7 +32,10 @@ func BoostLength(text string) int { return utf8.RuneCountInString(text) }
 // -- assignments (idempotent over Fizzy's toggle) ----------------------------
 
 func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, error) {
-	u, err := f.MatchUser(user, false)
+	// Unassign passes an unknown id of the Fizzy form through, so a
+	// deactivated user can still be removed. Assign does not, because a typo
+	// there would assign someone.
+	u, err := f.MatchUser(user, !want)
 	if err != nil {
 		return UserMatch{}, false, err
 	}
@@ -48,7 +51,7 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 		return u, false, err
 	}
 	if card.Assignees == nil {
-		return u, false, refusef("card #%d has no assignees list in Fizzy's reply, so fz cannot tell whether %s is assigned", n, u.Name)
+		return u, false, refusef("card #%d has no assignees list in Fizzy's reply, so fz cannot tell whether %s is assigned", n, u.Label())
 	}
 	present := false
 	for _, a := range *card.Assignees {
@@ -56,7 +59,7 @@ func (f *Fizzy) setAssigned(n int, user string, want bool) (UserMatch, bool, err
 	}
 	if !present && card.HasMore {
 		return u, false, refusef("card #%d has more than 5 assignees and Fizzy lists only the first 5, so fz cannot tell whether %s is assigned; change it in Fizzy",
-			n, u.Name)
+			n, u.Label())
 	}
 	if present == want {
 		return u, false, nil
@@ -74,7 +77,7 @@ func (f *Fizzy) Assign(n int, user string) (UserMatch, bool, error) {
 }
 
 // Unassign removes a user from a card and reports whether it changed
-// anything.
+// anything. An id that matches no active user is passed through.
 func (f *Fizzy) Unassign(n int, user string) (UserMatch, bool, error) {
 	return f.setAssigned(n, user, false)
 }
@@ -143,14 +146,19 @@ func (f *Fizzy) Boosts(n int) ([]Boost, error) {
 	return list[Boost](f.C, "/cards/"+strconv.Itoa(n)+"/reactions")
 }
 
-// CheckBoost returns an error when text is empty or longer than Fizzy
-// stores.
-func CheckBoost(text string) error {
-	if text == "" {
-		return refusef("a boost needs some text")
+// CheckBoost returns a Refusal when text is empty, only spaces, or longer
+// than Fizzy stores.
+func CheckBoost(text string) error { return checkReactionText("a boost", text) }
+
+// CheckReaction applies the CheckBoost rule to a comment reaction.
+func CheckReaction(text string) error { return checkReactionText("a reaction", text) }
+
+func checkReactionText(what, text string) error {
+	if strings.TrimSpace(text) == "" {
+		return refusef("%s cannot be empty", what)
 	}
 	if l := BoostLength(text); l > MaxBoostChars {
-		return refusef("a boost is at most %d characters; this one is %d", MaxBoostChars, l)
+		return refusef("%s is at most %d characters; this one is %d", what, MaxBoostChars, l)
 	}
 	return nil
 }
@@ -176,19 +184,24 @@ func (f *Fizzy) RemoveBoost(n int, id string) error {
 
 // -- lookups for card list filters ---------------------------------------------
 
-// FindTag finds an account tag by title. A leading # and case are ignored,
-// as in AddTag.
+// FindTag finds an account tag by title. A leading # is ignored. An exact
+// title wins; otherwise case is ignored, and a title two tags share
+// ignoring case is a Refusal.
 func (f *Fizzy) FindTag(name string) (Tag, error) {
-	want := strings.ToLower(strings.TrimSpace(strings.TrimLeft(name, "#")))
+	want := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "#"))
 	tags, err := f.Tags()
 	if err != nil {
 		return Tag{}, err
 	}
+	t, n := pickByName(tags, want, func(t Tag) string { return t.Title })
+	switch {
+	case n == 1:
+		return t, nil
+	case n > 1:
+		return Tag{}, refusef("%d tags are named %s; use the exact title", n, pyRepr(name))
+	}
 	titles := make([]string, len(tags))
 	for i, t := range tags {
-		if strings.ToLower(t.Title) == want {
-			return t, nil
-		}
 		titles[i] = t.Title
 	}
 	return Tag{}, fmt.Errorf("no tag %s (have: %s)", pyRepr(name), strings.Join(titles, ", "))

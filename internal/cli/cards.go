@@ -63,7 +63,7 @@ func addCardCommands(root *cobra.Command) {
 	create := &cobra.Command{
 		Use:     "create BOARD TITLE",
 		Short:   "create a card",
-		Long:    "Create a card on a board. It lands in Maybe? unless --column names another lane.",
+		Long:    "Create a card on a board. It lands in Maybe? unless --column names another lane. An empty or blank title exits 2 and sends nothing.",
 		Example: examples(`fz card create Home "Fix the gate"`, `fz card create Home "Fix the gate" --column Next --tag buy`),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardCreate),
@@ -104,9 +104,10 @@ func addCardCommands(root *cobra.Command) {
 	golden.Flags().Bool("off", false, "remove golden")
 
 	tag := &cobra.Command{
-		Use:     "tag NUMBER TAG",
-		Short:   "add a tag, or --remove",
-		Long:    "Add or remove a tag. Fizzy's tag call toggles, so fz reads the card first and only sends a change when one is needed.",
+		Use:   "tag NUMBER TAG",
+		Short: "add a tag, or --remove",
+		Long: "Add or remove a tag. Fizzy's tag call toggles, so fz reads the card first and only sends a change when one is needed. " +
+			"If Fizzy's reply has no tags list, fz cannot tell, so it exits 2 and sends nothing. An empty tag exits 2 as well.",
 		Example: examples("fz card tag 87 waiting", "fz card tag 87 waiting --remove"),
 		Args:    args(cobra.ExactArgs(2)),
 		RunE:    action(cardTag),
@@ -281,6 +282,15 @@ func isMaybe(column string) bool {
 
 func cardCreate(c *cmdContext, a []string) error {
 	fl := c.cmd.Flags()
+	if err := checkName("the card title", a[1]); err != nil {
+		return err
+	}
+	tags, _ := fl.GetStringArray("tag")
+	for _, t := range tags {
+		if fizzy.TagTitle(t) == "" {
+			return usagef("--tag cannot be empty")
+		}
+	}
 	fz, err := c.api()
 	if err != nil {
 		return err
@@ -311,7 +321,6 @@ func cardCreate(c *cmdContext, a []string) error {
 				return err
 			}
 		}
-		tags, _ := fl.GetStringArray("tag")
 		for _, t := range tags {
 			if _, err := fz.AddTag(n, t); err != nil {
 				return err

@@ -56,7 +56,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "edit NUMBER COMMENT_ID TEXT",
 			Short:   "replace a comment's text",
-			Long:    "Replace a comment's text with new Markdown. Only the comment's author can. On a 403 from the server, fz prints the status and says so.",
+			Long:    "Replace a comment's text with new Markdown. Only the comment's author can. On a 403 from the server, fz prints the status and says so. Empty or blank text exits 2 and sends nothing.",
 			Example: examples(`fz comment edit 87 03abc123def456ghi789jkl0mn "Gate latches now."`),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentEdit),
@@ -65,7 +65,7 @@ func addCommentExtraCommands(root *cobra.Command) {
 		&cobra.Command{
 			Use:     "react NUMBER COMMENT_ID TEXT",
 			Short:   "react to a comment",
-			Long:    "Add a reaction to a comment. The text is at most 16 characters, counted as card boost counts them. fz refuses empty or longer text and sends nothing. Fizzy does not send back the new reaction's id; comment reactions lists it.",
+			Long:    "Add a reaction to a comment. The text is at most 16 characters, counted as card boost counts them. fz refuses empty, blank or longer text and sends nothing. Fizzy does not send back the new reaction's id; comment reactions lists it.",
 			Example: examples(`fz comment react 87 03abc123def456ghi789jkl0mn "ok"`),
 			Args:    args(cobra.ExactArgs(3)),
 			RunE:    action(commentReact),
@@ -150,6 +150,9 @@ func commentShow(c *cmdContext, a []string) error {
 func commentEdit(c *cmdContext, a []string) error {
 	n, err := cardNumber(a[0])
 	if err != nil {
+		return err
+	}
+	if err := checkName("the comment text", a[2]); err != nil {
 		return err
 	}
 	fz, err := c.api()

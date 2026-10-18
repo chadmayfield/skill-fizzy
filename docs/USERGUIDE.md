@@ -175,7 +175,9 @@ fz --json card show 87
 ```
 
 In a dry run, the commands added after fz 0.1 end with a line such as
-`dry-run: nothing sent; would watch card #87`. With `--json` they add
+`dry-run: nothing sent; would watch card #87`. When the change is already in
+place, such as assigning a user who is assigned, the line is
+`dry-run: nothing sent; no change needed`. With `--json` they add
 `"dry_run": true` to their output. The fz 0.1 commands print the same text
 and JSON as the Python fz did.
 
@@ -185,7 +187,7 @@ and JSON as the Python fz did.
 |---|---|
 | 0 | Success. |
 | 1 | An API, config or draft error. The message says which. |
-| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, and an empty or blank name, and sends nothing. |
+| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. It also refuses an id that is empty, `.` or `..`, a USER that matches nobody, and an empty or blank name, title, step, comment, boost or reaction, and sends nothing. |
 
 ### Boards
 
@@ -241,7 +243,9 @@ replaces the whole list, so anyone not named loses access. Each entry is a
 user id, a name or an email, matched the way `card assign` matches a user.
 If an entry matches nobody or more than one user, `fz` exits 2 and changes
 nothing. Both changes print the old and new access first, with each user's
-name and id, and refuse without `--yes`. `--all` on a board that every user
+name and id, and refuse without `--yes`. The `--users` preview lists who
+keeps access, who gains it and who loses it. When Fizzy's reply does not say
+who has access now, the preview says the current list is unknown. `--all` on a board that every user
 can already reach prints that no change is needed, exits 0 and sends
 nothing.
 
@@ -369,8 +373,9 @@ fz card move 87 --board Garden --to Next
 fz card reopen 87
 ```
 
-`--to` takes a column name, or `maybe`, `not-now` or `done`. `--board` moves
-the card to another board. `card reopen` moves a closed card out of Done.
+`--to` takes a column name, or `maybe`, `not-now` or `done`. An exact column
+name wins. A name that two columns share in any case, with no exact match,
+exits 2. `--board` moves the card to another board. `card reopen` moves a closed card out of Done.
 
 Golden:
 
@@ -390,6 +395,8 @@ fz card tag 87 waiting --remove
 
 Fizzy's tag call toggles a tag on or off. `fz` reads the card first and only
 sends a change when one is needed, so tagging twice never removes the tag.
+If the card in Fizzy's reply has no tags list, `fz` cannot tell, so it exits
+2 and sends nothing. An empty tag exits 2 as well.
 
 #### Assign
 
@@ -401,8 +408,10 @@ fz card unassign 87 "Gate Keeper"
 
 USER is a user id, a name or an email address. `fz` tries, in order, an exact
 id, an exact name, a name with any case when only one user has it, and an
-email with any case. If two users have the name, `fz` refuses and exits with
-status 2. It prints which user it matched and how.
+email with any case. If two users have the name, or no user matches, `fz`
+refuses and exits with status 2. It prints which user it matched and how.
+`card unassign` also takes an id that matches no active user and sends it as
+it is, so a deactivated user can be removed. `card assign` does not.
 
 Fizzy's assign call toggles, like the tag call. `fz` reads the card first and
 only sends a change when one is needed. The card lists at most 5 assignees.
@@ -500,8 +509,8 @@ fz comment reactions 87 03abc123def456ghi789jkl0mn
 fz comment unreact 87 03abc123def456ghi789jkl0mn 03def456ghi789jkl0mn123abc
 ```
 
-A reaction is at most 16 characters, counted as boosts are. Empty or longer
-text exits 2 and sends nothing. Fizzy does not send back the new
+A reaction is at most 16 characters, counted as boosts are. Empty, blank or
+longer text exits 2 and sends nothing. Fizzy does not send back the new
 reaction's id, so `comment react` prints the comment id, and its `--json`
 output holds the comment id and the text. `comment reactions` prints each
 reaction's id, who reacted and the text. `comment unreact` removes your own
@@ -531,7 +540,8 @@ fz whoami
 `tag list` prints every tag on the account with its id. `user list` prints
 the active users with their id, name, email and role. `user show` and
 `user edit` take a user id, a name or an email, matched the way
-`card assign` matches a user. A name two users share exits 2. An id that
+`card assign` matches a user. A name two users share, or a USER that
+matches nobody, exits 2. An id that
 matches no active user is still tried, so a deactivated user's id works.
 `whoami` lists every
 account your token can reach, with your user on each, and marks the

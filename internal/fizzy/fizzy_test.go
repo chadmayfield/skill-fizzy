@@ -336,7 +336,7 @@ func TestCreateCardBodyAndDryRun(t *testing.T) {
 
 func TestUpdateCard(t *testing.T) {
 	f, s, _, _ := newFizzy(t, false, func(w http.ResponseWriter, r *http.Request, b []byte) { w.WriteHeader(204) })
-	if err := f.UpdateCard(5, CardFields{}); err == nil || err.Error() != "nothing to update" {
+	if err := f.UpdateCard(5, CardFields{}); !IsRefusal(err) || err.Error() != "nothing to update" {
 		t.Errorf("err=%v", err)
 	}
 	if len(s.calls) != 0 {
@@ -426,8 +426,8 @@ func TestUpdateStepSendsOnlyGivenFields(t *testing.T) {
 			t.Errorf("%d: %+v", i, s.calls[i])
 		}
 	}
-	if err := f.UpdateStep(5, "S1", nil, nil); err == nil {
-		t.Error("expected nothing to update")
+	if err := f.UpdateStep(5, "S1", nil, nil); !IsRefusal(err) || err.Error() != "nothing to update" {
+		t.Errorf("expected the nothing to update refusal, got %v", err)
 	}
 }
 

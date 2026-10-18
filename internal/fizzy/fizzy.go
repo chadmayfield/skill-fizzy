@@ -101,24 +101,36 @@ func (f *Fizzy) Board(nameOrID string) (Board, error) {
 
 // CreateBoard creates a board by name, then sets the auto-postpone period in
 // a second request when postponeDays is not 0. It returns the new id, empty
-// in dry-run mode.
+// in dry-run mode. The id comes from the Location header. When it is
+// missing, or cannot be a path segment, and a period was asked for, the
+// error says the board was created without it.
 func (f *Fizzy) CreateBoard(name string, postponeDays int) (string, error) {
 	if postponeDays != 0 {
 		if err := ValidPostponeDays(postponeDays); err != nil {
 			return "", err
 		}
 	}
-	id, err := f.C.Create("/boards", wrap("board", struct {
+	// Do, not Create, so a dry run (status 0) is told apart from a reply
+	// with no Location.
+	status, hdr, _, err := f.C.Do(http.MethodPost, "/boards", wrap("board", struct {
 		Name string `json:"name"`
 	}{name}))
-	if err != nil {
+	if err != nil || status == 0 {
 		return "", err
 	}
-	if id != "" && postponeDays != 0 {
-		_, err = f.C.Write(http.MethodPut, "/boards/"+id, wrap("board", struct {
-			Days int `json:"auto_postpone_period_in_days"`
-		}{postponeDays}))
+	id := client.IDFromLocation(hdr.Get("Location"))
+	if postponeDays == 0 {
+		return id, nil
 	}
+	if id == "" {
+		return "", fmt.Errorf("board %s was created, but Fizzy sent no id for it, so the auto-postpone period was not set", pyRepr(name))
+	}
+	if err := CheckIDs(id); err != nil {
+		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so the auto-postpone period was not set", pyRepr(name), err)
+	}
+	_, err = f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
+		Days int `json:"auto_postpone_period_in_days"`
+	}{postponeDays}))
 	return id, err
 }
 
@@ -130,20 +142,53 @@ func (f *Fizzy) Columns(boardID string) ([]Column, error) {
 	return list[Column](f.C, "/boards/"+url.PathEscape(boardID)+"/columns")
 }
 
-// Column finds a column by id, or by name ignoring case.
+// Column finds a column by id, then by exact name, then by name ignoring
+// case. A name that two columns share ignoring case, with no exact match,
+// is a Refusal.
 func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
 	cols, err := f.Columns(boardID)
 	if err != nil {
 		return Column{}, err
 	}
-	names := make([]string, len(cols))
-	for i, c := range cols {
-		if c.ID == nameOrID || strings.EqualFold(c.Name, nameOrID) {
+	for _, c := range cols {
+		if c.ID == nameOrID {
 			return c, nil
 		}
+	}
+	c, n := pickByName(cols, nameOrID, func(c Column) string { return c.Name })
+	switch {
+	case n == 1:
+		return c, nil
+	case n > 1:
+		return Column{}, refusef("%d columns are named %s; use the column id", n, pyRepr(nameOrID))
+	}
+	names := make([]string, len(cols))
+	for i, c := range cols {
 		names[i] = c.Name
 	}
 	return Column{}, fmt.Errorf("no column %s (have: %s)", pyRepr(nameOrID), strings.Join(names, ", "))
+}
+
+// pickByName returns the one item whose name is want, or failing that the
+// one whose name matches ignoring case, and how many matched. An exact match
+// wins over any number of case-insensitive ones.
+func pickByName[T any](items []T, want string, name func(T) string) (T, int) {
+	var zero T
+	for _, it := range items {
+		if name(it) == want {
+			return it, 1
+		}
+	}
+	var found []T
+	for _, it := range items {
+		if strings.EqualFold(name(it), want) {
+			found = append(found, it)
+		}
+	}
+	if len(found) == 1 {
+		return found[0], 1
+	}
+	return zero, len(found)
 }
 
 // CreateColumn creates a column. ColumnColorValue turns the color into the
@@ -226,7 +271,7 @@ func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error)
 // UpdateCard changes the fields that are set.
 func (f *Fizzy) UpdateCard(n int, fields CardFields) error {
 	if fields == (CardFields{}) {
-		return errors.New("nothing to update")
+		return refusef("nothing to update")
 	}
 	_, err := f.C.Write(http.MethodPut, "/cards/"+strconv.Itoa(n), wrap("card", fields))
 	return err
@@ -297,11 +342,26 @@ func (f *Fizzy) DeleteCard(n int) error {
 
 // -- tags (idempotent over Fizzy's toggle) ---------------------------------
 
+// TagTitle is the title fz sends for a TAG argument: the spaces around it
+// and a leading # removed, in lower case.
+func TagTitle(tag string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(tag), "#")))
+}
+
 func (f *Fizzy) toggleTag(n int, tag string, wantPresent bool) (bool, error) {
-	tag = strings.ToLower(strings.TrimSpace(strings.TrimLeft(tag, "#")))
+	tag = TagTitle(tag)
+	if tag == "" {
+		return false, refusef("the tag cannot be empty")
+	}
 	c, err := f.Card(n)
 	if err != nil {
 		return false, err
+	}
+	// A reply without the tags key says nothing about the card's tags, and
+	// the toggle could remove one it has. card assign refuses the same way.
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(c.Raw(), &keys) != nil || keys["tags"] == nil {
+		return false, refusef("card #%d has no tags list in Fizzy's reply, so fz cannot tell whether it has the tag %s", n, pyRepr(tag))
 	}
 	present := false
 	for _, t := range c.Tags {
@@ -342,7 +402,7 @@ func (f *Fizzy) UpdateStep(n int, id string, content *string, completed *bool) e
 		return err
 	}
 	if content == nil && completed == nil {
-		return errors.New("nothing to update")
+		return refusef("nothing to update")
 	}
 	_, err := f.C.Write(http.MethodPut, "/cards/"+strconv.Itoa(n)+"/steps/"+url.PathEscape(id), wrap("step", struct {
 		Content   *string `json:"content,omitempty"`
@@ -371,7 +431,8 @@ func (f *Fizzy) AddComment(n int, bodyHTML string) (string, error) {
 
 // Upload sends a file and returns the sgid to embed as
 // <action-text-attachment sgid=...>. In dry-run mode it prints the blob
-// request and returns "DRY-RUN-SGID".
+// request and returns "DRY-RUN-SGID". When the reply has no attachable_sgid
+// it returns signed_id and prints a warning on the client's output.
 func (f *Fizzy) Upload(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -430,5 +491,6 @@ func (f *Fizzy) Upload(path string) (string, error) {
 	if info.AttachableSgid != "" {
 		return info.AttachableSgid, nil
 	}
+	fmt.Fprintf(f.C.Out(), "fz: warning: Fizzy sent no attachable_sgid for %s, so fz used its signed_id; the attachment may not render\n", name)
 	return info.SignedID, nil
 }

@@ -128,7 +128,7 @@ func TestCardUnassign(t *testing.T) {
 func TestCardAssignUnknownUser(t *testing.T) {
 	extraServer(t, `{}`)
 	r := runGo([]string{"card", "assign", "87", "Nobody"})
-	if r.code != 1 || !strings.HasPrefix(r.stderr, "fz: no user 'Nobody'") {
+	if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: no user 'Nobody'") {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -377,7 +377,7 @@ func TestCardAssignNameIgnoresCase(t *testing.T) {
 func TestCardListAssigneeUnknownID(t *testing.T) {
 	extraServer(t, `{}`)
 	r := runGo([]string{"card", "list", "--assignee", "03abc123def456ghi789jkl0mn"})
-	if r.code != 1 || !strings.HasPrefix(r.stderr, "fz: no user '03abc123def456ghi789jkl0mn'") {
+	if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: no user '03abc123def456ghi789jkl0mn'") {
 		t.Fatalf("got %+v", r)
 	}
 }
@@ -422,5 +422,26 @@ func TestCardImageRefusesWithoutImageKey(t *testing.T) {
 	}
 	if w := extraWrites(calls()); len(w) != 0 {
 		t.Fatalf("sent %+v", w)
+	}
+}
+
+// A deactivated user is not in GET /users, so card unassign passes an id of
+// the Fizzy form through. card assign does not.
+func TestCardUnassignDeactivatedID(t *testing.T) {
+	const id = "03abc123def456ghi789jkl0mn"
+	_, calls := extraServer(t, `{"number":87,"assignees":[{"id":"`+id+`"}],"has_more_assignees":false}`)
+	r := runGo([]string{"card", "unassign", "87", id})
+	if r.code != 0 || r.stdout != "card #87: unassigned "+id+" (matched by id)\n" {
+		t.Fatalf("got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 1 || w[0].body != `{"assignee_id":"`+id+`"}` {
+		t.Errorf("writes %+v", w)
+	}
+	r = runGo([]string{"card", "assign", "87", "03zzz123def456ghi789jkl0mn"})
+	if r.code != 2 || !strings.HasPrefix(r.stderr, "fz: no user ") {
+		t.Fatalf("assign got %+v", r)
+	}
+	if w := extraWrites(calls()); len(w) != 1 {
+		t.Errorf("assign sent %+v", w)
 	}
 }

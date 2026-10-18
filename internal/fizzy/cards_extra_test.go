@@ -191,8 +191,10 @@ func TestAddBoostLength(t *testing.T) {
 	if _, err := f.AddBoost(87, strings.Repeat("a", 17)); err == nil || !strings.Contains(err.Error(), "this one is 17") {
 		t.Errorf("17 letters: %v", err)
 	}
-	if _, err := f.AddBoost(87, ""); err == nil {
-		t.Error("empty boost accepted")
+	for _, blank := range []string{"", "    "} {
+		if _, err := f.AddBoost(87, blank); !IsRefusal(err) || err.Error() != "a boost cannot be empty" {
+			t.Errorf("blank boost %q: %v", blank, err)
+		}
 	}
 	if len(s.calls) != 0 {
 		t.Errorf("sent %d calls for a bad boost", len(s.calls))
@@ -229,6 +231,33 @@ func TestAssignRefusesWithoutAssignees(t *testing.T) {
 		if !IsRefusal(err) || changed || err.Error() != "card #87 has no assignees list in Fizzy's reply, so fz cannot tell whether Hinge Smith is assigned" {
 			t.Errorf("err = %v, changed %v", err, changed)
 		}
+	}
+	for _, c := range s.calls {
+		if c.Method != http.MethodGet {
+			t.Errorf("sent %s %s", c.Method, c.Path)
+		}
+	}
+}
+
+// A deactivated user is not in GET /users. Unassign passes an id of the
+// Fizzy form through so the assignment can still be cleared. Assign does
+// not, because a typo there would assign someone.
+func TestUnassignPassesUnknownIDThrough(t *testing.T) {
+	const id = "03abc123def456ghi789jkl0mn"
+	card := `{"number":87,"assignees":[{"id":"` + id + `"}],"has_more_assignees":false}`
+	f, s, _, _ := newFizzy(t, false, cardServer(card))
+	m, changed, err := f.Unassign(87, id)
+	if err != nil || !changed || m.ID != id || m.By != "id" {
+		t.Fatalf("unassign: %+v %v %v", m, changed, err)
+	}
+	last := s.calls[len(s.calls)-1]
+	if last.Method != http.MethodPost || string(last.Body) != `{"assignee_id":"`+id+`"}` {
+		t.Errorf("unassign call %s %s %s", last.Method, last.Path, last.Body)
+	}
+
+	s.calls = nil
+	if _, _, err := f.Assign(87, "03zzz123def456ghi789jkl0mn"); !IsRefusal(err) || !strings.HasPrefix(err.Error(), "no user ") {
+		t.Errorf("assign unknown id: %v", err)
 	}
 	for _, c := range s.calls {
 		if c.Method != http.MethodGet {

@@ -103,7 +103,8 @@ func columnShow(c *cmdContext, a []string) error {
 }
 
 func columnCreate(c *cmdContext, a []string) error {
-	if err := checkName("the column name", a[1]); err != nil {
+	name := strings.TrimSpace(a[1])
+	if err := checkName("the column name", name); err != nil {
 		return err
 	}
 	color, _ := c.cmd.Flags().GetString("color")
@@ -122,12 +123,12 @@ func columnCreate(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	id, err := fz.CreateColumn(b.ID, a[1], color)
+	id, err := fz.CreateColumn(b.ID, name, color)
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, c.dry(obj{{"id", orNull(id)}, {"name", a[1]}}),
-		c.wrote(fmt.Sprintf("column %s created: %s", pyRepr(a[1]), orNone(id)), "create column "+pyRepr(a[1])))
+	return emit(c.cmd, c.dry(obj{{"id", orNull(id)}, {"name", name}}),
+		c.wrote(fmt.Sprintf("column %s created: %s", pyRepr(name), orNone(id)), "create column "+pyRepr(name)))
 }
 
 func columnEdit(c *cmdContext, a []string) error {
@@ -136,6 +137,7 @@ func columnEdit(c *cmdContext, a []string) error {
 	var changed []string
 	if fl.Changed("name") {
 		name, _ := fl.GetString("name")
+		name = strings.TrimSpace(name)
 		if err := checkName("--name", name); err != nil {
 			return err
 		}
