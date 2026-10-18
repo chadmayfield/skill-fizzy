@@ -2,8 +2,9 @@
 
 `fz` is a command-line client for the [Fizzy](https://github.com/basecamp/fizzy)
 API. It lists, creates, edits, moves, tags and deletes cards, and works on
-their steps and comments. It also turns Markdown drafts into cards and pushes
-later draft edits back to them.
+their steps, comments, assignees and boosts. It also manages boards, columns,
+notifications, exports and webhooks. It turns Markdown drafts into cards and
+pushes later draft edits back to them.
 
 The repo also holds the fizzy-cards skill for Claude Code. The skill asks you
 about a card, researches it, writes a draft and creates the card through `fz`
@@ -173,13 +174,17 @@ fz --dry-run card move 87 --to done
 fz --json card show 87
 ```
 
+In a dry run, the commands added after fz 0.1 end with a line such as
+`dry-run: nothing sent; would watch card #87`. The fz 0.1 commands print the
+same text as the Python fz did.
+
 ### Exit status
 
 | Code | Meaning |
 |---|---|
 | 0 | Success. |
 | 1 | An API, config or draft error. The message says which. |
-| 2 | A usage error, such as a bad flag or an unknown command, or a delete refused without `--yes`. |
+| 2 | A usage error, such as a bad flag or an unknown command, or a refusal. fz refuses a delete without `--yes`, a user name that two users share, and a change it cannot check first. |
 
 ### Boards
 
@@ -193,14 +198,82 @@ to Not now. `--columns` takes custom columns, left to right. `fz` creates the
 board first and then sets the period, because Fizzy can refuse both in one
 request.
 
+A board is named by its name or its id in every board command.
+
+Show and edit:
+
+```sh
+fz board show Home
+fz board edit Home --name "Gate and hinge"
+fz board edit Home --postpone 90
+fz board edit Home --public-description "Notes on the gate"
+```
+
+`board show` prints the id, name, auto-postpone period, who can access the
+board, who created it and its public link. The period is one of 3, 7, 11, 30,
+90 or 365 days. The public description is Markdown. It shows on the public
+page once the board is published.
+
+Publish:
+
+```sh
+fz board publish Home --yes
+fz board unpublish Home
+```
+
+Anyone with the public link can read a published board without logging in.
+`board publish` prints the link and refuses without `--yes`. `board unpublish`
+needs no `--yes`, because it only closes access.
+
+Access:
+
+```sh
+fz board access Home
+fz board access Home --all --yes
+fz board access Home --users 03abc123def456ghi789jkl0mn --yes
+```
+
+With no flag, `board access` lists who can reach the board. `--all` opens it
+to every user in the account. `--users` takes comma-separated user ids and
+replaces the whole list, so anyone not named loses access. Both changes print
+the old and new access first and refuse without `--yes`.
+
+Delete:
+
+```sh
+fz board delete Home --yes
+```
+
+This deletes the board and its cards for good. `fz` first prints how many
+open, closed and Not now cards the board holds, and its custom columns.
+Without `--yes` it deletes nothing and exits with status 2.
+
 ### Columns
 
 ```sh
 fz column list Home
+fz column show Home Next
+fz column cards Home Next
 ```
 
-This prints a board's lanes from Not now to Done. Not now, Maybe? and Done
-are fixed. Custom columns sit between Maybe? and Done.
+`column list` prints a board's lanes from Not now to Done. Not now, Maybe?
+and Done are fixed. Custom columns sit between Maybe? and Done. `column show`
+prints one column's id, name and color. `column cards` prints one line for
+each open card in the column. A column is named by its name or its id.
+
+Create, edit and delete custom columns:
+
+```sh
+fz column create Home "Gate repairs" --color 4
+fz column edit Home Next --name "Hinge repairs"
+fz column edit Home Next --color 2
+fz column delete Home Next --yes
+```
+
+A new column goes to the right of the others. `--color` takes `default`, a
+number from 1 to 8, or a full `var(--color-card-N)` value. `column delete`
+prints the column and how many open cards it holds, and refuses without
+`--yes`.
 
 ### Cards
 
@@ -218,6 +291,24 @@ fz card show 87
 `card list` reads every page Fizzy returns. `--state` passes Fizzy's index
 filter, such as `maybe`, `closed`, `not_now` or `golden`. `card show` prints
 the title, board, link, description and steps.
+
+More filters narrow the list. They combine with AND.
+
+```sh
+fz card list --board Home --column Next --tag waiting
+fz card list --assignee "Gate Keeper"
+fz card list --unassigned --created thisweek --sort oldest
+fz card list --closed lastmonth
+```
+
+| Flag | Keeps |
+|---|---|
+| `--column` | Cards in this column on `--board`. It needs `--board`. |
+| `--tag` | Cards with this tag. |
+| `--assignee` | Cards assigned to this user. See [Assign](#assign) for how fz matches a user. |
+| `--unassigned` | Cards with no assignee. It cannot go with `--assignee`. |
+| `--created`, `--closed` | Cards created or closed in a window: `today`, `yesterday`, `thisweek`, `lastweek`, `thismonth`, `lastmonth`, `thisyear` or `lastyear`. |
+| `--sort` | Not a filter. It orders the list `latest` (the default), `newest` or `oldest`. |
 
 Create:
 
@@ -288,6 +379,60 @@ fz card tag 87 waiting --remove
 Fizzy's tag call toggles a tag on or off. `fz` reads the card first and only
 sends a change when one is needed, so tagging twice never removes the tag.
 
+#### Assign
+
+```sh
+fz card assign 87 "Gate Keeper"
+fz card assign 87 03abc123def456ghi789jkl0mn
+fz card unassign 87 "Gate Keeper"
+```
+
+USER is a user id, a name or an email address. `fz` tries, in order, an exact
+id, an exact name, a name with any case when only one user has it, and an
+email with any case. If two users have the name, `fz` refuses and exits with
+status 2. It prints which user it matched and how.
+
+Fizzy's assign call toggles, like the tag call. `fz` reads the card first and
+only sends a change when one is needed. The card lists at most 5 assignees.
+When a card has more and the user is not among the 5, `fz` refuses, because
+it cannot tell whether that user is assigned.
+
+#### Watch and pin
+
+```sh
+fz card watch 87
+fz card unwatch 87
+fz card pin 87
+fz card unpin 87
+fz card pins
+```
+
+Watching a card subscribes you to its notifications. A pin is yours alone.
+`card pins` lists your pinned cards. Fizzy returns at most 100 of them and
+does not page them.
+
+#### Boosts
+
+```sh
+fz card boost 87 "Nice hinge"
+fz card boosts 87
+fz card unboost 87 03abc123def456ghi789jkl0mn
+```
+
+A boost is a short reaction on a card, at most 16 characters. `fz` counts
+characters as Fizzy does, one per Unicode code point, and refuses longer text
+before sending it. `card boosts` prints each boost's id, text and who added
+it. You can only remove your own boosts.
+
+#### Header image
+
+```sh
+fz card image 87 --remove --yes
+```
+
+`fz` can only remove a card's header image, so `--remove` is required. It
+prints the card first and refuses without `--yes`.
+
 Delete:
 
 ```sh
@@ -319,9 +464,29 @@ ticked. `step delete` needs `--yes`, like a card delete.
 
 ```sh
 fz comment add 87 "Measured the gap: 42 mm"
+fz comment list 87
+fz comment show 87 03abc123def456ghi789jkl0mn
+fz comment edit 87 03abc123def456ghi789jkl0mn "Gate latches now."
+fz comment delete 87 03abc123def456ghi789jkl0mn --yes
 ```
 
-The text is Markdown.
+The text is Markdown. `comment list` prints each comment's id, author, time
+and first line, oldest first. `comment show` prints one comment in full.
+`comment edit` replaces the whole text. `comment delete` prints the comment
+first and refuses without `--yes`. The Fizzy API docs say only a comment's
+creator can edit or delete it. `fz` prints the server's refusal as it comes.
+
+Reactions:
+
+```sh
+fz comment react 87 03abc123def456ghi789jkl0mn "ok"
+fz comment reactions 87 03abc123def456ghi789jkl0mn
+fz comment unreact 87 03abc123def456ghi789jkl0mn 03def456ghi789jkl0mn123abc
+```
+
+A reaction is at most 16 characters. `comment reactions` prints each
+reaction's id, who reacted and the text. `comment unreact` removes your own
+reaction.
 
 ### Upload
 
@@ -333,6 +498,123 @@ This uploads a file through Fizzy's direct upload and prints its
 `attachable_sgid`, which embeds the file in rich text. Fizzy's API docs say
 to embed the `signed_id` instead, but that renders as a broken attachment.
 Drafts upload their images for you, so most people never need this command.
+
+### Tags and people
+
+```sh
+fz tag list
+fz user list
+fz user show 03abc123def456ghi789jkl0mn
+fz whoami
+```
+
+`tag list` prints every tag on the account with its id. `user list` prints
+the active users with their id, name, email and role. `whoami` lists every
+account your token can reach, with your user on each, and marks the
+configured account with `*`.
+
+Change a name or your timezone:
+
+```sh
+fz user edit 03abc123def456ghi789jkl0mn --name "Gate Keeper" --yes
+fz user timezone America/Denver
+```
+
+`user edit` prints the current and new name and refuses without `--yes`.
+`user timezone` takes an IANA name, which Fizzy uses for times in
+notification emails. `fz` checks the name exists before sending it, and the
+server checks its case.
+
+### Notifications and activity
+
+```sh
+fz notification list
+fz notification read 03abc123def456ghi789jkl0mn
+fz notification read --all
+fz notification unread 03abc123def456ghi789jkl0mn
+fz notification settings
+fz notification settings --email daily
+```
+
+`notification list` prints unread notifications first, then read ones.
+`notification read --all` marks every unread one read. `--email` sets how
+often Fizzy bundles notification emails: `never`, `every_few_hours`, `daily`
+or `weekly`.
+
+```sh
+fz activity list
+fz activity list --limit 0
+fz activity list --board Home --creator 03abc123def456ghi789jkl0mn
+```
+
+`activity list` prints activity newest first, with the time, the action, what
+it happened to and a short summary. It stops after `--limit` entries, 50 by
+default. `--limit 0` reads every page. `--creator` matches a user the way
+[card assign](#assign) does. An id that matches no active user is sent as it
+is, so a deactivated user's activity can still be listed.
+
+### Account and exports
+
+```sh
+fz account show
+fz account postpone 30 --yes
+```
+
+`account show` prints the account's name, id, card count, default
+auto-postpone period and creation time. `account postpone` sets that default
+for boards that do not set their own. It takes 3, 7, 11, 30, 90 or 365 days,
+prints the current and new period, and refuses without `--yes`. It needs the
+admin role.
+
+```sh
+fz export account
+fz export mine
+fz export status 03abc123def456ghi789jkl0mn
+fz export status 03abc123def456ghi789jkl0mn --mine
+```
+
+`export account` starts an export of the whole account. Only admins and
+owners can. `export mine` starts an export of your own data. `export status`
+prints the export's id, status and creation time, and the download link once
+it is done. Add `--mine` for a personal export.
+
+### Webhooks
+
+A webhook sends a board's events to a URL. The Fizzy API docs say only
+account admins can use them. A board is named by its name or its id.
+
+```sh
+fz webhook list Gate
+fz webhook show Gate 03abc123def456ghi789jkl0mn
+fz webhook deliveries Gate 03abc123def456ghi789jkl0mn
+```
+
+`webhook list` and `webhook show` never print the signing secret, even with
+`--json`. `webhook show --json --reveal-secret` includes it. `webhook
+deliveries` lists each attempt to send an event.
+
+Create, change and remove:
+
+```sh
+fz webhook create Gate --name "Hinge alerts" --url https://fizzy.example.com/hook --actions card_closed,comment_created --yes
+fz webhook edit Gate 03abc123def456ghi789jkl0mn --actions card_closed --yes
+fz webhook edit Gate 03abc123def456ghi789jkl0mn --name "Gate alerts" --yes
+fz webhook delete Gate 03abc123def456ghi789jkl0mn --yes
+fz webhook activate Gate 03abc123def456ghi789jkl0mn
+```
+
+- The URL must be `https`, or `http` for `localhost`, `127.0.0.1` or `::1`.
+  It cannot change after the webhook is created.
+- `--actions` is a comma-separated list. The actions are `card_assigned`,
+  `card_closed`, `card_postponed`, `card_auto_postponed`,
+  `card_board_changed`, `card_published`, `card_reopened`,
+  `card_sent_back_to_triage`, `card_triaged`, `card_unassigned` and
+  `comment_created`.
+- `create`, `edit` and `delete` print what they would do and refuse without
+  `--yes`.
+- `webhook create` prints the signing secret once. Save it then.
+- `webhook activate` turns a deactivated webhook back on. It sends nothing
+  when the webhook is already active.
 
 ### Review
 
@@ -385,6 +667,7 @@ fz boards
 fz show 87
 fz move 87 --to Now
 fz tag 87 buy
+fz tag --remove 87 buy
 fz step 87 "Order the hinge"
 fz step 87 --check 03abc123def456ghi789jkl0mn
 fz comment 87 "Measured the gap: 42 mm"

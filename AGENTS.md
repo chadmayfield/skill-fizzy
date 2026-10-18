@@ -20,9 +20,24 @@ change the guide and the command's help text in the same commit.
 |---|---|
 | `cmd/fz/` | `main.go`, which calls `cli.Execute` with the version, commit and date the Makefile stamps in. |
 | `internal/cli/` | The cobra command tree. One file per command group, plus the fz 0.1 rewrites (`legacy.go`), the draft sync (`sync.go`, `fingerprint.go`) and the output helpers (`output.go`). |
+| `internal/cli/cards_extra.go` | `card assign`, `unassign`, `watch`, `unwatch`, `pin`, `unpin`, `pins`, `boost`, `boosts`, `unboost` and `image`. |
+| `internal/cli/comments_extra.go` | The `comment` commands after `add`: `list`, `show`, `edit`, `delete`, `react`, `reactions` and `unreact`. |
+| `internal/cli/boards_extra.go` | `board show`, `edit`, `delete`, `publish`, `unpublish` and `access`. |
+| `internal/cli/columns.go` | `column show`, `create`, `edit`, `delete` and `cards`. |
+| `internal/cli/people.go` | `tag list`, the `user` commands and `whoami`. |
+| `internal/cli/activity.go` | `activity list` and the `notification` commands. |
+| `internal/cli/account.go` | `account show`, `account postpone` and the `export` commands. |
+| `internal/cli/webhooks.go` | The `webhook` commands. |
 | `internal/client/` | The HTTP client. Account scoping, pagination, dry run and the action log. |
 | `internal/config/` | Loading `config.json` and the `FIZZY_*` variables, running the token command, and `SplitWords`, the shell-style word splitter. |
 | `internal/fizzy/` | The Fizzy operations built on the client, the API types, and the Python-style JSON printing. |
+| `internal/fizzy/cards_extra.go` | Assignments, watching, pins, boosts, the header image and the tag lookup for `card list --tag`. |
+| `internal/fizzy/comments.go` | Comments and their reactions. |
+| `internal/fizzy/boards_extra.go` | Board details, edits, access and publishing, and the calls that read, change and delete one column. |
+| `internal/fizzy/users.go` | Users, and `MatchUser`, the one function that turns a USER argument into a user. |
+| `internal/fizzy/account.go` | The account, identity, timezone, notifications, activity and exports. |
+| `internal/fizzy/webhooks.go` | Webhooks and their deliveries, and the URL and action checks. |
+| `internal/fizzy/refusal.go` | `Refusal`, the error for a check that stops a change before it is sent. The CLI exits 2 on it. |
 | `internal/draft/` | Parsing card drafts, finding their images, writing `card:` and `synced:` back, and planning step changes. |
 | `internal/markdown/` | Converting draft Markdown to the HTML Fizzy stores. |
 | `internal/richtext/` | Small edits to Fizzy rich text, used by `card edit --replace`. |

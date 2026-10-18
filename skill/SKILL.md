@@ -100,6 +100,7 @@ Commands are nouns followed by a verb. Run `fz help <noun>` or
 | Want | Command |
 |---|---|
 | List boards | `fz board list` |
+| Show a board | `fz board show "<board>"` (period, access, creator, public link) |
 | List lanes | `fz column list <board>` |
 | List cards | `fz card list --board "<board>" [--state maybe/closed/not_now/golden] [--search "<terms>"]` |
 | Show a card | `fz card show <n>` |
@@ -108,6 +109,8 @@ Commands are nouns followed by a verb. Run `fz help <noun>` or
 | Reopen | `fz card reopen <n>` |
 | Golden | `fz card golden <n>` / `fz card golden <n> --off` |
 | Tag | `fz card tag <n> <tag>` / `--remove` (safe: checks before toggling) |
+| Assign | `fz card assign <n> "<user>"` / `fz card unassign <n> "<user>"` (user id, name or email; safe: checks before toggling) |
+| Pin | `fz card pin <n>` / `fz card unpin <n>`; `fz card pins` lists your pins |
 | Retitle or redescribe | `fz card edit <n> --title "<title>"` or `--description-file <file>` |
 | Fix one phrase | `fz card edit <n> --replace "<old>" "<new>"` (add `--all` for every match) |
 | List steps | `fz step list <n>` (shows each step id) |
@@ -116,6 +119,9 @@ Commands are nouns followed by a verb. Run `fz help <noun>` or
 | Edit a step | `fz step edit <n> <step-id> "text"` |
 | Delete a step | `fz step delete <n> <step-id> --yes` (only with approval) |
 | Comment | `fz comment add <n> "Markdown text"` |
+| Read comments | `fz comment list <n>` (shows each comment id), then `fz comment show <n> <comment-id>` |
+| Edit a comment | `fz comment edit <n> <comment-id> "Markdown text"` (only the comment's creator can) |
+| Notifications | `fz notification list` (unread first) |
 | Upload a file | `fz upload <file>` prints the sgid for rich text |
 | Weekly look | `fz review [<board>...]` lists the last column before Done (whatever its name), counts the other columns and Maybe?, and lists golden, postponing-soon and stalled cards, per board |
 | Delete | `fz card delete <n> --yes` (only with approval) |
