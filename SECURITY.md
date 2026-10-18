@@ -2,9 +2,15 @@
 
 ## Reporting a problem
 
-Use GitHub's private vulnerability reporting. Open the repository's Security
-tab and choose "Report a vulnerability". Please do not open a public issue for
-a security problem.
+The repository is private for now. Until it is public, report a security
+problem to the owner, [chadmayfield](https://github.com/chadmayfield), through
+GitHub.
+
+Once the repository is public, GitHub's private vulnerability reporting will
+be the route. Open the repository's Security tab and choose "Report a
+vulnerability".
+
+Please do not open a public issue for a security problem.
 
 ## How fz handles your token
 
@@ -28,3 +34,12 @@ secret store, and restrict who can read the config file.
 and to any pagination URL that server returns in a Link header.
 `fz draft check --links` fetches the links in a draft without an
 Authorization header.
+
+`fz upload`, and `fz draft apply` for a draft with images, send each file's
+bytes to the upload URL the server returns. That request carries no token,
+but it goes wherever the server says.
+
+`fz webhook create` prints the new webhook's signing secret, in text and
+with `--json`. `fz webhook show --reveal-secret` prints it again. Anyone who
+can read that output can sign requests as Fizzy, so keep it out of shared
+logs.
