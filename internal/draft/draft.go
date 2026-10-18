@@ -246,8 +246,19 @@ func Parse(path string) (*Draft, error) {
 	haveTitle := false
 	var body []string
 	steps := []Step{}
-	inSteps := false
+	inSteps, inFence := false, false
 	for _, line := range strings.Split(rest, "\n") {
+		// Inside a fenced code block, as markdown.ToHTML reads one, a
+		// heading is code, not the title or the Steps section.
+		if !inSteps && strings.HasPrefix(pyStrip(line), "```") {
+			inFence = !inFence
+			body = append(body, line)
+			continue
+		}
+		if inFence {
+			body = append(body, line)
+			continue
+		}
 		h := headingRe.FindStringSubmatch(line)
 		if h != nil && len(h[1]) == 1 && !haveTitle {
 			title, haveTitle = h[2], true

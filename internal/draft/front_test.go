@@ -98,3 +98,20 @@ func TestTagQuotes(t *testing.T) {
 		}
 	}
 }
+
+func TestHeadingsInsideFenceAreNotStructure(t *testing.T) {
+	text := "---\nboard: Home\n---\n```text\n# Not the title\n```\n# Fix the gate\n\n```sh\n## Steps\n- [ ] not a step\n```\n\n## Steps\n- [ ] Order the hinge\n"
+	d, err := Parse(writeFile(t, t.TempDir(), "gate.md", text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Title != "Fix the gate" {
+		t.Errorf("title = %q", d.Title)
+	}
+	if !reflect.DeepEqual(d.Steps, []Step{{"Order the hinge", false}}) {
+		t.Errorf("steps = %v", d.Steps)
+	}
+	if want := "```text\n# Not the title\n```\n\n```sh\n## Steps\n- [ ] not a step\n```"; d.BodyMD != want {
+		t.Errorf("body = %q, want %q", d.BodyMD, want)
+	}
+}
