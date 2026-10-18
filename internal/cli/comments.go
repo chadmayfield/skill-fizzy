@@ -40,5 +40,5 @@ func commentAdd(c *cmdContext, a []string) error {
 	if err != nil {
 		return err
 	}
-	return emit(c.cmd, obj{{"id", orNull(id)}}, "comment added: "+orNone(id))
+	return emit(c.cmd, obj{{"id", orNull(id)}}, "comment added: "+line(orNone(id)))
 }

@@ -368,7 +368,7 @@ func webhookDelete(c *cmdContext, a []string) error {
 	if err != nil {
 		return adminOnly(err)
 	}
-	if err := refuseWithoutYes(c, fmt.Sprintf("about to delete webhook %s %s: %s sending %s", h.ID, pyRepr(h.Name), h.PayloadURL, strings.Join(h.SubscribedActions, ","))); err != nil {
+	if err := refuseWithoutYes(c, line(fmt.Sprintf("about to delete webhook %s %s: %s sending %s", h.ID, pyRepr(h.Name), h.PayloadURL, strings.Join(h.SubscribedActions, ",")))); err != nil {
 		return err
 	}
 	if err := fz.DeleteWebhook(board, a[1]); err != nil {

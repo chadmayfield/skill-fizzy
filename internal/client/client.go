@@ -23,7 +23,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
@@ -165,21 +167,33 @@ func redactErr(err error) error {
 	return err
 }
 
+// ErrUnsafeID is the error IDFromLocation returns for an id that holds
+// whitespace, a control character or a format character. Such an id could
+// split a printed line or a URL path, so fz never uses it.
+var ErrUnsafeID = errors.New("the id in its Location header holds whitespace or a control character, so fz does not use it")
+
 // IDFromLocation returns the last path segment of a Location header without a
-// .json suffix, or "" when the header is empty.
-func IDFromLocation(loc string) string {
+// .json suffix, or "" when the header is empty. An id that holds whitespace,
+// a control character or a format character is ErrUnsafeID.
+func IDFromLocation(loc string) (string, error) {
 	if loc == "" {
-		return ""
+		return "", nil
 	}
 	u, err := url.Parse(loc)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	p := strings.TrimRight(u.Path, "/")
 	if i := strings.LastIndex(p, "/"); i >= 0 {
 		p = p[i+1:]
 	}
-	return strings.TrimSuffix(p, ".json")
+	id := strings.TrimSuffix(p, ".json")
+	for _, r := range id {
+		if unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || r == utf8.RuneError {
+			return "", ErrUnsafeID
+		}
+	}
+	return id, nil
 }
 
 type reqOpts struct {
@@ -604,13 +618,14 @@ func (c *Client) resolveNext(link string) (string, error) {
 }
 
 // Create POSTs body and returns the new object's id from the Location header.
-// The id is empty in dry-run mode or when the server sends no Location.
+// The id is empty in dry-run mode or when the server sends no Location. An
+// id IDFromLocation refuses is ErrUnsafeID.
 func (c *Client) Create(path string, body any) (string, error) {
 	status, hdr, _, err := c.Do(http.MethodPost, path, body)
 	if err != nil || status == 0 {
 		return "", err
 	}
-	return IDFromLocation(hdr.Get("Location")), nil
+	return IDFromLocation(hdr.Get("Location"))
 }
 
 // Write sends a non-GET request and returns the JSON payload, or nil when

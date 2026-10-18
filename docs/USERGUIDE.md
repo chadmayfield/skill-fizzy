@@ -238,7 +238,10 @@ reply. If the reply has none, `fz` says the board was created without them
 and exits 1. A board created with neither still needs the id, so a reply
 without one exits 1 too. The same holds for `column create` and
 `webhook create`: a reply with no `Location` header, and for a webhook no id
-in its body, exits 1, because `fz` cannot name what it made. If setting the period or creating a column fails, `fz` says the
+in its body, exits 1, because `fz` cannot name what it made. An id in the
+`Location` header that holds whitespace or a control character counts as no
+id: `fz` never prints it and exits 1. This holds for every create, `step add`
+and `comment add` included. If setting the period or creating a column fails, `fz` says the
 board was created, gives its id, names the step that did not finish and
 prints the `fz board edit` and `fz column create` commands that finish the
 rest. It exits 1. Run those commands rather than the create again, which

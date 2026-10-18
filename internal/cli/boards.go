@@ -118,7 +118,7 @@ func boardCreate(c *cmdContext, a []string) error {
 		return err
 	}
 	return emit(c.cmd, obj{{"id", orNull(id)}, {"columns", cols}},
-		fmt.Sprintf("board %s created: %s", pyRepr(name), orNone(id)))
+		fmt.Sprintf("board %s created: %s", pyRepr(name), line(orNone(id))))
 }
 
 func columnList(c *cmdContext, a []string) error {

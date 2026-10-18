@@ -183,7 +183,7 @@ func cardBoost(c *cmdContext, a []string) error {
 	if raw == nil {
 		return emit(c.cmd, obj{{"number", n}, {"content", a[1]}}, fmt.Sprintf("boost added to card #%d", n))
 	}
-	return emit(c.cmd, raw, fmt.Sprintf("boost %s added to card #%d", rawString(raw, "id"), n))
+	return emit(c.cmd, raw, fmt.Sprintf("boost %s added to card #%d", line(rawString(raw, "id")), n))
 }
 
 func cardBoosts(c *cmdContext, a []string) error {
