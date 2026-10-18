@@ -32,7 +32,7 @@ func addDraftCommands(root *cobra.Command) {
 		Use:   "check DRAFT...",
 		Short: "validate drafts, and --links",
 		Long: "Parse each draft, resolve its images, and with --links fetch every link outside code. " +
-			"A link to a loopback, private, link-local or unspecified address, or one that redirects there, is skipped and printed as skipped (local address).",
+			"A link to a loopback, private, link-local, multicast, unspecified or other special-purpose address, such as 100.64.0.0/10, or one that redirects there, is skipped and printed as skipped (local address).",
 		Example: examples("fz draft check ~/.fizzy-inbox/drafts/", "fz draft check gate.md --links"),
 		Args:    args(cobra.MinimumNArgs(1)),
 		RunE:    action(draftCheck),
@@ -142,10 +142,62 @@ var errLocalAddress = errors.New("local address")
 
 // linkDialBlocked reports whether a link check may not connect to a. It is
 // a variable so tests can let it reach their loopback servers.
-var linkDialBlocked = func(a netip.AddrPort) bool {
-	ip := a.Addr().Unmap()
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast()
+var linkDialBlocked = func(a netip.AddrPort) bool { return linkAddrBlocked(a.Addr()) }
+
+// linkBlockedPrefixes are the special-purpose ranges a link check never
+// reaches, beyond the loopback, private, link-local, multicast and
+// unspecified ones netip names.
+var linkBlockedPrefixes = func() []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range []string{
+		"0.0.0.0/8",       // this network
+		"100.64.0.0/10",   // shared address space: CGNAT, Tailscale
+		"192.0.0.0/24",    // IETF protocol assignments
+		"192.0.2.0/24",    // documentation
+		"192.88.99.0/24",  // 6to4 relay anycast
+		"198.18.0.0/15",   // benchmarking
+		"198.51.100.0/24", // documentation
+		"203.0.113.0/24",  // documentation
+		"240.0.0.0/4",     // reserved, and the broadcast address
+		"::/96",           // IPv4-compatible
+		"64:ff9b:1::/48",  // local-use NAT64
+		"100::/64",        // discard only
+		"2001::/23",       // IETF protocol assignments, Teredo among them
+		"2001:db8::/32",   // documentation
+		"fec0::/10",       // site-local
+	} {
+		out = append(out, netip.MustParsePrefix(s))
+	}
+	return out
+}()
+
+var (
+	nat64Prefix = netip.MustParsePrefix("64:ff9b::/96")
+	sixToFour   = netip.MustParsePrefix("2002::/16")
+)
+
+// linkAddrBlocked reports whether ip is local, private or special-purpose.
+// A NAT64 or 6to4 address is judged by the IPv4 address inside it.
+func linkAddrBlocked(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+		return true
+	}
+	for _, p := range linkBlockedPrefixes {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	b := ip.As16()
+	switch {
+	case !ip.Is6():
+	case nat64Prefix.Contains(ip):
+		return linkAddrBlocked(netip.AddrFrom4([4]byte(b[12:16])))
+	case sixToFour.Contains(ip):
+		return linkAddrBlocked(netip.AddrFrom4([4]byte(b[2:6])))
+	}
+	return false
 }
 
 // linkClient is the HTTP client for draft check --links. It checks the

@@ -114,3 +114,42 @@ func TestLinksSkipCodeAndSendNoCredentials(t *testing.T) {
 		}
 	}
 }
+
+// The link check refuses every special-purpose and internal range, and
+// allows ordinary public addresses.
+func TestLinkDialBlockedRanges(t *testing.T) {
+	blocked := []string{
+		"127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254",
+		"100.64.0.1", "100.100.100.100", "100.127.255.254", // shared address space (CGNAT, Tailscale)
+		"0.1.2.3", "0.0.0.0", // this network
+		"192.0.0.1", "192.0.0.170", // IETF protocol assignments
+		"198.18.0.1", "198.19.255.254", // benchmarking
+		"240.0.0.1", "255.255.255.255", // reserved and broadcast
+		"224.0.0.1",
+		"::1", "::", "fd00:ec2::254", "fe80::1", "ff02::1",
+		"64:ff9b::a00:1", "64:ff9b::7f00:1", // NAT64 of 10.0.0.1 and 127.0.0.1
+		"::a00:1", "::7f00:1", // IPv4-compatible
+		"2002:a00:1::", "2002:7f00:1::", // 6to4 of 10.0.0.1 and 127.0.0.1
+		"fec0::1",          // site-local
+		"::ffff:10.0.0.1",  // IPv4-mapped
+		"64:ff9b:1::a00:1", // local-use NAT64
+		"2001:db8::1",      // documentation
+		"100::1",           // discard-only
+		"2001::1",          // Teredo
+		"2001:10::1",       // ORCHID
+		"198.51.100.1",     // documentation
+		"203.0.113.1",      // documentation
+		"192.0.2.1",        // documentation
+		"192.88.99.1",      // 6to4 relay anycast
+	}
+	for _, s := range blocked {
+		if !linkDialBlocked(netip.AddrPortFrom(netip.MustParseAddr(s), 443)) {
+			t.Errorf("%s is not blocked", s)
+		}
+	}
+	for _, s := range []string{"93.184.215.14", "8.8.8.8", "1.1.1.1", "2606:4700::1111", "2a00:1450:4001::1", "64:ff9b::808:808", "2002:808:808::"} {
+		if linkDialBlocked(netip.AddrPortFrom(netip.MustParseAddr(s), 443)) {
+			t.Errorf("%s is blocked", s)
+		}
+	}
+}

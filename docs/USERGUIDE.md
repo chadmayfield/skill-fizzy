@@ -872,9 +872,14 @@ fz draft apply ~/.fizzy-inbox/drafts/
   every link and reports its status. Those fetches carry no token and no
   cookie, and use no proxy. Links inside code are not fetched.
 - `--links` never connects to this machine or a private network. A link
-  whose address is loopback, private, link-local or unspecified, or that
-  redirects to one, prints `skipped (local address)` and does not fail the
-  check.
+  whose address is loopback, private, link-local, multicast, unspecified or
+  in another special-purpose range, or that redirects to one, prints
+  `skipped (local address)` and does not fail the check. The special ranges
+  include the shared address space 100.64.0.0/10 that Tailscale and carrier
+  NAT use, 0.0.0.0/8, 192.0.0.0/24, 198.18.0.0/15, 240.0.0.0/4 and the
+  broadcast address, IPv4-compatible and site-local IPv6 addresses, and
+  the documentation ranges. A NAT64 (64:ff9b::/96) or 6to4 (2002::/16)
+  address is judged by the IPv4 address inside it.
 - `preview` prints the title, board, column, tags, description HTML and steps.
   It sends nothing.
 - `apply` parses every draft, finds its images and checks that it can
