@@ -34,6 +34,10 @@ const defaultReposMap = "~/.config/fizzy-skill/repos.json"
 // API calls. A test shortens it.
 var hookTimeout = 5 * time.Second
 
+// hookKillGrace is how long the hook waits, after hookTimeout, for its work
+// to stop, so a hung token command is killed before fz exits.
+var hookKillGrace = 500 * time.Millisecond
+
 func init() { register(addHookCommands) }
 
 func addHookCommands(root *cobra.Command) {
@@ -58,7 +62,8 @@ func addHookCommands(root *cobra.Command) {
 			"Inside a git worktree the main checkout's folder name is tried first, then each folder " +
 			"in the path from the deepest up. The first name in the map wins.\n\n" +
 			"An unmapped folder prints nothing and reads no config. Any failure, such as a missing map, " +
-			"a config error, a network error or the 5 second time limit, prints nothing and exits 0.\n\n" +
+			"a config error, a network error or the 5 second time limit, prints nothing and exits 0. " +
+			"At the time limit, fz also kills the token command and everything it started.\n\n" +
 			"To run it at the start of every session, add this to ~/.claude/settings.json:\n\n" +
 			`  {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "fz hook session-start"}]}]}}`,
 		Example: examples("fz hook session-start", `fz hook session-start --note "Ask before moving a card."`, `fz hook session-start --note ""`),
@@ -87,6 +92,12 @@ func hookSessionStart(c *cmdContext, _ []string) error {
 	select {
 	case text = <-done:
 	case <-ctx.Done():
+		// The token command is killed when ctx ends. Give that a moment to
+		// happen, so the command does not outlive fz.
+		select {
+		case <-done:
+		case <-time.After(hookKillGrace):
+		}
 		return nil
 	}
 	if text == "" {
@@ -114,6 +125,7 @@ func sessionStartText(ctx context.Context, c *cmdContext) string {
 	if err != nil {
 		return ""
 	}
+	fz.C.SetTokenContext(ctx)
 	boardID := ""
 	if board != "" {
 		b, err := fz.Board(board)

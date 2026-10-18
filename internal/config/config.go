@@ -70,6 +70,19 @@ func (c *Config) LogFile() string { return ExpandTilde(c.LogPath) }
 // appears in an error, because a broken command may print the secret on
 // either one.
 func (c *Config) ResolveToken() (string, error) {
+	return c.resolveToken(context.Background(), false)
+}
+
+// ResolveTokenContext is ResolveToken, with the command also stopped when
+// ctx ends. On Unix the command runs in a process group of its own, and
+// fz kills the whole group, so a child the command started cannot outlive
+// it. A command in its own group cannot read from the terminal, so only a
+// caller with no terminal to share, such as the session hook, uses this.
+func (c *Config) ResolveTokenContext(ctx context.Context) (string, error) {
+	return c.resolveToken(ctx, true)
+}
+
+func (c *Config) resolveToken(parent context.Context, group bool) (string, error) {
 	if c.Token != "" {
 		return c.Token, nil
 	}
@@ -80,9 +93,12 @@ func (c *Config) ResolveToken() (string, error) {
 	if err != nil || len(words) == 0 {
 		return "", fmt.Errorf("%w: token command failed (invalid command)", ErrConfig)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), tokenCmdTimeout)
+	ctx, cancel := context.WithTimeout(parent, tokenCmdTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, words[0], words[1:]...)
+	if group {
+		ownGroup(cmd)
+	}
 	// A child that keeps stdout open would hold Wait past the kill.
 	cmd.WaitDelay = time.Second
 	var out bytes.Buffer
@@ -93,6 +109,8 @@ func (c *Config) ResolveToken() (string, error) {
 		switch {
 		case errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist):
 			reason = "not found"
+		case parent.Err() != nil:
+			reason = "stopped by the caller's time limit"
 		case ctx.Err() == context.DeadlineExceeded:
 			reason = fmt.Sprintf("timed out after %s", tokenCmdTimeout)
 		case errors.As(err, &exitErr):

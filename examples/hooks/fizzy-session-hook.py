@@ -10,6 +10,7 @@ this hook must never get in the way of starting a session.
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import unicodedata
@@ -23,9 +24,26 @@ TIMEOUT = 5  # seconds per fz call; fz normally answers in ~0.5 s
 
 
 def run(*args):
-    out = subprocess.run(args, capture_output=True, text=True, timeout=TIMEOUT)
-    out.check_returncode()
-    return out.stdout.strip()
+    """Run a command and return its stdout.
+
+    The command gets a session, and so a process group, of its own. On
+    timeout the whole group is killed, so a token command that fz started
+    does not keep running after the hook exits.
+    """
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, start_new_session=True)
+    try:
+        out, _ = proc.communicate(timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        proc.communicate()
+        raise
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, args)
+    return out.strip()
 
 
 def clean(text):

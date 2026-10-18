@@ -1003,7 +1003,10 @@ in the map wins.
 A folder that is not in the map prints nothing and reads no config. Any
 failure also prints nothing and exits 0, so the hook never blocks a session.
 That covers a missing map, a config error, a network error and the 5 second
-time limit.
+time limit. At the time limit, the hook also kills a token command that is
+still running, along with every process it started. The token command runs
+in a process group of its own for this, so in the hook it cannot prompt on
+the terminal. Other commands give the token command 30 seconds.
 
 ### The Python version
 

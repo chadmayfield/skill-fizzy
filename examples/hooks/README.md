@@ -16,6 +16,11 @@ are removed first. Before the first title, the hook prints
 into an AI agent's context, and a title is text anyone with access to the
 board can write.
 
+Each `fz` call gets 5 seconds. The script starts `fz` in a session of its
+own, and at the limit it kills that whole process group. A token command
+that `fz` started is killed with it, so nothing keeps running after the
+hook exits.
+
 ## What it needs
 
 - Python 3.
