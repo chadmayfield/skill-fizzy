@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,6 +15,40 @@ import (
 // link. fz rewrites a draft by renaming a new file over it, which would
 // leave the other links with the old text, so it refuses.
 var ErrLinked = errors.New("the draft has more than one hard link, and fz would split them by rewriting it; copy it to a file of its own")
+
+// MaxFileBytes is the most fz reads from a draft or a --description-file:
+// 4 MiB. A larger file is refused before it is read, so a huge file cannot
+// hold up check, preview or apply.
+const MaxFileBytes = 4 << 20
+
+// ErrTooLarge is matched by errors.Is for a file over MaxFileBytes. Such
+// an error also matches ErrDraft.
+var ErrTooLarge = errors.New("file too large")
+
+type tooLargeError struct{ msg string }
+
+func (e *tooLargeError) Error() string { return e.msg }
+func (e *tooLargeError) Is(target error) bool {
+	return target == ErrTooLarge || target == ErrDraft
+}
+
+// ReadCapped reads a whole file of at most MaxFileBytes. A larger file is
+// an ErrTooLarge error that names the path and the cap.
+func ReadCapped(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, MaxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > MaxFileBytes {
+		return nil, &tooLargeError{fmt.Sprintf("%s is larger than 4 MiB; fz reads at most 4 MiB", path)}
+	}
+	return raw, nil
+}
 
 // bom is the UTF-8 byte order mark. Parse skips it and RecordFields keeps it.
 const bom = "\xef\xbb\xbf"
@@ -30,7 +65,7 @@ type source struct {
 // readSource reads a file the way Python's read_text does, with universal
 // newlines, and keeps the bytes so a rewrite can leave them alone.
 func readSource(path string) (*source, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := ReadCapped(path)
 	if err != nil {
 		return nil, err
 	}

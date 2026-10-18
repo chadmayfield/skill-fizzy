@@ -308,7 +308,7 @@ func draftCheck(c *cmdContext, a []string) error {
 		}
 		if errors.Is(err, draft.ErrDraft) {
 			fmt.Fprintf(w, "✗ %s: %s\n", p, err)
-			if errors.Is(err, draft.ErrImagePath) {
+			if errors.Is(err, draft.ErrImagePath) || errors.Is(err, draft.ErrTooLarge) {
 				refused++
 			}
 			bad++
@@ -355,7 +355,7 @@ func draftCheck(c *cmdContext, a []string) error {
 // will not guess at, such as card: 87abc, is refused with exit 2.
 func parseDraft(path string) (*draft.Draft, error) {
 	d, err := draft.Parse(path)
-	if errors.Is(err, draft.ErrBadValue) {
+	if errors.Is(err, draft.ErrBadValue) || errors.Is(err, draft.ErrTooLarge) {
 		return nil, usageError{err}
 	}
 	return d, err

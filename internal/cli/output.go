@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/chadmayfield/skill-fizzy/internal/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
+	"github.com/chadmayfield/skill-fizzy/internal/draft"
 	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
@@ -268,7 +268,7 @@ func checkName(what, name string) error {
 // names, with Windows and old Mac line ends turned into newlines. A file
 // that cannot be read is a usage error.
 func readDescriptionFile(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := draft.ReadCapped(path)
 	if err != nil {
 		return "", usagef("argument --description-file: %v", err)
 	}

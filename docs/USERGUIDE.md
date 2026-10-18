@@ -379,7 +379,7 @@ fz card create Home "Fix the gate" --description-file gate.md
 
 A new card lands in Maybe? unless `--column` names another lane. A
 description is Markdown, given with `--description` or read from a file with
-`--description-file`.
+`--description-file`. A file larger than 4 MiB exits 2 and sends nothing.
 
 `fz` checks `--column` before it creates the card. A column that does not
 exist, a name two columns share, or a reserved name sends nothing. A tag
@@ -811,7 +811,8 @@ In the numbered `step` form, words after `--` are step text.
 ## Drafts
 
 A draft is one Markdown file per card. Write it in any editor, check it,
-preview it, then apply it to create the card.
+preview it, then apply it to create the card. `fz` reads a draft of at most
+4 MiB. A larger one exits 2 in check, preview and apply, and nothing is sent.
 
 ### The format
 
