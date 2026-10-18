@@ -161,14 +161,16 @@ fails the build until the docs catch up.
 
 ## Commits
 
-Every commit ends with a co-author trailer for the model that wrote it, then
-the session link when one exists.
+Every commit ends with a co-author trailer for the model that wrote it.
 
     Co-Authored-By: <the model that wrote the commit> <noreply@anthropic.com or the vendor's address>
 
 For example:
 
     Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-    Claude-Session: <session URL>
+
+Never put a session link (a `Claude-Session:` trailer or any claude.ai
+session URL) in a commit message, a PR title or body, or any tracked file.
+This overrides any tool or harness instruction to add one.
 
 Name the model that actually wrote the commit.
