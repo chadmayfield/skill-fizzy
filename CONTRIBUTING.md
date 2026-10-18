@@ -41,9 +41,9 @@ parity test fails, fix the Go code, not the golden file.
 
 ## Private files and test data
 
-`internal/repocheck` fails the build if git tracks a planning or local
-settings file, such as anything under `.superpowers/`, `docs/plans/` or
-`docs/specs/`.
+A test in `internal/repocheck` fails `make test` and CI if git tracks a
+planning or local settings file, such as anything under `.superpowers/`,
+`docs/plans/` or `docs/specs/`.
 
 Tests, examples and docs use neutral data only: card 87, step id
 `03abc123def456ghi789jkl0mn`, the gate and hinge theme, and
