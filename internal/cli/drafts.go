@@ -345,6 +345,9 @@ func applyDraft(c *cmdContext, fz *fizzy.Fizzy, d *draft.Draft, inbox string) (i
 		}
 	}
 	n, err := fz.CreateCard(board.ID, d.Title, d.DescriptionHTML(sgids), "")
+	if errors.Is(err, fizzy.ErrNoLocation) {
+		n, err = 0, nil
+	}
 	if err != nil {
 		return 0, err
 	}

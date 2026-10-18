@@ -269,6 +269,11 @@ func (f *Fizzy) Card(n int) (Card, error) {
 	return c, err
 }
 
+// ErrNoLocation marks a create whose reply had no Location header: the
+// object exists, but fz cannot name it. Callers can add advice with
+// errors.Is.
+var ErrNoLocation = errors.New("sent no Location header, so fz cannot tell its id")
+
 // created POSTs body and returns the new object's id from the Location
 // header, or "" in dry-run mode. A reply with no Location is an error: the
 // object exists, but fz cannot name it. what names the object.
@@ -279,7 +284,7 @@ func (f *Fizzy) created(path string, body any, what string) (string, error) {
 	}
 	id := client.IDFromLocation(hdr.Get("Location"))
 	if id == "" {
-		return "", fmt.Errorf("Fizzy created the %s but sent no Location header, so fz cannot tell its id", what)
+		return "", fmt.Errorf("Fizzy created the %s but %w", what, ErrNoLocation)
 	}
 	return id, nil
 }
