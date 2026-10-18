@@ -2,6 +2,8 @@ package draft
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -113,5 +115,17 @@ func TestHeadingsInsideFenceAreNotStructure(t *testing.T) {
 	}
 	if want := "```text\n# Not the title\n```\n\n```sh\n## Steps\n- [ ] not a step\n```"; d.BodyMD != want {
 		t.Errorf("body = %q, want %q", d.BodyMD, want)
+	}
+}
+
+// Mutation M55: a folder with the image's name is not an image.
+func TestResolveImageRejectsFolder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "hinge.jpg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	d := &Draft{Path: filepath.Join(dir, "gate.md")}
+	if p, err := d.ResolveImage("hinge.jpg", filepath.Join(dir, "inbox")); err == nil {
+		t.Errorf("a folder resolved as an image: %s", p)
 	}
 }

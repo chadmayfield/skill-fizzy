@@ -125,3 +125,22 @@ func TestReplaceSkipsMatchesInsideEntities(t *testing.T) {
 		t.Errorf("whole entity as the phrase: %q, %v", got, err)
 	}
 }
+
+// Mutations M41b and M41c: each half of the entity check matters on its
+// own. ReplaceText escapes its phrase, so an escaped phrase can never end
+// inside an entity without starting there; findMatches is tested directly.
+func TestFindMatchesEntityBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		s, o string
+		want int
+	}{
+		{"&gt;x", "gt;x", 0}, // starts inside &gt;
+		{"x&gt;", "x&g", 0},  // ends inside &gt;
+		{"x&gt;", "x&gt;", 1},
+		{"&gt;x", "x", 1},
+	} {
+		if got := findMatches(tc.s, tc.o); len(got) != tc.want {
+			t.Errorf("findMatches(%q, %q) = %v, want %d matches", tc.s, tc.o, got, tc.want)
+		}
+	}
+}

@@ -50,7 +50,7 @@ const card90 = `{"number":90,"title":"Oil the hinge","board":{"id":"b1","name":"
 type cardState struct {
 	title, desc, tags, column string
 	golden, measureDone       bool
-	postponed                 bool
+	postponed, closed         bool
 }
 
 func defaultCardState() cardState {
@@ -59,7 +59,7 @@ func defaultCardState() cardState {
 
 // syncCard is card n as the fake server returns it.
 func syncCard(n int, st cardState) string {
-	return `{"number":` + strconv.Itoa(n) + `,"title":` + strconv.Quote(st.title) + `,"board":{"id":"b1","name":"Home"},"closed":false,` +
+	return `{"number":` + strconv.Itoa(n) + `,"title":` + strconv.Quote(st.title) + `,"board":{"id":"b1","name":"Home"},"closed":` + strconv.FormatBool(st.closed) + `,` +
 		`"golden":` + strconv.FormatBool(st.golden) + `,"postponed":` + strconv.FormatBool(st.postponed) + `,"description_html":` + strconv.Quote(st.desc) + `,` +
 		`"tags":` + st.tags + `,"last_active_at":"2026-10-17T10:00:00Z","column":` + st.column + `,"steps":[` +
 		`{"id":"` + stepMeasure + `","content":"Measure the gap","completed":` + strconv.FormatBool(st.measureDone) + `},` +
