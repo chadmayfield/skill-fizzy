@@ -130,7 +130,17 @@ fails the build until the docs catch up.
 
 ### Behavior every command keeps
 
-- Every write honors `--dry-run`. Every delete needs `--yes`. So does publishing a board's public link and changing who can access a board. Changing a card's drafted or published status with `card edit --status` does not.
+- Every write honors `--dry-run`.
+- These commands refuse without `--yes`: `card delete`, `step delete`,
+  `card image --remove`, `comment delete`, `board delete`, `board publish`,
+  `board access --all` and `--users`, `column delete`, `account postpone`,
+  `user edit`, and `webhook create`, `edit` and `delete`. Without it they
+  print what they would do and exit 2.
+- These send a DELETE and need no `--yes`: `card unboost`, `card unwatch`,
+  `card unpin`, `comment unreact`, `notification unread` and
+  `board unpublish`. Each one removes a mark or closes access, and can be
+  redone. Changing a card's drafted or published status with
+  `card edit --status` needs no `--yes` either.
 - Old command forms keep working.
 - Dependencies: cobra and cobra/doc only. Ask Chad before adding any other.
 
