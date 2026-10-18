@@ -153,7 +153,7 @@ func TestMakeDist(t *testing.T) {
 	for _, name := range want {
 		names := checkArchive(t, filepath.Join(first, name), commitTime)
 		dir := strings.TrimSuffix(name, ".tar.gz")
-		wantNames := []string{dir + "/", dir + "/LICENSE", dir + "/README.md", dir + "/fz"}
+		wantNames := []string{dir + "/", dir + "/LICENSE", dir + "/README.md", dir + "/docs/", dir + "/docs/USERGUIDE.md", dir + "/fz"}
 		if strings.Join(names, " ") != strings.Join(wantNames, " ") {
 			t.Errorf("%s holds %v, want %v", name, names, wantNames)
 		}

@@ -27,7 +27,7 @@ a terminal or from Claude Code.
 
 You need these:
 
-- Go 1.27.2 or later, to build `fz`.
+- A release archive of `fz`, or Go 1.27.2 or later to build it.
 - A Fizzy server. A self-hosted server works. The hosted Fizzy service has not
   been tested with `fz`.
 - A Fizzy personal access token that can read and write.
@@ -41,8 +41,8 @@ can also block a newly built binary, so allow `fz` there too.
 
 ### Install
 
-There is no release yet, so build `fz` from source. From a checkout of this
-repo:
+Install `fz` from a release archive, described below, or build it from
+source. To build it, from a checkout of this repo:
 
 ```sh
 make install
@@ -56,8 +56,9 @@ or `go install` prints the version Go records, without the commit and date.
 
 ### Install from a release
 
-Once a release is published, it holds one archive per system (macOS or
-Linux, arm64 or amd64) and `checksums.txt`. Each archive is named after the
+Each release holds one archive per system (macOS or Linux, arm64 or amd64)
+and `checksums.txt`. An archive holds `fz`, `README.md`, `LICENSE` and this
+guide, at `docs/USERGUIDE.md`. Each archive is named after the
 release tag, `v` included, such as `fz_v1.2.0_linux_amd64.tar.gz`. Download
 yours and `checksums.txt`. In the folder that holds them, check the archive
 against the checksums. On Linux:
