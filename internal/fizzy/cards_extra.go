@@ -114,32 +114,9 @@ func (f *Fizzy) RemoveImage(n int) error { return f.cardWrite(http.MethodDelete,
 
 // -- boosts (card reactions) -------------------------------------------------
 
-// Boost is a reaction on a card.
-type Boost struct {
-	ID      string `json:"id"`
-	Content string `json:"content"`
-	Reacter struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"reacter"`
-
-	raw json.RawMessage
-}
-
-// Raw returns the server's JSON for this boost.
-func (b Boost) Raw() json.RawMessage { return b.raw }
-
-// UnmarshalJSON decodes the known fields and keeps the raw bytes.
-func (b *Boost) UnmarshalJSON(data []byte) error {
-	type plain Boost
-	var p plain
-	if err := json.Unmarshal(data, &p); err != nil {
-		return err
-	}
-	*b = Boost(p)
-	b.raw = append(json.RawMessage(nil), data...)
-	return nil
-}
+// Boost is a reaction on a card. It has the same shape as a comment
+// Reaction.
+type Boost = Reaction
 
 // Boosts lists a card's boosts, oldest first.
 func (f *Fizzy) Boosts(n int) ([]Boost, error) {

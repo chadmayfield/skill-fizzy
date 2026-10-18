@@ -30,8 +30,9 @@ type Comment struct {
 	raw json.RawMessage
 }
 
-// Reaction is a reaction on a comment. Its shape comes from Fizzy's API
-// docs; the live server had none to read on 2026-10-17.
+// Reaction is a reaction on a comment, and, as Boost, on a card. Fizzy's
+// API docs give both the same fields. The live server had no comment
+// reaction to read on 2026-10-17.
 type Reaction struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
