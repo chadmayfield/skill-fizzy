@@ -120,6 +120,43 @@ func scalar(v any) string {
 	return ""
 }
 
+// configKeys are the keys Load reads from the file.
+var configKeys = []string{"url", "account", "token_cmd", "inbox", "rules_card"}
+
+// checkKeys refuses a top-level key that appears twice in raw, where JSON
+// decoding would keep the last value, and a known key whose value is not a
+// string, a number or null. Errors never show a value.
+func checkKeys(raw []byte, data map[string]any) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if _, err := dec.Token(); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		key, _ := tok.(string)
+		if seen[key] {
+			return fmt.Errorf("the key %q appears twice", key)
+		}
+		seen[key] = true
+		var skip json.RawMessage
+		if err := dec.Decode(&skip); err != nil {
+			return err
+		}
+	}
+	for _, key := range configKeys {
+		switch data[key].(type) {
+		case nil, string, json.Number:
+		default:
+			return fmt.Errorf("%s must be a string or a number", key)
+		}
+	}
+	return nil
+}
+
 // Load reads the config file at path (or $FIZZY_CONFIG, or the default) and
 // applies environment overrides. A missing file is not an error.
 func Load(path string) (*Config, error) {
@@ -148,6 +185,9 @@ func Load(path string) (*Config, error) {
 		}
 		if _, ok := data["token"]; ok {
 			return nil, fmt.Errorf("%w: %s: the config file cannot hold the token; give a command that prints it in token_cmd, or set FIZZY_TOKEN", ErrConfig, path)
+		}
+		if err := checkKeys(raw, data); err != nil {
+			return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)
 		}
 	case !errors.Is(err, os.ErrNotExist):
 		return nil, fmt.Errorf("%w: %s: %v", ErrConfig, path, err)

@@ -207,3 +207,26 @@ func TestTokenCmdTimeoutIs30s(t *testing.T) {
 		t.Errorf("tokenCmdTimeout = %v", tokenCmdTimeout)
 	}
 }
+
+// A key given twice, or a known key whose value is not a string or a
+// number, is an error instead of a silent choice. The value is not shown,
+// in case it is a secret. null still means unset.
+func TestConfigKeyShapes(t *testing.T) {
+	isolate(t)
+	base := `"url":"https://fizzy.example.com","account":"1"`
+	for body, want := range map[string]string{
+		`{` + base + `,"account":"2"}`:             `the key "account" appears twice`,
+		`{` + base + `,"rules_card":true}`:         `rules_card must be a string or a number`,
+		`{` + base + `,"inbox":["a"]}`:             `inbox must be a string or a number`,
+		`{` + base + `,"token_cmd":{"x":"HINGE"}}`: `token_cmd must be a string or a number`,
+	} {
+		_, err := Load(writeFile(t, body))
+		if !errors.Is(err, ErrConfig) || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "HINGE") {
+			t.Errorf("%s: err = %v, want %q", body, err, want)
+		}
+	}
+	c, err := Load(writeFile(t, `{`+base+`,"inbox":null,"rules_card":87,"extra":true}`))
+	if err != nil || c.Inbox != DefaultInbox || c.RulesCard != 87 {
+		t.Errorf("null and unknown keys: %+v %v", c, err)
+	}
+}

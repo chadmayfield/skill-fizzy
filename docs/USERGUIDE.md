@@ -996,6 +996,8 @@ setup.
 | `<file>: invalid JSON (...)` | Fix the JSON in the config file. |
 | `rules_card "<value>" is not a number` | `rules_card` must be a card number. |
 | `<file>: invalid JSON (text after the JSON object)` | Remove whatever follows the closing `}`. |
+| `<file>: the key "<key>" appears twice` | Keep one copy of the key. |
+| `<file>: <key> must be a string or a number` | Give the key a value in quotes, or a number for `rules_card`. `true`, a list or an object is refused. |
 | `<file>: the config file cannot hold the token; ...` | Remove the `token` key. Put a command that prints the token in `token_cmd`, or set `FIZZY_TOKEN`. |
 | `<file> is writable by group or others, ...` | Run the `chmod go-w` command the message gives. |
 | `the server URL must start with https://` | Put `https://` in front of the host. |
