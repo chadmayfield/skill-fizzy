@@ -138,19 +138,51 @@ func (f *Fizzy) CreateBoard(name string, postponeDays int, columns []string) (st
 	if err := CheckIDs(id); err != nil {
 		return "", fmt.Errorf("board %s was created, but its id from Fizzy cannot be used (%w), so %s", PyRepr(name), err, strings.Join(lost, " and "))
 	}
+	// unfinished says the board exists, which step failed, and the
+	// commands that finish the rest, so a retry does not make a second
+	// board. It is not a Refusal: the board was created, so it exits 1.
+	unfinished := func(step string, err error, left []string) error {
+		return fmt.Errorf("board %s was created (id %s), but %s did not finish: %v; to finish, run: %s",
+			PyRepr(name), id, step, err, strings.Join(left, "; "))
+	}
+	var left []string
+	if postponeDays != 0 {
+		left = append(left, fmt.Sprintf("fz board edit %s --postpone %d", shellWord(id), postponeDays))
+	}
+	for _, col := range columns {
+		left = append(left, "fz column create "+shellWord(id)+" "+shellWord(col))
+	}
 	if postponeDays != 0 {
 		if _, err := f.C.Write(http.MethodPut, "/boards/"+url.PathEscape(id), wrap("board", struct {
 			Days int `json:"auto_postpone_period_in_days"`
 		}{postponeDays})); err != nil {
-			return id, err
+			return id, unfinished("setting the auto-postpone period", err, left)
 		}
+		left = left[1:]
 	}
 	for _, col := range columns {
 		if _, err := f.CreateColumn(id, col, ""); err != nil {
-			return id, err
+			return id, unfinished("creating column "+PyRepr(col), err, left)
 		}
+		left = left[1:]
 	}
 	return id, nil
+}
+
+// shellWord returns s as one word for a POSIX shell: as it is when it
+// holds only letters, digits and -_.,/:@%+=, otherwise in single quotes.
+func shellWord(s string) string {
+	safe := s != ""
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.,/:@%+=", r)) {
+			safe = false
+			break
+		}
+	}
+	if safe {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Columns lists a board's custom columns.

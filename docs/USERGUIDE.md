@@ -235,7 +235,11 @@ to Not now. `--columns` takes custom columns, left to right. `fz` creates the
 board first and then sets the period, because Fizzy can refuse both in one
 request. The period and the columns need the new board's id from Fizzy's
 reply. If the reply has none, `fz` says the board was created without them
-and exits 1.
+and exits 1. If setting the period or creating a column fails, `fz` says the
+board was created, gives its id, names the step that did not finish and
+prints the `fz board edit` and `fz column create` commands that finish the
+rest. It exits 1. Run those commands rather than the create again, which
+would make a second board.
 
 A board is named by its name or its id in every board command. Case does not matter. A name that two boards share in any case exits 2; use the board id.
 
