@@ -273,11 +273,12 @@ fz column delete Home Next --yes
 
 A new column goes to the right of the others. `--color` takes one of the
 nine color names in Fizzy's API docs, in any case: Blue, Gray, Tan, Yellow,
-Lime, Aqua, Violet, Purple and Pink. It also takes the exact value Fizzy
-stores for one, from `var(--color-card-default)` for Blue to
-`var(--color-card-8)` for Pink. Any other color exits 2, lists the names and
-sends nothing, because the server accepts an unknown color without using it
-and still reports success. `column delete` prints the column and how many open
+Lime, Aqua, Violet, Purple and Pink. It also takes `default` for Blue, or a
+number from 1 for Gray to 8 for Pink, so `--color 4` is Lime. It also takes
+the exact value Fizzy stores for one, from `var(--color-card-default)` for
+Blue to `var(--color-card-8)` for Pink. Any other color exits 2, lists the
+accepted forms and sends nothing, because the server accepts an unknown color
+without using it and still reports success. `column delete` prints the column and how many open
 cards it holds, and refuses without `--yes`.
 
 ### Cards

@@ -155,6 +155,11 @@ func TestColumnColorValue(t *testing.T) {
 		"var(--color-card-default)": "var(--color-card-default)",
 		"var(--color-card-1)":       "var(--color-card-1)",
 		"var(--color-card-8)":       "var(--color-card-8)",
+		"default":                   "var(--color-card-default)",
+		"DEFAULT":                   "var(--color-card-default)",
+		"1":                         "var(--color-card-1)",
+		"4":                         "var(--color-card-4)",
+		"8":                         "var(--color-card-8)",
 	}
 	for in, want := range ok {
 		got, err := ColumnColorValue(in)
@@ -162,7 +167,7 @@ func TestColumnColorValue(t *testing.T) {
 			t.Errorf("%q: got %q, %v; want %q", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", "red", "4", "default", "var(--color-card-blue)", "var(--color-card-9)", "VAR(--color-card-1)", " Blue", "var(--x)"} {
+	for _, in := range []string{"", "red", "0", "9", "04", "defaults", "var(--color-card-blue)", "var(--color-card-9)", "VAR(--color-card-1)", " Blue", "var(--x)"} {
 		got, err := ColumnColorValue(in)
 		if err == nil || !IsRefusal(err) || got != "" {
 			t.Errorf("%q: got %q, %v; want a refusal", in, got, err)
@@ -172,6 +177,9 @@ func TestColumnColorValue(t *testing.T) {
 			if !strings.Contains(err.Error(), name) {
 				t.Errorf("%q: refusal %q does not list %s", in, err, name)
 			}
+		}
+		if !strings.Contains(err.Error(), "default, 1 to 8") {
+			t.Errorf("%q: refusal %q does not name default, 1 to 8", in, err)
 		}
 	}
 }

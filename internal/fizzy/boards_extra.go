@@ -198,16 +198,19 @@ func ColumnColorNames() []string {
 }
 
 // ColumnColorValue turns a color name such as "Lime", in any case, into the
-// CSS value Fizzy stores. One of those exact var() values passes through.
+// CSS value Fizzy stores. It also takes the older short forms "default", in
+// any case, and "1" to "8", which stand for var(--color-card-default) and
+// var(--color-card-N). One of the exact var() values passes through.
 // Anything else is a Refusal, because the server accepts an unknown value
 // without using it and still reports success.
 func ColumnColorValue(color string) (string, error) {
 	for _, c := range columnColors {
-		if strings.EqualFold(color, c.Name) || color == c.Value {
+		short := strings.TrimSuffix(strings.TrimPrefix(c.Value, "var(--color-card-"), ")")
+		if strings.EqualFold(color, c.Name) || strings.EqualFold(color, short) || color == c.Value {
 			return c.Value, nil
 		}
 	}
-	return "", refusef("unknown column color %s; use one of %s, or one of their var(--color-card-...) values",
+	return "", refusef("unknown column color %s; use a name (%s), or default, 1 to 8, or one of their var(--color-card-...) values",
 		pyRepr(color), strings.Join(ColumnColorNames(), ", "))
 }
 

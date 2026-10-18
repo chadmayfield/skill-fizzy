@@ -332,6 +332,16 @@ func TestColumnColorNames(t *testing.T) {
 	if r.code != 0 || len(w) != 2 || w[1].body != `{"column":{"color":"var(--color-card-8)"}}` {
 		t.Fatalf("edit PINK: %+v writes %+v", r, w)
 	}
+	r = runGo([]string{"column", "create", "Home", "Soon", "--color", "4"})
+	w = writes(calls())
+	if r.code != 0 || len(w) != 3 || w[2].body != `{"column":{"name":"Soon","color":"var(--color-card-4)"}}` {
+		t.Fatalf("create 4: %+v writes %+v", r, w)
+	}
+	r = runGo([]string{"column", "edit", "Home", "Next", "--color", "DEFAULT"})
+	w = writes(calls())
+	if r.code != 0 || len(w) != 4 || w[3].body != `{"column":{"color":"var(--color-card-default)"}}` {
+		t.Fatalf("edit DEFAULT: %+v writes %+v", r, w)
+	}
 }
 
 func TestColumnColorRefused(t *testing.T) {
@@ -340,13 +350,13 @@ func TestColumnColorRefused(t *testing.T) {
 		{"column", "create", "Home", "Soon", "--color", "var(--color-card-blue)"},
 		{"column", "create", "Home", "Soon", "--color", ""},
 		{"column", "edit", "Home", "Next", "--color", "red"},
-		{"column", "edit", "Home", "Next", "--name", "Soon", "--color", "4"},
+		{"column", "edit", "Home", "Next", "--name", "Soon", "--color", "9"},
 		{"--dry-run", "column", "edit", "Home", "Next", "--color", "red"},
 	} {
 		srv, calls := bxServer(t, false)
 		editEnv(t, srv)
 		r := runGo(argv)
-		if r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "Blue, Gray, Tan, Yellow, Lime, Aqua, Violet, Purple, Pink") {
+		if r.code != 2 || r.stdout != "" || !strings.Contains(r.stderr, "Blue, Gray, Tan, Yellow, Lime, Aqua, Violet, Purple, Pink") || !strings.Contains(r.stderr, "default, 1 to 8") {
 			t.Errorf("%v: %+v", argv, r)
 		}
 		if len(calls()) != 0 {

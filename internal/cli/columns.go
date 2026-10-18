@@ -62,11 +62,12 @@ func addColumnCommands(root *cobra.Command) {
 
 // columnColorHelp is the --color paragraph of the column help.
 var columnColorHelp = "--color takes a color name, in any case: " + strings.Join(fizzy.ColumnColorNames(), ", ") +
-	". It also takes the exact value Fizzy stores for one, from var(--color-card-default) for Blue to var(--color-card-8) for Pink. " +
+	". It also takes default for Blue, or a number from 1 for Gray to 8 for Pink. " +
+	"It also takes the exact value Fizzy stores for one, from var(--color-card-default) for Blue to var(--color-card-8) for Pink. " +
 	"fz refuses any other color and sends nothing."
 
 // columnColorFlagHelp is the --color flag's one-line help.
-var columnColorFlagHelp = strings.ToLower(strings.Join(fizzy.ColumnColorNames(), ", ")) + ", or a var() value"
+var columnColorFlagHelp = strings.ToLower(strings.Join(fizzy.ColumnColorNames(), ", ")) + ", default, 1 to 8, or a var() value"
 
 // findColumn resolves BOARD and COLUMN arguments.
 func findColumn(c *cmdContext, boardArg, colArg string) (*fizzy.Fizzy, fizzy.Board, fizzy.Column, error) {
