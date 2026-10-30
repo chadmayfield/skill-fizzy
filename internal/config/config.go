@@ -250,6 +250,28 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// FromValues builds a Config from a server URL, account and token, with
+// the checks Load applies to the URL and account. When clusterHTTP is true
+// it also accepts plain http to a host ending in .svc or .svc.cluster.local.
+// It reads no file and no environment variable, and leaves LogPath empty, so
+// no action log is written.
+func FromValues(url, account, token string, clusterHTTP bool) (*Config, error) {
+	if url == "" || account == "" {
+		return nil, fmt.Errorf("%w: the server URL and the account are required", ErrConfig)
+	}
+	if err := checkURLWith(url, clusterHTTP); err != nil {
+		return nil, err
+	}
+	account = strings.Trim(account, "/")
+	if err := checkAccount(account); err != nil {
+		return nil, err
+	}
+	if token == "" {
+		return nil, fmt.Errorf("%w: no token", ErrConfig)
+	}
+	return &Config{URL: strings.TrimRight(url, "/"), Account: account, Token: token}, nil
+}
+
 // LoadInbox returns the inbox folder, with ~ expanded, from FIZZY_INBOX or
 // the config file at path, or the default. Unlike Load it needs no server
 // URL or account, for commands that never reach the server. A config file

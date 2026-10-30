@@ -1,6 +1,7 @@
 package fizzy
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 )
 
 // EmailFrequencies are the bundle_email_frequency values Fizzy accepts.
@@ -327,10 +328,15 @@ func (f *Fizzy) SetEmailFrequency(freq string) error {
 
 // -- activity -------------------------------------------------------------
 
-// Activities lists the activity feed, newest first. It stops reading pages
-// once it has limit items; a limit of 0 reads every page. An empty boardID
-// or creatorID leaves that filter out.
+// Activities is ActivitiesCtx with context.Background().
 func (f *Fizzy) Activities(boardID, creatorID string, limit int) ([]Activity, error) {
+	return f.ActivitiesCtx(context.Background(), boardID, creatorID, limit)
+}
+
+// ActivitiesCtx lists the activity feed, newest first. It stops reading
+// pages once it has limit items; a limit of 0 reads every page. An empty
+// boardID or creatorID leaves that filter out.
+func (f *Fizzy) ActivitiesCtx(ctx context.Context, boardID, creatorID string, limit int) ([]Activity, error) {
 	var parts []string
 	if boardID != "" {
 		parts = append(parts, url.QueryEscape("board_ids[]")+"="+url.QueryEscape(boardID))
@@ -342,15 +348,15 @@ func (f *Fizzy) Activities(boardID, creatorID string, limit int) ([]Activity, er
 	if len(parts) > 0 {
 		path += "?" + strings.Join(parts, "&")
 	}
-	return listUpTo[Activity](f.C, path, limit)
+	return listUpTo[Activity](ctx, f.C, path, limit)
 }
 
 // listUpTo is list with a cap: it follows rel="next" only until it holds
 // limit items, then drops any extra from the last page. A limit of 0 reads
 // every page, as list does.
-func listUpTo[T any](c *client.Client, path string, limit int) ([]T, error) {
+func listUpTo[T any](ctx context.Context, c *client.Client, path string, limit int) ([]T, error) {
 	var out []T
-	err := c.EachPage(path, func(payload []byte) (bool, error) {
+	err := c.EachPageCtx(ctx, path, func(payload []byte) (bool, error) {
 		var page []T
 		if err := json.Unmarshal(payload, &page); err != nil {
 			return false, client.ReplyError(http.MethodGet, c.RequestPath(path, true), err)

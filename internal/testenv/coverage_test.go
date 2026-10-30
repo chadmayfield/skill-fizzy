@@ -29,6 +29,13 @@ func TestEveryPackageThatLoadsConfigUsesMain(t *testing.T) {
 		if d.IsDir() && (d.Name() == "testdata" || strings.HasPrefix(d.Name(), ".")) && path != root {
 			return filepath.SkipDir
 		}
+		// A nested module, such as examples/consumer, cannot import
+		// internal/testenv, and go test ./... here does not run its tests.
+		if d.IsDir() && path != root {
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+				return filepath.SkipDir
+			}
+		}
 		if d.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
 		}

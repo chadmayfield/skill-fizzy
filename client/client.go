@@ -293,13 +293,21 @@ var RequestTimeout = 60 * time.Second
 // on a slow link has time to arrive. Tests may lower it.
 var UploadTimeout = 10 * time.Minute
 
+// Limiter paces requests. Wait blocks until one request may go, or returns
+// an error when ctx ends first. *rate.Limiter from golang.org/x/time/rate
+// satisfies it.
+type Limiter interface {
+	Wait(ctx context.Context) error
+}
+
 // Client talks to one Fizzy account.
 type Client struct {
-	cfg    *config.Config
-	dryRun bool
-	out    io.Writer
-	http   *http.Client
-	origin *url.URL // the configured URL; nil when it does not parse
+	cfg     *config.Config
+	dryRun  bool
+	out     io.Writer
+	http    *http.Client
+	origin  *url.URL // the configured URL; nil when it does not parse
+	limiter Limiter  // nil sends without waiting
 
 	mu       sync.Mutex // guards token, hasTok and tokenCtx
 	token    string
@@ -322,8 +330,41 @@ func New(cfg *config.Config, dryRun bool, out io.Writer) *Client {
 	if err != nil {
 		origin = nil
 	}
-	return &Client{cfg: cfg, dryRun: dryRun, out: out, origin: origin,
-		http: &http.Client{CheckRedirect: checkRedirect}}
+	c := &Client{cfg: cfg, dryRun: dryRun, out: out, origin: origin}
+	c.http = &http.Client{CheckRedirect: c.followRedirect}
+	return c
+}
+
+// UseHTTPClient sends requests through a copy of h. The copy keeps h's
+// transport, jar and timeout, but its redirect policy is replaced with the
+// client's own, which never follows a write and drops the token on a
+// redirect to another origin. Call it before the first request.
+func (c *Client) UseHTTPClient(h *http.Client) {
+	cp := *h
+	cp.CheckRedirect = c.followRedirect
+	c.http = &cp
+}
+
+// UseLimiter makes every HTTP request wait on l first: each page of a list
+// and each redirect followed count as one request. Writes printed in dry-run
+// mode are not sent and do not wait. Call it before the first request.
+func (c *Client) UseLimiter(l Limiter) { c.limiter = l }
+
+// wait blocks on the limiter, if there is one.
+func (c *Client) wait(ctx context.Context) error {
+	if c.limiter == nil {
+		return nil
+	}
+	return c.limiter.Wait(ctx)
+}
+
+// followRedirect applies checkRedirect, then waits on the limiter before the
+// redirect is sent.
+func (c *Client) followRedirect(req *http.Request, via []*http.Request) error {
+	if err := checkRedirect(req, via); err != nil {
+		return err
+	}
+	return c.wait(req.Context())
 }
 
 // MaxBody caps the size of one response body.
@@ -393,10 +434,17 @@ func (c *Client) URL(path string, accountScoped bool) string {
 // Account returns the configured account, without slashes.
 func (c *Client) Account() string { return c.cfg.Account }
 
-// Do sends one request. In dry-run mode a non-GET request is printed, not
-// sent, and Do returns status 0 with no payload. A status of 300 or above
-// returns an *APIError along with the status, header and payload.
+// Do is DoCtx with context.Background().
 func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.Header, []byte, error) {
+	return c.DoCtx(context.Background(), method, path, body, opts...)
+}
+
+// DoCtx sends one request. It waits on the limiter first, if one is set,
+// and ctx bounds both the wait and the request. In dry-run mode a non-GET
+// request is printed, not sent, and DoCtx returns status 0 with no payload.
+// A status of 300 or above returns an *APIError along with the status,
+// header and payload.
+func (c *Client) DoCtx(ctx context.Context, method, path string, body any, opts ...Option) (int, http.Header, []byte, error) {
 	var o reqOpts
 	for _, opt := range opts {
 		opt(&o)
@@ -462,15 +510,27 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 	if o.upload {
 		timeout = UploadTimeout
 	}
-	// The deadline covers the reply body too, which is read before Do
-	// returns.
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
 	if !o.deadline.IsZero() {
 		var cancelAt context.CancelFunc
 		ctx, cancelAt = context.WithDeadline(ctx, o.deadline)
 		defer cancelAt()
 	}
+	// The wait comes before the timeout starts, so time spent waiting does
+	// not shorten the request's own time limit.
+	if err := c.wait(ctx); err != nil {
+		shown := redactURL(u)
+		if o.logHost {
+			// Name only the host, as the action log does for these requests.
+			if pu, perr := url.Parse(u); perr == nil {
+				shown = pu.Host
+			}
+		}
+		return 0, nil, nil, fmt.Errorf("%s %s: waiting to send: %w", method, shown, err)
+	}
+	// The deadline covers the reply body too, which is read before DoCtx
+	// returns.
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	redact := redactErr
 	if o.logHost {
 		redact = redactErrHost
@@ -525,6 +585,10 @@ func (c *Client) Do(method, path string, body any, opts ...Option) (int, http.He
 
 func (c *Client) logAction(method, path string, status int) {
 	p := c.cfg.LogFile()
+	if p == "" {
+		// No log path means no action log.
+		return
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
 	}
@@ -544,10 +608,15 @@ func (c *Client) logAction(method, path string, status int) {
 	fmt.Fprintln(f, line)
 }
 
-// Get sends a GET and decodes the JSON payload into v. An empty payload
-// leaves v untouched; a nil v discards the payload.
+// Get is GetCtx with context.Background().
 func (c *Client) Get(path string, v any) error {
-	_, _, payload, err := c.Do(http.MethodGet, path, nil)
+	return c.GetCtx(context.Background(), path, v)
+}
+
+// GetCtx sends a GET and decodes the JSON payload into v. An empty payload
+// leaves v untouched; a nil v discards the payload.
+func (c *Client) GetCtx(ctx context.Context, path string, v any) error {
+	_, _, payload, err := c.DoCtx(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return err
 	}
@@ -557,11 +626,16 @@ func (c *Client) Get(path string, v any) error {
 	return ReplyError(http.MethodGet, c.RequestPath(path, true), json.Unmarshal(payload, v))
 }
 
-// GetAll GETs a list endpoint and follows every page. On any error it
-// returns nil, never a partial list.
+// GetAll is GetAllCtx with context.Background().
 func (c *Client) GetAll(path string) ([]json.RawMessage, error) {
+	return c.GetAllCtx(context.Background(), path)
+}
+
+// GetAllCtx GETs a list endpoint and follows every page. On any error it
+// returns nil, never a partial list.
+func (c *Client) GetAllCtx(ctx context.Context, path string) ([]json.RawMessage, error) {
 	var items []json.RawMessage
-	err := c.EachPage(path, func(payload []byte) (bool, error) {
+	err := c.EachPageCtx(ctx, path, func(payload []byte) (bool, error) {
 		var page []json.RawMessage
 		if err := json.Unmarshal(payload, &page); err != nil {
 			return false, ReplyError(http.MethodGet, c.RequestPath(path, true), err)
@@ -587,11 +661,17 @@ const MaxPages = 1000
 // variable so a test can lower it.
 var maxListBytes = 256 << 20
 
-// EachPage GETs path and each rel="next" page after it, passing every
+// EachPage is EachPageCtx with context.Background().
+func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err error)) error {
+	return c.EachPageCtx(context.Background(), path, fn)
+}
+
+// EachPageCtx GETs path and each rel="next" page after it, passing every
 // non-empty payload to fn; fn returns true to stop. Next links must stay on
 // the configured origin, so the token never leaves it. A repeated link, more
-// than MaxPages pages, 256 MiB in total or ListTimeout is an error.
-func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err error)) error {
+// than MaxPages pages, 256 MiB in total or ListTimeout is an error. Each
+// page is one request, and each waits on the limiter.
+func (c *Client) EachPageCtx(ctx context.Context, path string, fn func(payload []byte) (stop bool, err error)) error {
 	next := c.URL(path, true)
 	seen := map[string]bool{}
 	total := 0
@@ -608,7 +688,7 @@ func (c *Client) EachPage(path string, fn func(payload []byte) (stop bool, err e
 			return fmt.Errorf("pagination loop: %s linked again", redactURL(next))
 		}
 		seen[next] = true
-		_, hdr, payload, err := c.Do(http.MethodGet, next, nil, deadline(end))
+		_, hdr, payload, err := c.DoCtx(ctx, http.MethodGet, next, nil, deadline(end))
 		if err != nil {
 			if !time.Now().Before(end) {
 				return tooSlow
@@ -664,10 +744,15 @@ func (c *Client) Create(path string, body any) (string, error) {
 	return IDFromLocation(hdr.Get("Location"))
 }
 
-// Write sends a non-GET request and returns the JSON payload, or nil when
-// the payload is empty or not valid JSON.
+// Write is WriteCtx with context.Background().
 func (c *Client) Write(method, path string, body any) (json.RawMessage, error) {
-	_, _, payload, err := c.Do(method, path, body)
+	return c.WriteCtx(context.Background(), method, path, body)
+}
+
+// WriteCtx sends a non-GET request and returns the JSON payload, or nil when
+// the payload is empty or not valid JSON.
+func (c *Client) WriteCtx(ctx context.Context, method, path string, body any) (json.RawMessage, error) {
+	_, _, payload, err := c.DoCtx(ctx, method, path, body)
 	if err != nil {
 		return nil, err
 	}

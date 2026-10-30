@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
 

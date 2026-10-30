@@ -10,10 +10,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 	"github.com/chadmayfield/skill-fizzy/internal/draft"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/spf13/cobra"
 )
 

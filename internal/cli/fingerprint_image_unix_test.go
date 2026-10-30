@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 )
 
 // The image hash refuses a file that is not regular, as Upload does, and

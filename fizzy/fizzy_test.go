@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 )
 
 const fpCard = `{"number":87,"title":"Fix the gate","board":{"id":"b1","name":"Home"},` +

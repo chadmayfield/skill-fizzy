@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/spf13/cobra"
 )
 

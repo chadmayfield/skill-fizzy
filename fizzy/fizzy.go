@@ -17,6 +17,7 @@ package fizzy
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5" //nolint:gosec // ActiveStorage requires MD5 checksums.
 	"encoding/base64"
 	"encoding/json"
@@ -31,7 +32,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
 )
 
@@ -49,7 +50,11 @@ const (
 type Fizzy struct{ C *client.Client }
 
 func list[T any](c *client.Client, path string) ([]T, error) {
-	raw, err := c.GetAll(path)
+	return listCtx[T](context.Background(), c, path)
+}
+
+func listCtx[T any](ctx context.Context, c *client.Client, path string) ([]T, error) {
+	raw, err := c.GetAllCtx(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -191,19 +196,28 @@ func shellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// Columns lists a board's custom columns.
+// Columns is ColumnsCtx with context.Background().
 func (f *Fizzy) Columns(boardID string) ([]Column, error) {
+	return f.ColumnsCtx(context.Background(), boardID)
+}
+
+// ColumnsCtx lists a board's custom columns.
+func (f *Fizzy) ColumnsCtx(ctx context.Context, boardID string) ([]Column, error) {
 	if err := CheckIDs(boardID); err != nil {
 		return nil, err
 	}
-	return list[Column](f.C, "/boards/"+url.PathEscape(boardID)+"/columns")
+	return listCtx[Column](ctx, f.C, "/boards/"+url.PathEscape(boardID)+"/columns")
 }
 
 // Column finds a column by id, then by exact name, then by name ignoring
 // case. A name that two columns share exactly, or share ignoring case with
 // no exact match, is a Refusal.
 func (f *Fizzy) Column(boardID, nameOrID string) (Column, error) {
-	cols, err := f.Columns(boardID)
+	return f.column(context.Background(), boardID, nameOrID)
+}
+
+func (f *Fizzy) column(ctx context.Context, boardID, nameOrID string) (Column, error) {
+	cols, err := f.ColumnsCtx(ctx, boardID)
 	if err != nil {
 		return Column{}, err
 	}
@@ -281,19 +295,29 @@ func (f *Fizzy) CreateColumn(boardID, name, color string) (string, error) {
 	return f.created("/boards/"+url.PathEscape(boardID)+"/columns", wrap("column", body), "column")
 }
 
-// ColumnCards lists the cards in one column, following every page.
+// ColumnCards is ColumnCardsCtx with context.Background().
 func (f *Fizzy) ColumnCards(boardID, columnID string) ([]Card, error) {
+	return f.ColumnCardsCtx(context.Background(), boardID, columnID)
+}
+
+// ColumnCardsCtx lists the cards in one column, following every page.
+func (f *Fizzy) ColumnCardsCtx(ctx context.Context, boardID, columnID string) ([]Card, error) {
 	if err := CheckIDs(boardID, columnID); err != nil {
 		return nil, err
 	}
-	return list[Card](f.C, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID)+"/cards")
+	return listCtx[Card](ctx, f.C, "/boards/"+url.PathEscape(boardID)+"/columns/"+url.PathEscape(columnID)+"/cards")
 }
 
 // -- cards ----------------------------------------------------------------
 
-// Cards lists cards. The query is board_ids[] first when boardID is set, then
-// filters in slice order. The caller drops filters it does not want.
+// Cards is CardsCtx with context.Background().
 func (f *Fizzy) Cards(boardID string, filters []Param) ([]Card, error) {
+	return f.CardsCtx(context.Background(), boardID, filters)
+}
+
+// CardsCtx lists cards. The query is board_ids[] first when boardID is set,
+// then filters in slice order. The caller drops filters it does not want.
+func (f *Fizzy) CardsCtx(ctx context.Context, boardID string, filters []Param) ([]Card, error) {
 	var parts []string
 	add := func(k, v string) { parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(v)) }
 	if boardID != "" {
@@ -306,13 +330,16 @@ func (f *Fizzy) Cards(boardID string, filters []Param) ([]Card, error) {
 	if len(parts) > 0 {
 		path += "?" + strings.Join(parts, "&")
 	}
-	return list[Card](f.C, path)
+	return listCtx[Card](ctx, f.C, path)
 }
 
-// Card fetches one card.
-func (f *Fizzy) Card(n int) (Card, error) {
+// Card is CardCtx with context.Background().
+func (f *Fizzy) Card(n int) (Card, error) { return f.CardCtx(context.Background(), n) }
+
+// CardCtx fetches one card.
+func (f *Fizzy) CardCtx(ctx context.Context, n int) (Card, error) {
 	var c Card
-	err := f.C.Get("/cards/"+strconv.Itoa(n), &c)
+	err := f.C.GetCtx(ctx, "/cards/"+strconv.Itoa(n), &c)
 	return c, err
 }
 
@@ -334,7 +361,11 @@ func (e locationError) Is(target error) bool { return target == ErrNoLocation }
 // reply with no Location is an error: the object exists, but fz cannot name
 // it. what names the object.
 func (f *Fizzy) created(path string, body any, what string) (string, error) {
-	status, hdr, _, err := f.C.Do(http.MethodPost, path, body)
+	return f.createdCtx(context.Background(), path, body, what)
+}
+
+func (f *Fizzy) createdCtx(ctx context.Context, path string, body any, what string) (string, error) {
+	status, hdr, _, err := f.C.DoCtx(ctx, http.MethodPost, path, body)
 	if status >= 200 && status < 300 {
 		id, err := client.IDFromLocation(hdr.Get("Location"))
 		if err != nil {
@@ -351,10 +382,15 @@ func (f *Fizzy) created(path string, body any, what string) (string, error) {
 	return "", fmt.Errorf("POST %s -> HTTP %d", path, status)
 }
 
-// CreateCard creates a card and returns its number, 0 in dry-run mode. A
+// CreateCard is CreateCardCtx with context.Background().
+func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error) {
+	return f.CreateCardCtx(context.Background(), boardID, title, descHTML, status)
+}
+
+// CreateCardCtx creates a card and returns its number, 0 in dry-run mode. A
 // reply with no Location, or with one that holds no card number, is an
 // error that matches ErrNoLocation.
-func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error) {
+func (f *Fizzy) CreateCardCtx(ctx context.Context, boardID, title, descHTML, status string) (int, error) {
 	if err := CheckIDs(boardID); err != nil {
 		return 0, err
 	}
@@ -363,7 +399,7 @@ func (f *Fizzy) CreateCard(boardID, title, descHTML, status string) (int, error)
 		Description string `json:"description,omitempty"`
 		Status      string `json:"status,omitempty"`
 	}{title, descHTML, status}
-	id, err := f.created("/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body), "card")
+	id, err := f.createdCtx(ctx, "/boards/"+url.PathEscape(boardID)+"/cards", wrap("card", body), "card")
 	if err != nil || id == "" {
 		return 0, err
 	}
@@ -429,37 +465,47 @@ func (t MoveTarget) Holds(c Card) bool {
 	return !c.Closed && c.Column != nil && c.Column.ID == t.columnID
 }
 
-// ResolveMoveTarget checks target against the board's columns and sends
+// ResolveMoveTarget is ResolveMoveTargetCtx with context.Background().
+func (f *Fizzy) ResolveMoveTarget(boardID, target string) (MoveTarget, error) {
+	return f.ResolveMoveTargetCtx(context.Background(), boardID, target)
+}
+
+// ResolveMoveTargetCtx checks target against the board's columns and sends
 // nothing. A keyword that a custom column is also named, a column name two
 // columns share, and a name no column has are each an error, so a caller
 // can check every target before its first write.
-func (f *Fizzy) ResolveMoveTarget(boardID, target string) (MoveTarget, error) {
-	if err := f.CheckMoveTarget(boardID, target); err != nil {
+func (f *Fizzy) ResolveMoveTargetCtx(ctx context.Context, boardID, target string) (MoveTarget, error) {
+	if err := f.checkMoveTarget(ctx, boardID, target); err != nil {
 		return MoveTarget{}, err
 	}
 	if kw := moveKeyword(target); kw != "" {
 		return MoveTarget{keyword: kw}, nil
 	}
-	col, err := f.Column(boardID, target)
+	col, err := f.column(ctx, boardID, target)
 	if err != nil {
 		return MoveTarget{}, err
 	}
 	return MoveTarget{columnID: col.ID}, nil
 }
 
-// MoveCardTo moves a card to a target from ResolveMoveTarget.
+// MoveCardTo is MoveCardToCtx with context.Background().
 func (f *Fizzy) MoveCardTo(n int, t MoveTarget) error {
+	return f.MoveCardToCtx(context.Background(), n, t)
+}
+
+// MoveCardToCtx moves a card to a target from ResolveMoveTarget.
+func (f *Fizzy) MoveCardToCtx(ctx context.Context, n int, t MoveTarget) error {
 	p := "/cards/" + strconv.Itoa(n)
 	var err error
 	switch t.keyword {
 	case maybe:
-		_, err = f.C.Write(http.MethodDelete, p+"/triage", nil)
+		_, err = f.C.WriteCtx(ctx, http.MethodDelete, p+"/triage", nil)
 	case notNow:
-		_, err = f.C.Write(http.MethodPost, p+"/not_now", nil)
+		_, err = f.C.WriteCtx(ctx, http.MethodPost, p+"/not_now", nil)
 	case done:
-		_, err = f.C.Write(http.MethodPost, p+"/closure", nil)
+		_, err = f.C.WriteCtx(ctx, http.MethodPost, p+"/closure", nil)
 	default:
-		_, err = f.C.Write(http.MethodPost, p+"/triage", struct {
+		_, err = f.C.WriteCtx(ctx, http.MethodPost, p+"/triage", struct {
 			ColumnID string `json:"column_id"`
 		}{t.columnID})
 	}
@@ -484,11 +530,15 @@ func moveKeyword(target string) string {
 // whether the user means the column or the keyword. A target that is not a
 // keyword is not checked and reads nothing.
 func (f *Fizzy) CheckMoveTarget(boardID, target string) error {
+	return f.checkMoveTarget(context.Background(), boardID, target)
+}
+
+func (f *Fizzy) checkMoveTarget(ctx context.Context, boardID, target string) error {
 	kw := moveKeyword(target)
 	if kw == "" {
 		return nil
 	}
-	cols, err := f.Columns(boardID)
+	cols, err := f.ColumnsCtx(ctx, boardID)
 	if err != nil {
 		return err
 	}
@@ -642,10 +692,15 @@ func (f *Fizzy) DeleteStep(n int, id string) error {
 	return err
 }
 
-// AddComment adds a comment and returns its id, empty in dry-run mode. A
-// reply with no Location is an error.
+// AddComment is AddCommentCtx with context.Background().
 func (f *Fizzy) AddComment(n int, bodyHTML string) (string, error) {
-	return f.created("/cards/"+strconv.Itoa(n)+"/comments", wrap("comment", struct {
+	return f.AddCommentCtx(context.Background(), n, bodyHTML)
+}
+
+// AddCommentCtx adds a comment and returns its id, empty in dry-run mode. A
+// reply with no Location is an error.
+func (f *Fizzy) AddCommentCtx(ctx context.Context, n int, bodyHTML string) (string, error) {
+	return f.createdCtx(ctx, "/cards/"+strconv.Itoa(n)+"/comments", wrap("comment", struct {
 		Body string `json:"body"`
 	}{bodyHTML}), "comment")
 }

@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/markdown"
 	"github.com/spf13/cobra"
 )

@@ -19,8 +19,9 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 build: ## Build the fz binary
 	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY) ./cmd/fz
 
-test: ## Run tests with the race detector
+test: ## Run tests with the race detector, here and in examples/consumer
 	go test -race -count=1 ./...
+	cd examples/consumer && go vet ./... && go test -race -count=1 ./...
 
 lint: ## Run go vet
 	go vet ./...

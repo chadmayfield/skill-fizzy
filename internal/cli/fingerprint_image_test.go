@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 )
 
 // draftHash stats each image before it reads it, and refuses a file over

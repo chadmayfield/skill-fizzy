@@ -28,26 +28,28 @@ change the guide and the command's help text in the same commit.
 | `internal/cli/activity.go` | `activity list` and the `notification` commands. |
 | `internal/cli/account.go` | `account show`, `account postpone` and the `export` commands. |
 | `internal/cli/webhooks.go` | The `webhook` commands. |
-| `internal/client/` | The HTTP client. Account scoping, pagination, dry run and the action log. |
+| `client/` | The HTTP client. Account scoping, pagination, dry run, the action log and the optional rate limiter. Public, so other Go programs can import it. |
 | `internal/config/` | Loading `config.json` and the `FIZZY_*` variables, running the token command, and `SplitWords`, the shell-style word splitter. |
-| `internal/fizzy/` | The Fizzy operations built on the client, the API types, and the Python-style JSON printing. |
-| `internal/fizzy/cards_extra.go` | Assignments, watching, pins, boosts, the header image and the tag lookup for `card list --tag`. |
-| `internal/fizzy/comments.go` | Comments and their reactions. |
-| `internal/fizzy/boards_extra.go` | Board details, edits, access and publishing, and the calls that read, change and delete one column. |
-| `internal/fizzy/users.go` | Users, and `MatchUser`, the one function that turns a USER argument into a user. |
-| `internal/fizzy/account.go` | The account, identity, timezone, notifications, activity and exports. |
-| `internal/fizzy/webhooks.go` | Webhooks and their deliveries, and the URL and action checks. |
-| `internal/fizzy/refusal.go` | `Refusal`, the error for a check that stops a change before it is sent. The CLI exits 2 on it. |
+| `fizzy/` | The Fizzy operations built on the client, the API types, and the Python-style JSON printing. Public. Methods that take a `context.Context` end in `Ctx`. |
+| `fizzy/cards_extra.go` | Assignments, watching, pins, boosts, the header image and the tag lookup for `card list --tag`. |
+| `fizzy/comments.go` | Comments and their reactions. |
+| `fizzy/boards_extra.go` | Board details, edits, access and publishing, and the calls that read, change and delete one column. |
+| `fizzy/users.go` | Users, and `MatchUser`, the one function that turns a USER argument into a user. |
+| `fizzy/account.go` | The account, identity, timezone, notifications, activity and exports. |
+| `fizzy/webhooks.go` | Webhooks and their deliveries, and the URL and action checks. |
+| `fizzy/refusal.go` | `Refusal`, the error for a check that stops a change before it is sent. The CLI exits 2 on it. |
+| `fizzyapi/` | `New`, which builds a `*fizzy.Fizzy` from a URL, account and token for other Go programs. It reads no config file and writes no action log. |
 | `internal/draft/` | Parsing card drafts, finding their images, writing `card:` and `synced:` back, and planning step changes. |
 | `internal/markdown/` | Converting draft Markdown to the HTML Fizzy stores. |
 | `internal/richtext/` | Small edits to Fizzy rich text, used by `card edit --replace`. |
 | `internal/review/` | Gathering and formatting `fz review`. |
-| `internal/testenv/` | `Main`, which every test package that builds a client or runs commands calls from its `TestMain`. It gives the tests a temporary HOME, a missing config file and no `FIZZY_*` variables, so no test reads the real config or reaches a real server. It also replaces `http.DefaultTransport` with one that dials only a literal loopback IP or `localhost`, so an API request from a test cannot reach a real host. That guard covers only requests through `http.DefaultTransport`, which fz's API client uses. It does not cover the `--links` checker, which has its own transport, or a subprocess that a test starts, such as the Python hook in the hook tests. A test that needs a variable sets it with `t.Setenv`. The Go caches and the go env file keep their real places. A test fails if a package that can reach `internal/config` has tests but no `testenv.Main`. |
+| `internal/testenv/` | `Main`, which every test package that builds a client or runs commands calls from its `TestMain`. It gives the tests a temporary HOME, a missing config file and no `FIZZY_*` variables, so no test reads the real config or reaches a real server. It also replaces `http.DefaultTransport` with one that dials only a literal loopback IP or `localhost`, so an API request from a test cannot reach a real host. That guard covers only requests through `http.DefaultTransport`, which fz's API client uses. It does not cover the `--links` checker, which has its own transport, or a subprocess that a test starts, such as the Python hook in the hook tests. A test that needs a variable sets it with `t.Setenv`. The Go caches and the go env file keep their real places. A test fails if a package that can reach `internal/config` has tests but no `testenv.Main`. That check skips a nested module, such as `examples/consumer`, which cannot import `internal/testenv`. |
 | `internal/docscheck/` | Tests that keep the Markdown docs honest. |
 | `internal/repocheck/` | A test that fails if git tracks a private planning or agent file. |
 | `internal/releasecheck/` | Tests for the release build and the tag guard script. |
 | `skill/` | The Claude Code skill. Users link this folder into `~/.claude/skills/`. |
 | `examples/hooks/` | A Python SessionStart hook and its README. |
+| `examples/consumer/` | A separate Go module whose test builds a client with `fizzyapi.New`, so a public package that only compiles from inside this module fails there. |
 | `internal/*/testdata/` | Golden files. See [Tests that pin behavior](#tests-that-pin-behavior). |
 
 ## Build and test
@@ -55,8 +57,9 @@ change the guide and the command's help text in the same commit.
 `go.mod` sets Go 1.27.3. CI reads the Go version from `go.mod`.
 
 - `make build` writes `./fz`.
-- `make test` runs `go test -race -count=1 ./...`.
+- `make test` runs `go test -race -count=1 ./...`, then `go vet ./...` and the same tests inside `examples/consumer`.
 - `make lint` runs `go vet ./...`.
+- `examples/consumer` is its own module, so `go test ./...` at the root skips it. `make test` and CI run it separately.
 - `gofmt -l .` must print nothing.
 - `make install` copies `./fz` to `~/.local/bin/fz`. `make man` writes the man pages to `~/.local/share/man`.
 - `make vuln` runs `govulncheck ./...`, if you have it installed.
@@ -70,7 +73,7 @@ change the guide and the command's help text in the same commit.
   The build job turns off setup-go's cache, so it builds with empty Go caches.
   The archives are attested; the step runs only on a public repository.
 - `make dist` is reproducible. The build date is `SOURCE_DATE_EPOCH` if set, else the commit time, never the clock. The archives carry that time, owner 0 and sorted names.
-- CI runs the gofmt check, `go vet`, the race tests, the release build test with `FZ_TEST_DIST=1`, a build and `govulncheck` v1.9.0. A govulncheck finding fails the build.
+- CI runs the gofmt check, `go vet`, the race tests, `go vet` and the race tests in `examples/consumer`, the release build test with `FZ_TEST_DIST=1`, a build and `govulncheck` v1.9.0. A govulncheck finding fails the build.
 - The actions are pinned to commit SHAs, with the version in a comment. Dependabot proposes minor and patch updates to them, and to the Go modules, weekly.
 
 ## Adding a command
@@ -107,7 +110,7 @@ the docs catch up. `fz help <noun>` must name a real command.
   draft parser. The same rule applies: fix the Go code.
 - **Changing a golden.** A golden file may change only to fix a confirmed
   bug, by hand, never by regenerating it, and the commit names the bug.
-- **Live shapes.** `internal/fizzy/shapes_test.go` decodes JSON with the key
+- **Live shapes.** `fizzy/shapes_test.go` decodes JSON with the key
   names and value types a real Fizzy server sends, filled with invented
   gate and hinge values.
 - **Docs checks.** `internal/docscheck` checks the skill's template paths,

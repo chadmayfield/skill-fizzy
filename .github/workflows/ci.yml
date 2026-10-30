@@ -29,6 +29,13 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race -count=1 ./...
+      # examples/consumer is a separate module, so the steps above skip it.
+      # It builds against the public packages the way outside code does.
+      - name: Consumer module
+        working-directory: examples/consumer
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
       # The release build test is slow, so go test skips it unless
       # FZ_TEST_DIST is 1. Running it here catches a broken make dist before
       # a tag does.
