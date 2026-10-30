@@ -14,7 +14,7 @@ holds one archive per system, with `checksums.txt`. An archive holds the
 PATH, for example in `~/.local/bin`. The user guide's Install section shows
 how to check the archive first.
 
-With Go 1.27.2 or later you can install it directly:
+With Go 1.27.3 or later you can install it directly:
 
 ```sh
 go install github.com/chadmayfield/skill-fizzy/cmd/fz@latest

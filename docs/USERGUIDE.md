@@ -27,7 +27,7 @@ a terminal or from Claude Code.
 
 You need these:
 
-- A release archive of `fz`, or Go 1.27.2 or later to build it.
+- A release archive of `fz`, or Go 1.27.3 or later to build it.
 - A Fizzy server. A self-hosted server works. The hosted Fizzy service has not
   been tested with `fz`.
 - A Fizzy personal access token that can read and write.
@@ -41,7 +41,7 @@ newly built binary, so allow `fz` there too.
 
 ### Install
 
-Install `fz` from a release archive, described below, or with Go 1.27.2 or
+Install `fz` from a release archive, described below, or with Go 1.27.3 or
 later:
 
 ```sh

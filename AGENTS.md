@@ -52,7 +52,7 @@ change the guide and the command's help text in the same commit.
 
 ## Build and test
 
-`go.mod` sets Go 1.27.2. CI reads the Go version from `go.mod`.
+`go.mod` sets Go 1.27.3. CI reads the Go version from `go.mod`.
 
 - `make build` writes `./fz`.
 - `make test` runs `go test -race -count=1 ./...`.
