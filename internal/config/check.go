@@ -14,7 +14,12 @@ import (
 // https, except plain http to localhost, 127.0.0.0/8 or ::1, and it refuses
 // credentials, a query, a fragment and an empty host. Errors never repeat the
 // URL, because it may hold a secret.
-func checkURL(raw string) error {
+func checkURL(raw string) error { return checkURLWith(raw, false) }
+
+// checkURLWith is checkURL. When clusterHTTP is true it also allows plain
+// http to a host that ends in .svc or .svc.cluster.local, the names of
+// in-cluster services.
+func checkURLWith(raw string, clusterHTTP bool) error {
 	bad := func(problem string) error {
 		return fmt.Errorf("%w: the server URL %s; set it to https://HOST, with an optional path", ErrConfig, problem)
 	}
@@ -38,10 +43,42 @@ func checkURL(raw string) error {
 	if u.Fragment != "" || strings.Contains(raw, "#") {
 		return bad("must not have a fragment")
 	}
-	if scheme == "http" && !isLoopback(u.Hostname()) {
+	if scheme == "http" && !isLoopback(u.Hostname()) && !(clusterHTTP && isClusterService(u.Hostname())) {
 		return bad("must use https (plain http is allowed only for localhost)")
 	}
 	return nil
+}
+
+// isClusterService reports whether host is an in-cluster service name: one
+// or more DNS labels before a final .svc or .svc.cluster.local. A trailing
+// dot is ignored.
+func isClusterService(host string) bool {
+	h := strings.TrimSuffix(strings.ToLower(host), ".")
+	for _, suffix := range []string{".svc", ".svc.cluster.local"} {
+		if name, ok := strings.CutSuffix(h, suffix); ok && name != "" {
+			for _, label := range strings.Split(name, ".") {
+				if !isDNSLabel(label) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// isDNSLabel reports whether s is 1 to 63 lowercase letters, digits or
+// dashes, not starting or ending with a dash.
+func isDNSLabel(s string) bool {
+	if len(s) == 0 || len(s) > 63 || s[0] == '-' || s[len(s)-1] == '-' {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 // isLoopback reports whether host is localhost, an address in 127.0.0.0/8,

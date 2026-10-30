@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 )
 
 // pyRepr matches Python's repr() for the strings fz quotes in messages.

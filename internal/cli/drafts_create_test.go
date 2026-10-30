@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 )
 
 // createServer is a Fizzy with board Home and card 90 whose card create

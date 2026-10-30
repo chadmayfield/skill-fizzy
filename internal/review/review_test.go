@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
 
 func card(t *testing.T, n int, title string, closed bool) fizzy.Card {

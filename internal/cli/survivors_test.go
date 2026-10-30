@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 )
 
 // A card create whose Location names card 0 is an error, not a dry run.

@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 )
 
 // WebhookActions are the values subscribed_actions accepts, from Fizzy's

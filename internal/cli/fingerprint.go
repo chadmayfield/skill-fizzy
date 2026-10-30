@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/draft"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
 
 // openImage is os.Open. A test replaces it to count the image reads.

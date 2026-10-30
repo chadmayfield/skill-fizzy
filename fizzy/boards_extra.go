@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/chadmayfield/skill-fizzy/internal/client"
+	"github.com/chadmayfield/skill-fizzy/client"
 )
 
 // BoardInfo is one board as GET /boards/:id returns it. The list endpoint

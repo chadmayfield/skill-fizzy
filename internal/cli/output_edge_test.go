@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 )
 
 func TestUserLineWithoutEmail(t *testing.T) {

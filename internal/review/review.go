@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/config"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
 
 // Lane is one custom column and its open cards.

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/draft"
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
 )
 
 // lane normalizes a column name for comparison: no column is Maybe?, case
@@ -208,7 +208,11 @@ func syncDraftHashed(fz *fizzy.Fizzy, d *draft.Draft, inbox, dh string, prune, f
 		add("title and description sent")
 	}
 
-	plan := draft.PlanSteps(d.Steps, card.Steps)
+	existing := make([]draft.CardStep, len(card.Steps))
+	for i, s := range card.Steps {
+		existing[i] = draft.CardStep(s)
+	}
+	plan := draft.PlanSteps(d.Steps, existing)
 	for _, s := range plan.Add {
 		if _, err := fz.AddStep(d.Card, s.Content, s.Done); err != nil {
 			return report, err

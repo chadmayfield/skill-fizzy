@@ -3,7 +3,7 @@ package cli
 import (
 	"strings"
 
-	"github.com/chadmayfield/skill-fizzy/internal/fizzy"
+	"github.com/chadmayfield/skill-fizzy/fizzy"
 	"github.com/chadmayfield/skill-fizzy/internal/review"
 	"github.com/spf13/cobra"
 )
