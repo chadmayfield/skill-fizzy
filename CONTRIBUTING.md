@@ -5,7 +5,7 @@ basics. [AGENTS.md](AGENTS.md) holds the full rules.
 
 ## Prerequisites
 
-- Go 1.27.2 or later. `go.mod` sets the version, and CI reads it from there.
+- Go 1.27.3 or later. `go.mod` sets the version, and CI reads it from there.
 - `actionlint`, if you change a file in `.github/workflows/`.
 
 ## Build and test
